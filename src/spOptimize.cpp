@@ -11,10 +11,8 @@
 #include "beam.h"
 #include "particle.h"
 #include "diffraction.h"
-
-//#ifdef COMPILE_WITH_CUDA
+#include "toolbox.h"
 #include "diffraction.cuh"
-//#endif
 
 //#include <cuda.h>
 #include <algorithm>
@@ -27,13 +25,17 @@ using namespace detector;
 using namespace beam;
 using namespace particle;
 using namespace diffraction;
+using namespace toolbox;
+
 //#define ARMA_NO_DEBUG
 
 #define USE_CUDA 0
-#define USE_CHUNK 1
+#define USE_CHUNK 0
 
 int main(){
-	wall_clock timer, timer1, timer2, timer3;
+	wall_clock timer, timer1, timer2, timer3, timerMaster;
+
+timerMaster.tic();
 
 	/****** Particle ******/
 	CParticle particle = CParticle();
@@ -44,24 +46,24 @@ int main(){
 	particle.load_qSample("../qSample.dat");	// rowvec q vector sin(theta)/lambda
 
 // atomType (numAtomTypes)
-cout << "atomType: " << particle.atomType.n_cols<< endl;// 1x4
-cout << particle.atomType << endl;
+//cout << "atomType: " << particle.atomType.n_cols<< endl;// 1x4
+//cout << particle.atomType << endl;
 // pos (3xnumAtoms)
-cout << "pos rows: " << particle.atomPos.n_rows<< endl;
-cout << "pos cols: " << particle.atomPos.n_cols<< endl;		// 15x3
+//cout << "pos rows: " << particle.atomPos.n_rows<< endl;
+//cout << "pos cols: " << particle.atomPos.n_cols<< endl;		// 15x3
 // xyzInd (numAtoms)
-cout << "xyzInd: " << particle.xyzInd.n_cols<< endl;	// 1x15
-cout << particle.xyzInd << endl;
+//cout << "xyzInd: " << particle.xyzInd.n_cols<< endl;	// 1x15
+//cout << particle.xyzInd << endl;
 // ffTable (numQSamplex4)
-cout << "ff rows: " << particle.ffTable.n_rows<< endl;
-cout << "ff cols: " << particle.ffTable.n_cols<< endl;	// 4x601
+//cout << "ff rows: " << particle.ffTable.n_rows<< endl;
+//cout << "ff cols: " << particle.ffTable.n_cols<< endl;	// 4x601
 // qSample (numQSample)
-cout << "qSample: " << particle.qSample.n_cols<< endl;	// 1x601
+//cout << "qSample: " << particle.qSample.n_cols<< endl;	// 1x601
 
 	/****** Beam ******/
-	double lambda = 1e-10; 							// (m) wavelength
-	double focus = 0.001e-6;						// (m)
-	double n_phot = 1e22;							// number of photons per pulse
+	double lambda = 2.5e-10; 							// (m) wavelength
+	double focus = 250e-9;						// (m)
+	double n_phot = 1e16;							// number of photons per pulse
 
 	CBeam beam = CBeam();
 	beam.set_wavelength(lambda);
@@ -70,11 +72,11 @@ cout << "qSample: " << particle.qSample.n_cols<< endl;	// 1x601
 	beam.set_photonsPerPulsePerArea();
 
 	/****** Detector ******/
-	double d = 0.3e-2;				// (m) detector distance
-	double pix_width = 2e-5;		// (m)
-	double pix_height = 2e-5;		// (m)
-	const int px = 200;					// number of pixels in x
-	const int py = 200;					// number of pixels in y
+	double d = 1.3e-3;				// (m) detector distance
+	double pix_width = 200e-6;		// (m)
+	double pix_height = pix_width;		// (m)
+	const int px = 39;					// number of pixels in x
+	const int py = px;					// number of pixels in y
 	double cx = ((double) px-1)/2;			// this can be user defined
 	double cy = ((double) py-1)/2;			// this can be user defined
 
@@ -93,70 +95,51 @@ timer.tic();
 	CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
 cout<<"Calculate factor: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 
-cout << "q_xyz rows: " << det.q_xyz.n_rows<<endl;
-cout << "q_xyz cols: " << det.q_xyz.n_cols<<endl;
-cout << "q_xyz slices: " << det.q_xyz.n_slices<<endl;
+//cout << "q_xyz rows: " << det.q_xyz.n_rows<<endl;
+//cout << "q_xyz cols: " << det.q_xyz.n_cols<<endl;
+//cout << "q_xyz slices: " << det.q_xyz.n_slices<<endl;
 
 #ifdef COMPILE_WITH_CUDA
-	if (USE_CUDA) {
+	if (USE_CUDA && !USE_CHUNK) {
 cout<< "USE_CUDA" << endl;
-		timer.tic();
+timer.tic();
 		CDiffraction::get_atomicFormFactorList(&particle,&det);		
 cout<<"Make list: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 1.00s
 
-		timer.tic();
+timer.tic();
 		fmat F_hkl_sq(py,px);
 	 	float* F_mem = F_hkl_sq.memptr();
 		fcube f_hkl_list = conv_to<fcube>::from(CDiffraction::f_hkl_list); // py x px x N
 		fcube q_xyz = conv_to<fcube>::from(det.q_xyz); // py x px x 3
 		fmat pos = conv_to<fmat>::from(particle.atomPos);// Nx3
-pos.print("pos: ");
+//pos.print("pos: ");
 		float* f_mem = f_hkl_list.memptr();
 		float* q_mem = q_xyz.memptr();
 		float* p_mem = pos.memptr();
 		cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, det.numPix, particle.numAtoms);
 cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-
-	
-			cout << "f000: " << f_hkl_list(0,0,0) << endl;
-			cout << "f001: " << f_hkl_list(0,0,1) << endl;
-			cout << "f002: " << f_hkl_list(0,0,2) << endl;
-			cout << "p00: " << particle.atomPos(0,0) << endl;
-			cout << "p01: " << particle.atomPos(0,1) << endl;
-			cout << "p02: " << particle.atomPos(0,2) << endl;
-			cout << "q000: " << det.q_xyz(0,0,0) << endl;
-			cout << "q001: " << det.q_xyz(0,0,1) << endl;
-			cout << "q002: " << det.q_xyz(0,0,2) << endl;
-			cout << F_hkl_sq(0) << endl;
-	
-
 		F_hkl_sq.save("../F_hkl_sq_cuda.dat",raw_ascii);
-		timer.tic();
-		fmat detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * 2.105e30;//beam.phi_in;
-		cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+timer.tic();
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
+cout<<"phi_in: "<<beam.phi_in<<endl;
+		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);
+cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		det.solidAngle.save("../solidAngle_cuda.dat",raw_ascii);
-		timer.tic();
-		detector_intensity.save("../diffraction_cuda.dat",raw_ascii);
-		cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;	
-	} else if (USE_CHUNK) {
+		det.thomson.save("../thomson_cuda.dat",raw_ascii);
+timer.tic();
+		detector_intensity.save("../diffraction_intensity_cuda.dat",raw_ascii);
+		detector_counts.save("../diffraction_cuda.dat",raw_ascii);
+cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;	
+	} else if (USE_CUDA && USE_CHUNK) {
+cout<< "USE_CHUNK" << endl;
 		int max_chunkSize = 100;
 		int chunkSize = 0;
 
 		fmat F_hkl_sq;
 		F_hkl_sq.zeros(py,px); // F_hkl_sq: py x px
 
-		//fmat sf_real;
-		//sf_real.zeros(py,px);
-	 	//float* sf_real_mem = sf_real.memptr();
-
-		//fmat sf_imag;
-		//sf_imag.zeros(py,px);
-	 	//float* sf_imag_mem = sf_imag.memptr();
-
 		fcube f_hkl = conv_to<fcube>::from(CDiffraction::f_hkl); // f_hkl: py x px x numAtomTypes
 		float* f_mem = f_hkl.memptr();
-//cout << "f_hkl: " << f_hkl.n_rows << " " << f_hkl.n_cols << " " << f_hkl.n_slices << endl;
-
 		fcube q_xyz = conv_to<fcube>::from(det.q_xyz); // q_xyz: py x px x 3
 		float* q_mem = q_xyz.memptr();
 
@@ -202,36 +185,37 @@ cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 //cout << "first_ind: " << first_ind << endl;
 //cout << "chunkSize: " << chunkSize << endl;
 
-			timer.tic();
+//timer.tic();
 			cuda_structureFactorChunkParallel(pad_real_mem, pad_imag_mem, f_mem, q_mem, i_mem, p_mem, particle.numAtomTypes, det.numPix, chunkSize);
-			cout<<"Chunk: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+//cout<<"Chunk: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 
 			sumDr += sum(pad_real,1);
 			sumDi += sum(pad_imag,1);
 			
 			first_ind += max_chunkSize;
 		}
-		timer.tic();
+timer.tic();
 		
 		sumDr.reshape(py,px);
 		sumDi.reshape(py,px);
-		F_hkl_sq = sumDr % sumDr + sumDi % sumDi;// % sf_real + sf_imag % sf_imag;
-		cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+		F_hkl_sq = sumDr % sumDr + sumDi % sumDi;
+cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		F_hkl_sq.save("../F_hkl_sq_cudaChunk.dat",raw_ascii);
-		timer.tic();
-		fmat detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * 2.105e30;//beam.phi_in;
-		cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+timer.tic();
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
+		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);
+cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		det.solidAngle.save("../solidAngle_cudaChunk.dat",raw_ascii);
-		timer.tic();
-		detector_intensity.save("../diffraction_cudaChunk.dat",raw_ascii);
-		cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+		det.thomson.save("../thomson_cudaChunk.dat",raw_ascii);
+timer.tic();
+		detector_counts.save("../diffraction_cudaChunk.dat",raw_ascii);
+cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 	} 
 #endif
 	if(!USE_CUDA) {
-	//else {
 		timer.tic();
 		CDiffraction::get_atomicFormFactorList(&particle,&det);
-		cout<<"Make list: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 1.00s
+		cout<<"No CUDA! Make list: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 1.00s
 
 		timer.tic();
 		fmat F_hkl_sq;
@@ -239,25 +223,16 @@ cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
 		F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
 		timer.tic();
-		fmat detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * 2.105e30;//beam.phi_in;
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in; //2.105e30
+		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);		
 		cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		det.solidAngle.save("../solidAngle.dat",raw_ascii);
 		timer.tic();
-		detector_intensity.save("../diffraction.dat",raw_ascii);
+		detector_counts.save("../diffraction.dat",raw_ascii);
 		cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 	}
 
-/*
-cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
-	F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
-timer.tic();
-	det.dp = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * 2.105e30;//beam.phi_in;
-cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-	det.solidAngle.save("../solidAngle.dat",raw_ascii);
-timer.tic();
-	det.dp.save("../diffraction.dat",raw_ascii);
-cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-*/
+cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
   	return 0;
 }
 

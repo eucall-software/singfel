@@ -24,6 +24,7 @@ IF(HAVE_ARMADILLO)
   IF(MKL_FOUND)
     MESSAGE("MKL_INCLUDE_DIRS = ${MKL_INCLUDE_DIRS}")
     INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
+    #set(BOOST_ROOT /usr/local/include)
     LINK_DIRECTORIES(${ARMADILLO_LIBRARIES} ${MKL_INCLUDE_DIRS})
     LINK_LIBRARIES(iomp5)
   ENDIF()
@@ -31,10 +32,33 @@ ELSEIF(NOT HAVE_ARMADILLO)
   MESSAGE("ARMA NOT FOUND GOODBYE!!!")
 ENDIF()
 
-FIND_PACKAGE(Boost 1.53.0 COMPONENTS python thread date_time system)
+FIND_PACKAGE(PythonInterp)
+FIND_PACKAGE(PythonLibs)
+#FIND_PACKAGE(Boost 1.53.0 COMPONENTS python thread date_time system)
 IF(Boost_FOUND)
+  add_definitions(-DCOMPILE_WITH_BOOST) # set #define COMPILE_WITH_BOOST to 1 in .cpp
   MESSAGE("BOOST FOUND")
   MESSAGE("${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS}")
+
+  SET(Boost_USE_STATIC_LIBS ON)
+  SET(Boost_USE_MULTITHREADED ON)
+  SET(Boost_USE_STATIC_RUNTIME OFF)
+
+  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+  LINK_LIBRARIES(${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES}) # Deprecated but so convenient!
+
+  PYTHON_ADD_MODULE(hello hello.cpp)
+  FILE(COPY hello.py DESTINATION .)
+  ADD_TEST(01-HelloWorld hello.py)
+
+  PYTHON_ADD_MODULE(member member.cpp)
+  FILE(COPY member.py DESTINATION .)
+  ADD_TEST(04-HelloWorld member.py)
+
+  PYTHON_ADD_MODULE(toolbox2 toolbox.cpp)
+  FILE(COPY toolbox.py DESTINATION .)
+  ADD_TEST(toolbox2 toolbox.py)
+
 ELSEIF(NOT Boost_FOUND)
   MESSAGE("Unable to find correct Boost version. Did you set BOOST_ROOT?")
 ENDIF()
@@ -58,7 +82,7 @@ IF(CUDA_FOUND)
   MESSAGE("${CUDA_LIBRARIES}")
   MESSAGE("${ARMADILLO_LIBRARIES}")
   
-  add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITHOUT_CUDA to 1 in .cpp
+  add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
 
   CUDA_ADD_EXECUTABLE(cudaSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
   TARGET_LINK_LIBRARIES(cudaSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
