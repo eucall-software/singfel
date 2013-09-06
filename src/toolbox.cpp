@@ -6,6 +6,11 @@
 #include <gsl/gsl_rng.h>
 #include <gsl/gsl_randist.h>
 #include "toolbox.h"
+
+#include <string>
+#include <sstream>
+#include <armadillo>
+
 using namespace std;
 using namespace arma;
 using namespace toolbox;
@@ -31,13 +36,13 @@ umat CToolbox::convert_to_poisson(fmat x){
 	gBaseRand = gsl_rng_alloc (T); 
   	randSeed = rand();                    /* returns a non-negative integer */
 //  	cout << "time: " << time(NULL) << endl;
-cout << "randSeed: " << randSeed << endl;
+//cout << "randSeed: " << randSeed << endl;
   	gsl_rng_set (gBaseRand, randSeed);    /* seed the PRNG */
-cout << "set done" << endl;	            
+//cout << "set done" << endl;	            
 	umat y;
-cout << "init y" << endl;		
+//cout << "init y" << endl;		
 	y.copy_size(x);
-cout << "copy done" << endl;		
+//cout << "copy done" << endl;		
 	for (unsigned i = 0; i < y.n_elem; i++) {
 		//cout << "i: " << i << endl;
 		//cout << "x(i): " << x(i) << endl;
@@ -49,38 +54,25 @@ cout << "copy done" << endl;
 		}
 		//cout << "y: " << y(i) << endl;	
 	}	
-cout << "x: " << x(0) << endl;	
+//cout << "x: " << x(0) << endl;	
 	gsl_rng_free(gBaseRand);
 	
 	return y;
 }
 
-/*
-float CToolbox::Uniform(float mean)
-{
-	//Generate a random number between 0 and 1.
-	//REMEMBER: Always cast the oparands of a division to float, or truncation will be performed.
-	float R;
-	R = (float)rand()/(float)(RAND_MAX+1);
-           
-	return  2*mean*R;
-}
+#ifdef COMPILE_WITH_BOOST
+	#include <boost/python.hpp>
+	using namespace boost::python;
+	using namespace toolbox;
 
-int CToolbox::Poisson(float mean) //Special technique required: Box-Muller method...
-{
-	float R;
-	float sum = 0;
-	int i = -1;
-	float z;
- 
-	while(sum <=mean) {
-		R = (float)rand()/(float)(RAND_MAX+1);
-		z = -log(R);
-		sum += z;
-		i++;
+	BOOST_PYTHON_MODULE(toolbox2)
+	{
+		class_<CToolbox>("CToolbox", init<std::string>())	// constructor with string input
+			//.def(init<>())	// Overloaded constructor
+			.def_readwrite("name", &CToolbox::name)
+			//.add_property("number", &SomeClass::getNumber, &SomeClass::setNumber)
+			//.def("test", &SomeClass::test)
+			.def("convert_to_poisson", &CToolbox::convert_to_poisson)
+		;
 	}
-	
-	return i;
-}
-*/
-
+#endif
