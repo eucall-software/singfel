@@ -31,6 +31,8 @@ public:
 	static void set_atomType(Packet*);
 	static void load_atomPos(string);
 	static void set_atomPos(Packet*);
+	static void set_atomPos(arma::fmat*);	
+	static arma::fmat get_atomPos();	
 	static void load_xyzInd(string);
 	static void set_xyzInd(Packet*);
 	static void load_ffTable(string);
@@ -41,7 +43,6 @@ public:
 protected:
 
 private:
-
 };
 
 }

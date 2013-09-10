@@ -32,7 +32,14 @@ using namespace toolbox;
 #define USE_CUDA 0
 #define USE_CHUNK 0
 
-int main(){
+int main( int argc, char* argv[] ){
+
+	cout << "The name used to start the program: " << argv[ 0 ] << "\nArguments are:\n";
+    for (int n = 1; n < argc; n++)
+    	cout << setw( 2 ) << n << ": " << argv[ n ] << '\n';
+
+	int numPatterns = atoi(argv[1]);
+
 	wall_clock timer, timer1, timer2, timer3, timerMaster;
 
 timerMaster.tic();
@@ -44,21 +51,6 @@ timerMaster.tic();
 	particle.load_xyzInd("../xyzInd.dat");		// rowvec xyzInd (temporary)
 	particle.load_ffTable("../ffTable.dat");	// mat ffTable (atomType x qSample)
 	particle.load_qSample("../qSample.dat");	// rowvec q vector sin(theta)/lambda
-
-// atomType (numAtomTypes)
-//cout << "atomType: " << particle.atomType.n_cols<< endl;// 1x4
-//cout << particle.atomType << endl;
-// pos (3xnumAtoms)
-//cout << "pos rows: " << particle.atomPos.n_rows<< endl;
-//cout << "pos cols: " << particle.atomPos.n_cols<< endl;		// 15x3
-// xyzInd (numAtoms)
-//cout << "xyzInd: " << particle.xyzInd.n_cols<< endl;	// 1x15
-//cout << particle.xyzInd << endl;
-// ffTable (numQSamplex4)
-//cout << "ff rows: " << particle.ffTable.n_rows<< endl;
-//cout << "ff cols: " << particle.ffTable.n_cols<< endl;	// 4x601
-// qSample (numQSample)
-//cout << "qSample: " << particle.qSample.n_cols<< endl;	// 1x601
 
 	/****** Beam ******/
 	double lambda = 2.5e-10; 							// (m) wavelength
@@ -88,12 +80,12 @@ timerMaster.tic();
 	det.set_center_x(cx);
 	det.set_center_y(cy);
 
-timer.tic();
+//timer.tic();
 	det.init_dp(&beam);
-cout<<"Init dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-timer.tic();
+//cout<<"Init dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+//timer.tic();
 	CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
-cout<<"Calculate factor: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+//cout<<"Calculate factor: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 
 //cout << "q_xyz rows: " << det.q_xyz.n_rows<<endl;
 //cout << "q_xyz cols: " << det.q_xyz.n_cols<<endl;
@@ -217,19 +209,53 @@ cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		CDiffraction::get_atomicFormFactorList(&particle,&det);
 		cout<<"No CUDA! Make list: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 1.00s
 
-		timer.tic();
+		//timer.tic();
 		fmat F_hkl_sq;
-		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
-		cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
-		F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
-		timer.tic();
-		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in; //2.105e30
-		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);		
-		cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-		det.solidAngle.save("../solidAngle.dat",raw_ascii);
-		timer.tic();
-		detector_counts.save("../diffraction.dat",raw_ascii);
-		cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+		string outputName;
+
+		CParticle rotatedParticle = CParticle();
+		rotatedParticle = particle;
+		fmat rot3D(3,3);
+		vec u(3);
+		vec quaternion(4);	
+		for (int i = 0; i < numPatterns; i++) {
+			// Rotate single particle
+			//rot3D.zeros(3,3);			
+			u = randu<vec>(3); // uniform random distribution in the [0,1] interval
+			// generate uniform random quaternion on SO(3)
+			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
+					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+			
+			//cout << quaternion << endl;
+			
+			rot3D = CToolbox::quaternion2rot3D(quaternion, 1);
+			
+			//cout << rot3D << endl;
+
+			fmat myPos = particle.get_atomPos();
+			//cout << myPos << endl;
+			
+			myPos = myPos * trans(rot3D);	// rotate atom positions
+			
+			rotatedParticle.set_atomPos(&myPos);
+
+			//cout << rotatedParticle.get_atomPos() << endl;
+
+			F_hkl_sq = CDiffraction::calculate_intensity(&rotatedParticle,&det);
+			//cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
+			//F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
+			//timer.tic();
+			fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in; //2.105e30
+			umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);		
+			//cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+			//det.solidAngle.save("../solidAngle.dat",raw_ascii);
+			//timer.tic();
+			stringstream sstm;
+			sstm << "../diffraction_" << setfill('0') << setw(6) << i << ".dat";
+			outputName = sstm.str();
+			detector_counts.save(outputName,raw_ascii);
+			//cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+		}
 	}
 
 cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;

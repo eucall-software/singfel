@@ -1,5 +1,6 @@
 #include <iostream>
 #include "particle.h"
+
 using namespace std;
 using namespace particle;
 using namespace arma;
@@ -42,14 +43,23 @@ void CParticle::load_atomPos(string x){
 	atomPos.load(x,raw_ascii);
 	numAtoms = atomPos.n_rows;
 	formFactorList = zeros<urowvec>(1,numAtoms);
-	CParticle::atomPos.print("set_atomPos: ");
+//	CParticle::atomPos.print("set_atomPos: ");
 }
 
 void CParticle::set_atomPos(Packet *x){
 	fmat temp(x->atomPos, 3, x->N);
 	atomPos = trans(temp);
 	numAtoms = x->N;
-	CParticle::atomPos.print("set_atomPos: ");
+//	CParticle::atomPos.print("set_atomPos: ");
+}
+
+void CParticle::set_atomPos(fmat *x){
+//cout << "x:" << x[0] << endl;
+	atomPos = x[0];
+}
+
+fmat CParticle::get_atomPos(){
+	return atomPos;
 }
 
 void CParticle::load_xyzInd(string x){
@@ -60,31 +70,31 @@ void CParticle::load_xyzInd(string x){
 void CParticle::set_xyzInd(Packet *x){
 	frowvec temp(x->xyzInd, x->N);
 	xyzInd = temp;
-	CParticle::xyzInd.print("set_xyzInd: ");
+//	CParticle::xyzInd.print("set_xyzInd: ");
 }
 
 void CParticle::load_ffTable(string x){
 	ffTable.load(x,raw_ascii);
-	CParticle::ffTable.print("set_ffTable: ");
+//	CParticle::ffTable.print("set_ffTable: ");
 }
 
 void CParticle::set_ffTable(Packet *x){
 	fmat temp(x->ffTable, x->Q, x->T);
 	ffTable = trans(temp);
 	numQSamples = x->Q;
-	CParticle::ffTable.print("set_ffTable: ");	
+//	CParticle::ffTable.print("set_ffTable: ");	
 }
 
 void CParticle::load_qSample(string x){
 	qSample.load(x,raw_ascii);
 	numQSamples = qSample.n_elem;
-	CParticle::qSample.print("set_qSample: ");
+//	CParticle::qSample.print("set_qSample: ");
 }
 
 void CParticle::set_qSample(Packet *x){
 	frowvec temp(x->qSample, x->Q);
 	qSample = temp;
-	CParticle::qSample.print("set_qSample: ");
+//	CParticle::qSample.print("set_qSample: ");
 }
 
 void CParticle::set_param(Packet *x){
@@ -94,3 +104,4 @@ void CParticle::set_param(Packet *x){
 	set_ffTable(x);
 	set_qSample(x);
 }
+
