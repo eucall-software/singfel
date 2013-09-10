@@ -123,11 +123,12 @@ void CDetector::init_dp( beam::CBeam *beam ){
 		twotheta(ind_y,ind_x) = atan2(radial(ind_y,ind_x),d);
 	}
 	}
-	solidAngle = pix_width * pix_height * cos(twotheta) / (pow(coord_x_mat,2) + pow(coord_y_mat,2) + pow(d,2)); // real space (Unitless)
+	fmat r_sq =  pow(coord_x_mat,2) + pow(coord_y_mat,2) + pow(d,2); // real space
+	solidAngle = pix_width * pix_height * cos(twotheta) / r_sq; // real space (Unitless)
+/******************THOMSON SCATTERING FIX HERE********************/
 	double re = 2.81793870e-15;			// classical electron radius (m)
-	double ang = 0;
-	double P = (1 + cos(ang))/2;
-	thomson = pow(re,2) * P;
+	// Vertical polarization, mu = pi/2, cos^2(mu) = 0
+	thomson = pow(re,2) / r_sq;
 }
 
 void CDetector::set_param(Packet *x){
