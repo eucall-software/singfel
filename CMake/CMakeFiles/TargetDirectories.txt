@@ -1,2 +1,0 @@
-/data/yoon/spfel/CMake/src/CMakeFiles/SPFEL.dir
-/data/yoon/spfel/CMake/src/CMakeFiles/cudaSPFEL.dir
