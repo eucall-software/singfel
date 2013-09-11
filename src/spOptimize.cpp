@@ -53,7 +53,7 @@ timerMaster.tic();
 	particle.load_qSample("../qSample.dat");	// rowvec q vector sin(theta)/lambda
 
 	/****** Beam ******/
-	double lambda = 2.5e-10; 							// (m) wavelength
+	double lambda = 0.4e-10; 							// (m) wavelength
 	double focus = 250e-9;						// (m)
 	double n_phot = 1e16;							// number of photons per pulse
 
@@ -64,7 +64,7 @@ timerMaster.tic();
 	beam.set_photonsPerPulsePerArea();
 
 	/****** Detector ******/
-	double d = 1.3e-3;				// (m) detector distance
+	double d = 1.3e-3 * 14;				// (m) detector distance
 	double pix_width = 200e-6;		// (m)
 	double pix_height = pix_width;		// (m)
 	const int px = 39;					// number of pixels in x
@@ -90,6 +90,12 @@ timerMaster.tic();
 //cout << "q_xyz rows: " << det.q_xyz.n_rows<<endl;
 //cout << "q_xyz cols: " << det.q_xyz.n_cols<<endl;
 //cout << "q_xyz slices: " << det.q_xyz.n_slices<<endl;
+
+	double theta = atan((px/2*pix_height)/d);
+	double qmax = 2/lambda*sin(theta/2);
+	double dmin = 1/(2*qmax);
+	cout << "max q to the edge: " << qmax << " m^-1" << endl;
+	cout << "Half period resolution: " << dmin << " m" << endl;
 
 #ifdef COMPILE_WITH_CUDA
 	if (USE_CUDA && !USE_CHUNK) {
@@ -254,6 +260,10 @@ cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 			sstm << "../diffraction_" << setfill('0') << setw(6) << i << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
+			stringstream sstm1;
+			sstm1 << "../quaternion_" << setfill('0') << setw(6) << i << ".dat";
+			outputName = sstm1.str();
+			quaternion.save(outputName,raw_ascii);			
 			//cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		}
 	}
