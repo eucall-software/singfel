@@ -93,7 +93,7 @@ void load_atomPos(float *array2D,int rows,int cols){
 	dung.print("read in as matrix: ");
 }
 
-void load_xyzInd(float *array,int size){
+void load_xyzInd(int *array,int size){
 	for (int i = 0; i < size; i++) {
 		cout << array[i] << endl;
 	}
@@ -164,7 +164,7 @@ void calculate_dp(Packet *pack){
 		fcube q_xyz = conv_to<fcube>::from(det.q_xyz); // q_xyz: py x px x 3
 		float* q_mem = q_xyz.memptr();
 
-		frowvec xyzInd = conv_to<frowvec>::from(particle.xyzInd); // xyzInd: 1 x numAtom
+		irowvec xyzInd = conv_to<irowvec>::from(particle.xyzInd); // xyzInd: 1 x numAtom
 		fmat pos = conv_to<fmat>::from(particle.atomPos); // pos: numAtom x 3
 
 		fmat pad_real;
@@ -186,8 +186,8 @@ void calculate_dp(Packet *pack){
 			pad_imag.zeros(pack->py*pack->px,chunkSize);
 		 	float* pad_imag_mem = pad_imag.memptr();
 		 	
-			frowvec xyzInd_sub = xyzInd.subvec( first_ind,last_ind-1 );
-			float* i_mem = xyzInd_sub.memptr();	
+			irowvec xyzInd_sub = xyzInd.subvec( first_ind,last_ind-1 );
+			int* i_mem = xyzInd_sub.memptr();	
 			fmat pos_sub = pos( span(first_ind,last_ind-1), span::all );
 			float* p_mem = pos_sub.memptr();
 

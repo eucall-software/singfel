@@ -22,7 +22,10 @@ public:
 	static arma::fmat atomPos;				// atom position
 	static arma::fmat ffTable;			// form factor table (atomType x qSample)
 	static arma::frowvec qSample;		// q vector sin(theta)/lambda
-	static arma::frowvec xyzInd;			// TEMPORARY
+	
+	static arma::irowvec ionList;			// TEMPORARY	
+	
+	static arma::irowvec xyzInd;			// TEMPORARY
 	static arma::urowvec formFactorList;
 public:
 	CParticle();
@@ -32,9 +35,15 @@ public:
 	static void load_atomPos(string);
 	static void set_atomPos(Packet*);
 	static void set_atomPos(arma::fmat*);	
-	static arma::fmat get_atomPos();	
+	static arma::fmat get_atomPos();
+
+	static void load_ionList(string);	
+		
 	static void load_xyzInd(string);
 	static void set_xyzInd(Packet*);
+	
+	static void set_xyzInd(arma::irowvec*);
+		
 	static void load_ffTable(string);
 	static void set_ffTable(Packet*);
 	static void load_qSample(string);

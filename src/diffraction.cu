@@ -61,7 +61,7 @@ __global__ void structureFactor(float *F, float *f, float *q, float *p, int numP
 	}
 }
 
-__global__ void structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, float *i, float *p, int numAtomTypes, int numPix, int chunkSize){
+__global__ void structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize){
 	int index = ((blockIdx.y*blockDim.y + threadIdx.y)*gridDim.x + blockIdx.x )*blockDim.x + threadIdx.x;
 	if (index<numPix){
 		// F (py x px)
@@ -73,14 +73,14 @@ __global__ void structureFactorChunk(float *sf_real, float *sf_imag, float *f, f
 		int f_ind = 0;
 		for (int n = 0; n < chunkSize; n++) {
 			map = 6.283185307F * (p[n]*q[index] + p[n+chunkSize]*q[index+(numPix)] + p[n+(2*chunkSize)]*q[index+(2*numPix)]);
-			f_ind = index + ((int)i[n])*numPix;
+			f_ind = index + i[n]*numPix;
 			sf_real[index] += f[f_ind] * cos(map);
 			sf_imag[index] += f[f_ind] * sin(map);
 		}
 	}
 }
 
-__global__ void structureFactorChunkParallel(float *pad_real, float *pad_imag, float *f, float *q, float *i, float *p, int numAtomTypes, int numPix, int chunkSize){
+__global__ void structureFactorChunkParallel(float *pad_real, float *pad_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize){
 	int pixelId = blockIdx.x + blockIdx.y * gridDim.x;
 	int chunkId = threadIdx.x;
 	int index = pixelId + chunkId * numPix;
@@ -91,7 +91,7 @@ __global__ void structureFactorChunkParallel(float *pad_real, float *pad_imag, f
 		// i (1 x chunkSize)
 		// p (chunkSize x 3)
 		float map = 6.283185307F * (p[chunkId]*q[pixelId] + p[chunkId+chunkSize]*q[pixelId+(numPix)] + p[chunkId+(2*chunkSize)]*q[pixelId+(2*numPix)]);
-		int f_ind = pixelId + ((int)i[chunkId])*numPix;
+		int f_ind = pixelId + i[chunkId]*numPix;
 		pad_real[index] = f[f_ind] * cos(map);
 		pad_imag[index] = f[f_ind] * sin(map);
 	}
@@ -217,12 +217,13 @@ void cuda_structureFactor(float *F, float *f, float *q, float *p, int numPix, in
   	cudaFree(d_F); cudaFree(d_f); cudaFree(d_q); cudaFree(d_p);
 }
 
-void cuda_structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, float *i, float *p, int numAtomTypes, int numPix, int chunkSize) {
-	float *d_sf_real, *d_sf_imag, *d_f, *d_q, *d_i, *d_p; // Pointer to device memory
+void cuda_structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize) {
+	float *d_sf_real, *d_sf_imag, *d_f, *d_q, *d_p; // Pointer to device memory
+	int *d_i;
 	int size_sf = numPix*sizeof(float);
 	int size_f = numPix*numAtomTypes*sizeof(float);
 	int size_q = numPix*3*sizeof(float);
-	int size_i = chunkSize*sizeof(float);
+	int size_i = chunkSize*sizeof(int);
 	int size_p = chunkSize*3*sizeof(float);
 	// Allocate space for device copies
 	cudaMalloc((void **)&d_sf_real, size_sf);
@@ -251,12 +252,13 @@ void cuda_structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *
   	cudaFree(d_sf_real); cudaFree(d_sf_imag); cudaFree(d_f); cudaFree(d_q); cudaFree(d_i); cudaFree(d_p);
 }
 
-void cuda_structureFactorChunkParallel(float *pad_real, float *pad_imag, float *f, float *q, float *i, float *p, int numAtomTypes, int numPix, int chunkSize) {
-	float *d_pad_real, *d_pad_imag, *d_f, *d_q, *d_i, *d_p; // Pointer to device memory
+void cuda_structureFactorChunkParallel(float *pad_real, float *pad_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize) {
+	float *d_pad_real, *d_pad_imag, *d_f, *d_q, *d_p; // Pointer to device memory
+	int *d_i;
 	int size_pad = numPix*chunkSize*sizeof(float);
 	int size_f = numPix*numAtomTypes*sizeof(float);
 	int size_q = numPix*3*sizeof(float);
-	int size_i = chunkSize*sizeof(float);
+	int size_i = chunkSize*sizeof(int);
 	int size_p = chunkSize*3*sizeof(float);
 	// Allocate space for device copies
   	cudaMalloc((void **)&d_pad_real, size_pad);

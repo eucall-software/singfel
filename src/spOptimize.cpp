@@ -64,8 +64,8 @@ timerMaster.tic();
 	beam.set_photonsPerPulsePerArea();
 
 	/****** Detector ******/
-	double d = 1.3e-3 * 14;				// (m) detector distance
-	double pix_width = 200e-6;		// (m)
+	double d = 1.3e-3 * 23;				// (m) detector distance
+	double pix_width = 250e-6;		// (m)
 	double pix_height = pix_width;		// (m)
 	const int px = 39;					// number of pixels in x
 	const int py = px;					// number of pixels in y
@@ -141,7 +141,7 @@ cout<< "USE_CHUNK" << endl;
 		fcube q_xyz = conv_to<fcube>::from(det.q_xyz); // q_xyz: py x px x 3
 		float* q_mem = q_xyz.memptr();
 
-		frowvec xyzInd = conv_to<frowvec>::from(particle.xyzInd); // xyzInd: 1 x numAtom
+		irowvec xyzInd = conv_to<irowvec>::from(particle.xyzInd); // xyzInd: 1 x numAtom
 		fmat pos = conv_to<fmat>::from(particle.atomPos); // pos: numAtom x 3
 	
 		fmat pad_real;
@@ -171,9 +171,9 @@ cout<< "USE_CHUNK" << endl;
 //cout << "xyzInd length: " << xyzInd.n_cols << endl;
 //cout << "first_ind: " << first_ind << endl;
 //cout << "last_ind-1: " << last_ind-1 << endl;
-			frowvec xyzInd_sub = xyzInd.subvec( first_ind,last_ind-1 );
+			irowvec xyzInd_sub = xyzInd.subvec( first_ind,last_ind-1 );
 //cout << "hello" << endl;
-			float* i_mem = xyzInd_sub.memptr();	
+			int* i_mem = xyzInd_sub.memptr();	
 			//particle.pos // chunk x 3
 //cout << "pos length: " << pos.n_rows << endl;
 			fmat pos_sub = pos( span(first_ind,last_ind-1), span::all );
@@ -228,6 +228,7 @@ cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 			// Rotate single particle
 			//rot3D.zeros(3,3);			
 			u = randu<vec>(3); // uniform random distribution in the [0,1] interval
+			//u << 0.501 << 0.31 << 0.82;
 			// generate uniform random quaternion on SO(3)
 			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
 					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));

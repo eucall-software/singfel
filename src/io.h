@@ -15,7 +15,7 @@ void load_array2Df(float*,int,int);
 
 void load_atomType(int*,int);
 void load_atomPos(float*,int,int);
-void load_xyzInd(float*,int);
+void load_xyzInd(int*,int);
 void load_fftable(float*,int,int);
 void load_qSample(float*,int);
 
@@ -23,7 +23,7 @@ struct Packet {
 // particle
 	int* atomType;
 	float* atomPos;
-	float* xyzInd;
+	int* xyzInd;
 	float* ffTable;
 	float* qSample;
 	int T;

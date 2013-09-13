@@ -12,7 +12,10 @@ irowvec CParticle::atomType;				// atom type list
 fmat CParticle::atomPos;						// atom position
 fmat CParticle::ffTable;					// form factor table (atomType x qSample)
 frowvec CParticle::qSample;				// q vector sin(theta)/lambda
-frowvec CParticle::xyzInd;				// TEMPORARY
+
+irowvec CParticle::ionList;
+irowvec CParticle::xyzInd;				// TEMPORARY
+
 urowvec CParticle::formFactorList;
 
 CParticle::CParticle (){
@@ -20,7 +23,14 @@ CParticle::CParticle (){
 }
 
 void CParticle::load_atomType(string x){
-	atomType.load(x,raw_ascii);
+	imat B;	// handles rowvec and colvec
+	B.load(x,raw_ascii);
+	if ( B.n_cols == 1 || B.n_rows == 1 ){ // rowvec or colvec
+		atomType = vectorise(B,1);
+	}else{
+		cout << "Error: unexpected atom type dimension" << endl;
+		exit(EXIT_FAILURE);
+	}
 	numAtomTypes = atomType.n_elem;
 }
 /*
@@ -32,7 +42,7 @@ void CParticle::set_atomType(irowvec x, int n){
 }
 */
 void CParticle::set_atomType(Packet *x){
-	cout << "n: " << x->T << endl;
+	//cout << "n: " << x->T << endl;
 	irowvec temp(x->atomType, x->T);
 	atomType = temp;
 	//CParticle::atomType.print("set_atomType: ");
@@ -62,15 +72,37 @@ fmat CParticle::get_atomPos(){
 	return atomPos;
 }
 
+void CParticle::load_ionList(string x){
+	imat B;	// handles rowvec and colvec
+	B.load(x,raw_ascii);
+	if ( B.n_cols == 1 || B.n_rows == 1 ){ // rowvec or colvec
+		ionList = vectorise(B,1);
+	}else{
+		cout << "Error: unexpected ion list dimension" << endl;
+		exit(EXIT_FAILURE);
+	}	
+}
+
 void CParticle::load_xyzInd(string x){
 	xyzInd.load(x,raw_ascii);
-	CParticle::xyzInd.print("set_xyzInd: ");
+	//CParticle::xyzInd.print("set_xyzInd: ");
 }
 
 void CParticle::set_xyzInd(Packet *x){
-	frowvec temp(x->xyzInd, x->N);
+	irowvec temp(x->xyzInd, x->N);
 	xyzInd = temp;
 //	CParticle::xyzInd.print("set_xyzInd: ");
+}
+
+void CParticle::set_xyzInd(irowvec *ionList){
+	int numAtoms = ionList->n_elem;
+	//cout << numAtoms << endl;
+	xyzInd = zeros<irowvec>(numAtoms);
+	for (int i = 0; i < numAtoms; i++) {
+		//cout << "iList: " << ionList[i] << endl;
+		xyzInd(i) = conv_to< int >::from(find(ionList[0](i) == atomType, 0, "first"));
+	}	
+	//CParticle::xyzInd.print("set_xyzInd: ");
 }
 
 void CParticle::load_ffTable(string x){
@@ -86,7 +118,14 @@ void CParticle::set_ffTable(Packet *x){
 }
 
 void CParticle::load_qSample(string x){
-	qSample.load(x,raw_ascii);
+	fmat B;	// handles rowvec and colvec
+	B.load(x,raw_ascii);
+	if ( B.n_cols == 1 || B.n_rows == 1 ){ // rowvec or colvec
+		qSample = vectorise(B,1);
+	}else{
+		cout << "Error: unexpected qSample dimension" << endl;
+		exit(EXIT_FAILURE);
+	}
 	numQSamples = qSample.n_elem;
 //	CParticle::qSample.print("set_qSample: ");
 }
