@@ -12,7 +12,7 @@ ENDIF()
 
 FIND_PACKAGE(GSL REQUIRED)
 
-FIND_PACKAGE(Armadillo REQUIRED)
+FIND_PACKAGE(Armadillo 3.9 REQUIRED)
 IF(HAVE_ARMADILLO)
   INCLUDE(ARMA_FindMKL) # Look for MKL
   MESSAGE("${ARMADILLO_INCLUDES}")
@@ -83,6 +83,9 @@ IF(CUDA_FOUND)
   MESSAGE("${ARMADILLO_LIBRARIES}")
   
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
+
+  CUDA_ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
   CUDA_ADD_EXECUTABLE(cudaSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
   TARGET_LINK_LIBRARIES(cudaSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
