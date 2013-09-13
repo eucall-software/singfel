@@ -96,10 +96,13 @@ IF(CUDA_FOUND)
 ELSEIF(NOT CUDA_FOUND)
   MESSAGE("damn! no cuda")
 
-  ADD_EXECUTABLE(cpuSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+
+  ADD_EXECUTABLE(cpuSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp)
   TARGET_LINK_LIBRARIES(cpuSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
   
-  ADD_LIBRARY(SPFEL SHARED spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp io.cpp diffraction.cu)
+  ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp io.cpp)
   TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
 ENDIF()
