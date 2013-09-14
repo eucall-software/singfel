@@ -43,10 +43,10 @@ int main( int argc, char* argv[] ){
 	string inputDir = argv[2];
 	string outputDir = argv[3];
 	int patternID = atoi(argv[4]);
-	
+
 	string outputName;
 	/* initialize random seed: */
-  	srand (time(NULL));
+	srand(patternID); //srand (time(NULL));
   	
 	wall_clock timer, timer1, timer2, timer3, timerMaster;
 
