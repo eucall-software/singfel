@@ -19,7 +19,7 @@ irowvec CParticle::xyzInd;				// TEMPORARY
 urowvec CParticle::formFactorList;
 
 CParticle::CParticle (){
-	cout << "init particle" << endl;
+	//cout << "init particle" << endl;
 }
 
 void CParticle::load_atomType(string x){

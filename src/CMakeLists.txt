@@ -84,11 +84,11 @@ IF(CUDA_FOUND)
   
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
 
-  CUDA_ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(radiationSINGFEL_gpu radiationDamage.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  CUDA_ADD_EXECUTABLE(cudaSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
-  TARGET_LINK_LIBRARIES(cudaSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(singlePattern_gpu spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  TARGET_LINK_LIBRARIES(singlePattern_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
   CUDA_ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu io.cpp)
   TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
@@ -96,10 +96,13 @@ IF(CUDA_FOUND)
 ELSEIF(NOT CUDA_FOUND)
   MESSAGE("damn! no cuda")
 
-  ADD_EXECUTABLE(cpuSINGFEL spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
-  TARGET_LINK_LIBRARIES(cpuSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+  ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+
+  ADD_EXECUTABLE(singlePattern spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp diffraction.cu)
+  TARGET_LINK_LIBRARIES(singlePattern ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
   
-  ADD_LIBRARY(SPFEL SHARED spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp io.cpp diffraction.cu)
+  ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp detector.cpp beam.cpp particle.cpp diffraction.cpp toolbox.cpp io.cpp diffraction.cu)
   TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
 ENDIF()
