@@ -54,7 +54,8 @@ find_path (ARMADILLO_INCLUDES Mat_meat.hpp
   /usr/include
   /usr/local/include
   /opt/include
-  /afs/desy.de/user/y/yoon/armadillo-3.800.2/include
+  /afs/desy.de/user/y/yoon/armadillo-3.910.1/include
+  #/afs/desy.de/user/y/yoon/armadillo-3.800.2/include
   PATH_SUFFIXES armadillo armadillo_bits
   )
 
@@ -66,7 +67,8 @@ find_library (ARMADILLO_LIBRARIES armadillo
   /usr/lib
   /usr/local/lib
   /opt/lib
-  /afs/desy.de/user/y/yoon/armadillo-3.800.2
+  /afs/desy.de/user/y/yoon/armadillo-3.910.1
+  #/afs/desy.de/user/y/yoon/armadillo-3.800.2
 #  /usr/lib64
   PATH_SUFFIXES
   )
