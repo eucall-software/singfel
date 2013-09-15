@@ -239,8 +239,6 @@ int main( int argc, char* argv[] ){
 		fmat F_hkl_sq;
 		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
 		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
-		detector_intensity.save("../detector_intensity.dat",raw_ascii);
-
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 			
 		if (timeSlice == numPatterns) {
