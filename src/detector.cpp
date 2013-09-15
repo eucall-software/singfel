@@ -25,7 +25,7 @@ fmat CDetector::solidAngle;
 fmat CDetector::thomson;
 
 CDetector::CDetector (){
-	cout << "init detector" << endl;
+	//cout << "init detector" << endl;
 }
 
 void CDetector::set_detector_dist(double dist){

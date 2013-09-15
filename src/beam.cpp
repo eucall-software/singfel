@@ -12,7 +12,7 @@ double CBeam::n_phot;							// number of photons per pulse
 double CBeam::phi_in;  							// number of photon per pulse per area (m^-2)
 
 CBeam::CBeam (){
-	cout << "init beam" << endl;
+	//cout << "init beam" << endl;
 }
 
 void CBeam::set_wavelength(double x){
@@ -61,5 +61,5 @@ void CBeam::set_param(Packet *x){
 	focus_area = datum::pi * pow(focus/2,2);	// pi*r^2
 	n_phot = x->n_phot;	
 	phi_in = n_phot/focus_area;
-cout << "phi_in=n_phot/focus_area: " << phi_in << endl;	
+//cout << "phi_in=n_phot/focus_area: " << phi_in << endl;	
 }

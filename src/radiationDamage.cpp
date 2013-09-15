@@ -30,7 +30,7 @@ using namespace toolbox;
 
 //#define ARMA_NO_DEBUG
 
-#define USE_CUDA 0
+//#define USE_CUDA 0
 #define USE_CHUNK 0
 
 int main( int argc, char* argv[] ){
@@ -43,6 +43,7 @@ int main( int argc, char* argv[] ){
 	string inputDir = argv[2];
 	string outputDir = argv[3];
 	int patternID = atoi(argv[4]);
+	int USE_CUDA = atoi(argv[5]);
 
 	string outputName;
 	/* initialize random seed: */
@@ -93,15 +94,15 @@ int main( int argc, char* argv[] ){
 	double theta = atan((px/2*pix_height)/d);
 	double qmax = 2/lambda*sin(theta/2);
 	double dmin = 1/(2*qmax);
-	cout << "max q to the edge: " << qmax << " m^-1" << endl;
-	cout << "Half period resolution: " << dmin << " m" << endl;
+	//cout << "max q to the edge: " << qmax << " m^-1" << endl;
+	//cout << "Half period resolution: " << dmin << " m" << endl;
 	
 	umat detector_counts;		
 	detector_counts.zeros(py,px);
 
 	int sliceInterval = 5;
 	for (int timeSlice = 5; timeSlice <= numPatterns; timeSlice+=sliceInterval) {
-		cout << timeSlice << endl;
+		//cout << timeSlice << endl;
 	
 		stringstream sstm0;
 		sstm0 << "/snp_" << setfill('0') << setw(3) << timeSlice;
@@ -131,7 +132,7 @@ int main( int argc, char* argv[] ){
 			phot.load(inputDir+filename+"_Nph.dat");
 			n_phot += conv_to< double >::from(phot);	// number of photons per pulse
 		}
-		cout << n_phot << endl;
+		//cout << n_phot << endl;
 		beam.set_photonsPerPulse(n_phot);
 		beam.set_photonsPerPulsePerArea();
 
@@ -140,7 +141,7 @@ int main( int argc, char* argv[] ){
 
 #ifdef COMPILE_WITH_CUDA
 	if (USE_CUDA && !USE_CHUNK) {
-		cout<< "USE_CUDA" << endl;
+		//cout<< "USE_CUDA" << endl;
 
 		CDiffraction::get_atomicFormFactorList(&particle,&det);		
 
@@ -166,7 +167,7 @@ int main( int argc, char* argv[] ){
 			quaternion.save(outputName,raw_ascii);		
 		}		
 	} else if (USE_CUDA && USE_CHUNK) {
-		cout<< "USE_CHUNK" << endl;
+		//cout<< "USE_CHUNK" << endl;
 		int max_chunkSize = 100;
 		int chunkSize = 0;
 
@@ -233,7 +234,7 @@ int main( int argc, char* argv[] ){
 	if(!USE_CUDA) {
 		timer.tic();
 		CDiffraction::get_atomicFormFactorList(&particle,&det);
-		cout<< "CPU" << endl;
+		//cout<< "CPU" << endl;
 
 		fmat F_hkl_sq;
 		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
@@ -253,10 +254,8 @@ int main( int argc, char* argv[] ){
 			quaternion.save(outputName,raw_ascii);		
 		}	
 	}
-
-	cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
-
 	}
+//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
   	return 0;
 }
 
