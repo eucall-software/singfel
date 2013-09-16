@@ -44,10 +44,12 @@ int main( int argc, char* argv[] ){
 	string outputDir = argv[3];
 	int patternID = atoi(argv[4]);
 	int USE_CUDA = atoi(argv[5]);
+	int trajectory = atoi(argv[6]);
 
 	string outputName;
 	/* initialize random seed: */
-	srand(patternID); //srand (time(NULL));
+	//srand(patternID); 
+	srand (time(NULL)+patternID);
   	
 	wall_clock timer, timer1, timer2, timer3, timerMaster;
 
@@ -243,17 +245,17 @@ int main( int argc, char* argv[] ){
 			
 		if (timeSlice == numPatterns) {
 			stringstream sstm;
-			sstm << outputDir << "/diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);		
 		}	
 	}
 	}
-//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
+	cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
   	return 0;
 }
 
