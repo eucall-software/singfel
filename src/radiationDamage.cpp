@@ -160,11 +160,11 @@ int main( int argc, char* argv[] ){
 		
 		if (timeSlice == numPatterns) {
 			stringstream sstm;
-			sstm << outputDir << "/diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);		
 		}		
@@ -223,11 +223,11 @@ int main( int argc, char* argv[] ){
 		
 		if (timeSlice == numPatterns) {
 			stringstream sstm;
-			sstm << outputDir << "/diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);		
 		}
