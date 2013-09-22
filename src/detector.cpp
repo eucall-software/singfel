@@ -128,7 +128,8 @@ void CDetector::init_dp( beam::CBeam *beam ){
 /******************THOMSON SCATTERING FIX HERE********************/
 	double re = 2.81793870e-15;			// classical electron radius (m)
 	// Vertical polarization, mu = pi/2, cos^2(mu) = 0
-	thomson = pow(re,2) / r_sq;
+	fmat tmp(py,px);
+	thomson = pow(re,2) * tmp.ones();
 }
 
 void CDetector::set_param(Packet *x){
