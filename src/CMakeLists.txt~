@@ -66,7 +66,7 @@ IF (H5_HAVE_PARALLEL)
   ADD_DEFINITIONS ("-DMPICH_IGNORE_CXX_SEEK")
 ENDIF (H5_HAVE_PARALLEL)
 
-#ADD_SUBDIRECTORY (${HDF5_CPP_SOURCE_DIR}/src ${HDF5_CPP_BINARY_DIR}/src)
+ADD_SUBDIRECTORY (${HDF5_CPP_SOURCE_DIR}/src ${HDF5_CPP_BINARY_DIR}/src)
 
 #-----------------------------------------------------------------------------
 # Build the CPP Examples

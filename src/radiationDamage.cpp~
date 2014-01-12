@@ -134,7 +134,7 @@ int main( int argc, char* argv[] ){
 			phot.load(inputDir+filename+"_Nph.dat");
 			n_phot += conv_to< double >::from(phot);	// number of photons per pulse
 		}
-		n_phot = 2e13;
+		n_phot = 1e13;
 		//cout << n_phot << endl;
 		beam.set_photonsPerPulse(n_phot);
 		beam.set_photonsPerPulsePerArea();

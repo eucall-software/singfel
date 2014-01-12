@@ -38,8 +38,11 @@ int main( int argc, char* argv[] ){
     for (int n = 1; n < argc; n++)
     	cout << setw( 2 ) << n << ": " << argv[ n ] << '\n';
 
-	int numPatterns = atoi(argv[1]);
-
+	float q0 = atof(argv[1]);
+	float q1 = atof(argv[2]);
+	float q2 = atof(argv[3]);
+	float q3 = atof(argv[4]);
+	
 	wall_clock timer, timer1, timer2, timer3, timerMaster;
 
 timerMaster.tic();
@@ -222,16 +225,15 @@ cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		CParticle rotatedParticle = CParticle();
 		rotatedParticle = particle;
 		fmat rot3D(3,3);
-		vec u(3);
+		//vec u(3);
 		vec quaternion(4);	
 		for (int i = 0; i < numPatterns; i++) {
 			// Rotate single particle
 			//rot3D.zeros(3,3);			
-			u = randu<vec>(3); // uniform random distribution in the [0,1] interval
+			//u = randu<vec>(3); // uniform random distribution in the [0,1] interval
 			//u << 0.501 << 0.31 << 0.82;
 			// generate uniform random quaternion on SO(3)
-			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+			quaternion << q0 << q1 << q2 << q3;
 			
 			//cout << quaternion << endl;
 			
