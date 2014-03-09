@@ -19,7 +19,7 @@ umat CDetector::dp;					// diffraction pattern
 fmat CDetector::q_x;
 fmat CDetector::q_y;
 fmat CDetector::q_z;
-fcube CDetector::q_xyz;
+fcube CDetector::q_xyz; // slow? perhaps waste of memory
 fmat CDetector::q_mod;
 fmat CDetector::solidAngle;
 fmat CDetector::thomson;
@@ -98,16 +98,66 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	set_numPix(py,px);
 	set_center_x(cx);
 	set_center_y(cy);
-	//dp.zeros(py,px);
+//cout << "Got here" << endl;	
+
+	// Used for LCLS making diffraction volume
+	q_xyz.zeros(py,px,3);
+	float rx, ry, r, twotheta, az;
+	for (int ind_x = 0; ind_x < px; ind_x++) {
+		for (int ind_y = 0; ind_y < py; ind_y++) {
+			rx = (ind_x - cx) * pix_width;
+			ry = (ind_y - cy) * pix_width;
+			r = sqrt(pow(rx,2)+pow(ry,2));
+			twotheta = atan2(r,d);
+			az = atan2(ry,rx);
+			q_xyz(ind_y,ind_x,0) = beam->k * sin(twotheta)*cos(az);
+			q_xyz(ind_y,ind_x,1) = beam->k * sin(twotheta)*sin(az);
+			q_xyz(ind_y,ind_x,2) = beam->k * (cos(twotheta) - 1.0);
+			
+			if (ind_x==0 && ind_y==0) {
+			//cout << "cnx,cny,res: " << cx<<","<<cy<<","<<1./pix_width<<endl;
+			//cout << "fs,ss: " << ind_x<<","<<ind_y<<endl;
+			cout << "cx,lambda: " << cx <<"," << beam->lambda << endl;
+			cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
+			}
+		}
+	}
+
+/* // Hard coded 9090
+	// Used for LCLS making diffraction volume
+	q_xyz.zeros(py,px,3);
+	float rx, ry, r, twotheta, az;
+	for (int ind_x = 0; ind_x < px; ind_x++) {
+		for (int ind_y = 0; ind_y < py; ind_y++) {
+			rx = (ind_x - cx) / 9090.0;
+			ry = (ind_y - cy) / 9090.0;
+			r = sqrt(pow(rx,2)+pow(ry,2));
+			twotheta = atan2(r,d);
+			az = atan2(ry,rx);
+			q_xyz(ind_y,ind_x,0) = beam->k * sin(twotheta)*cos(az);
+			q_xyz(ind_y,ind_x,1) = beam->k * sin(twotheta)*sin(az);
+			q_xyz(ind_y,ind_x,2) = beam->k * (cos(twotheta) - 1.0);
+			//if (ind_x==331 && ind_y==513) {
+			//cout << "cnx,cny,res: " << cx<<","<<cy<<","<<1./pix_width<<endl;
+			//cout << "fs,ss: " << ind_x<<","<<ind_y<<endl;
+			//cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
+			//}
+		}
+	}
+*/
+/*		
 	q_xyz.zeros(py,px,3);
 	fmat r_x, r_y, k;
 	frowvec coord_x = (linspace<frowvec>(0.0, px-1, px) - cx) * pix_width;
 	fcolvec coord_y = (cy - linspace<fcolvec>(0.0, py-1, py)) * pix_height;
+	//cout << coord_x << endl;
 	double c2r = 1/(beam->lambda*d); // convert to reciprocal space 
 	fmat coord_x_mat = repmat(coord_x, py, 1);
 	fmat coord_y_mat = repmat(coord_y, 1, px);
 	r_x = coord_x_mat*c2r; // reciprocal coord
 	r_y = coord_y_mat*c2r;
+	//cout << "cx,cy: " << cx << "," << cy << endl;
+cout << "r_x r_y: " << r_x(0,0) << "," << r_y(0,0) << endl;
 	k = beam->k * ones<fmat>(py,px);
 	fmat c2e = k/(sqrt( pow(r_x,2) + pow(r_y,2) + pow(k,2) ));
 	q_xyz.slice(0) = r_x % c2e;
@@ -125,6 +175,8 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	}
 	fmat r_sq =  pow(coord_x_mat,2) + pow(coord_y_mat,2) + pow(d,2); // real space
 	solidAngle = pix_width * pix_height * cos(twotheta) / r_sq; // real space (Unitless)
+//cout << "solidAngle:" << solidAngle << endl;
+*/
 /******************THOMSON SCATTERING FIX HERE********************/
 	double re = 2.81793870e-15;			// classical electron radius (m)
 	// Vertical polarization, mu = pi/2, cos^2(mu) = 0

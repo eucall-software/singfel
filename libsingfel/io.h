@@ -1,13 +1,17 @@
 #ifndef CIO_H
 #define CIO_H
-
+#include <armadillo>
 #include <string>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-int hdf_read(std::string,std::string);
+arma::fmat hdf5read(std::string,std::string);
+void hdf5write(std::string,std::string,arma::fmat);
+
+arma::fmat load_asciiImage(std::string x);
+arma::fvec load_asciiEuler(std::string x);
 
 void load_constant(int);
 void load_array(int*,int);
