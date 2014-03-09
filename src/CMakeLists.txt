@@ -18,73 +18,16 @@ IF(NOT CMAKE_BUILD_TYPE)
 ENDIF()
 
 #FIND_PACKAGE(HDF5 REQUIRED)
-#IF(HDF5_FOUND)
-#  MESSAGE("HDF5 FOUND")
-#  MESSAGE(${HDF5_INCLUDE_DIR})
-  # We don't want to scare people with this
-#mark_as_advanced(HDF5_DIR)
-#mark_as_advanced(CLEAR HDF5_C_INCLUDE_DIR)
-#mark_as_advanced(CLEAR HDF5_hdf5_LIBRARY_RELEASE)
-#mark_as_advanced(CLEAR HDF5_hdf5_LIBRARY_DEBUG)
-set(HDF5_INCLUDE_DIRS /data/yoon/hdf5/include)
-set(HDF5_LIBRARIES /data/yoon/hdf5/lib)
-include_directories(${HDF5_INCLUDE_DIRS})
-link_directories(${HDF5_LIBRARIES})
-
-#-----------------------------------------------------------------------------
-# Apply Definitions to compiler in this directory and below
-#-----------------------------------------------------------------------------
-ADD_DEFINITIONS (${HDF5_EXTRA_C_FLAGS})
-
-#-----------------------------------------------------------------------------
-# Shared/Static Libs
-#-----------------------------------------------------------------------------
-IF (BUILD_SHARED_LIBS)
-  SET (CPP_BUILT_AS_DYNAMIC_LIB 1)
-ELSE (BUILD_SHARED_LIBS)
-  SET (CPP_BUILT_AS_STATIC_LIB 1)
-ENDIF (BUILD_SHARED_LIBS)
-
-#-----------------------------------------------------------------------------
-# Generate configure file
-#-----------------------------------------------------------------------------
-#CONFIGURE_FILE (${HDF5_RESOURCES_DIR}/H5cxx_config.h.in
-#                ${HDF5_BINARY_DIR}/H5cxx_pubconf.h
-#)
-
-#-----------------------------------------------------------------------------
-# Setup Include directories
-#-----------------------------------------------------------------------------
-INCLUDE_DIRECTORIES (${HDF5_CPP_SOURCE_DIR}/src)
-INCLUDE_DIRECTORIES (${HDF5_BINARY_DIR})
-
-#-----------------------------------------------------------------------------
-# Parallel/MPI, prevent spurious cpp/cxx warnings
-#-----------------------------------------------------------------------------
-IF (H5_HAVE_PARALLEL)
-  ADD_DEFINITIONS ("-DMPICH_SKIP_MPICXX")
-  ADD_DEFINITIONS ("-DMPICH_IGNORE_CXX_SEEK")
-ENDIF (H5_HAVE_PARALLEL)
-
-#ADD_SUBDIRECTORY (${HDF5_CPP_SOURCE_DIR}/src ${HDF5_CPP_BINARY_DIR}/src)
-
-#-----------------------------------------------------------------------------
-# Build the CPP Examples
-#-----------------------------------------------------------------------------
-IF (HDF5_BUILD_EXAMPLES)
-  ADD_SUBDIRECTORY (${HDF5_CPP_SOURCE_DIR}/examples ${HDF5_CPP_BINARY_DIR}/examples)
-ENDIF (HDF5_BUILD_EXAMPLES)
-
-#-----------------------------------------------------------------------------
-# Build the CPP unit tests
-#-----------------------------------------------------------------------------
-IF (BUILD_TESTING)
-  ADD_SUBDIRECTORY (${HDF5_CPP_SOURCE_DIR}/test ${HDF5_CPP_BINARY_DIR}/test)
-ENDIF (BUILD_TESTING)
-
-#ELSEIF(NOT HDF5_FOUND)
-#  MESSAGE("HDF5 NOT FOUND")
-#ENDIF()
+IF(HDF5_FOUND)
+  MESSAGE("HDF5 FOUND")
+  INCLUDE_DIRECTORIES(${HDF5_INCLUDE_DIRS})
+  LINK_DIRECTORIES(${HDF5_LIBRARIES})
+ENDIF()
+set(HDF5_INCLUDE_DIRS ${HDF5_INCLUDE_DIRS} /data/yoon/hdf5-1.8.12/include)
+set(HDF5_LIBRARIES ${HDF5_LIBRARIES} /data/yoon/hdf5-1.8.12/lib/libhdf5.so /data/yoon/hdf5-1.8.12/lib/libhdf5_cpp.so)
+SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+#include_directories(${HDF5_INCLUDE_DIRS})
+#link_directories(${HDF5_LIBRARIES})
 
 FIND_PACKAGE(GSL REQUIRED)
 
@@ -169,7 +112,7 @@ IF(CUDA_FOUND)
   CUDA_ADD_EXECUTABLE(singlePatternQuaternion_gpu spQuaternion.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(singlePatternQuaternion_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  CUDA_ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu io.cpp)
+  CUDA_ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu ${LIBSINGFEL}/io.cpp)
   TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
 ELSEIF(NOT CUDA_FOUND)
@@ -189,4 +132,7 @@ ELSEIF(NOT CUDA_FOUND)
 
   ADD_EXECUTABLE(makeDiffractionVolume makeDiffractionVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(makeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  
+  ADD_EXECUTABLE(makeDiffractionVolumeSingleAxis makeDiffractionVolumeSingleAxis.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(makeDiffractionVolumeSingleAxis ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
 ENDIF()
