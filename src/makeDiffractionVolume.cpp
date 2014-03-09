@@ -45,10 +45,12 @@ int main( int argc, char* argv[] ){
     for (int n = 1; n < argc; n++)
     	cout << setw( 2 ) << n << ": " << argv[ n ] << '\n';
 
+	std::string myStream = "/data/yoon/diffVol3D/test_x/1JB0.stream";
+
 	std::string folderName;
 	folderName = argv[1];
 
-	float inc_res = 3300;
+	float inc_res = 3268;
 	
 	wall_clock timer, timer1, timer2, timer3, timerMaster;
 
@@ -85,31 +87,35 @@ int main( int argc, char* argv[] ){
 	cout << "Half period resolution: " << dmin << " m" << endl;
 
 	if(!USE_CUDA) {
-		cout << det.q_xyz(0,0,0) << endl; // 1456x1456x3
 
-		
 		int counter = 0;
 		fmat pix;
 		pix.zeros(det.numPix,3);
+		//imat pixInd;
+		//pixInd.zeros(det.numPix,2);
 		for (int i = 0; i < px; i++) {
-			for (int j = 0; j < py; j++) {
+			for (int j = 0; j < py; j++) { // column-wise
 				pix(counter,0) = det.q_xyz(j,i,0);
 				pix(counter,1) = det.q_xyz(j,i,1);
 				pix(counter,2) = det.q_xyz(j,i,2);
+				//pixInd(counter,0) = j;
+				//pixInd(counter,1) = i;
 				counter++;
+		
 			}
 		}
+
 		pix = pix * 1e-10 * inc_res; // (A^-1)
-		
-		cout << pix.row(197) << endl;
+	
 		fvec pix_mod = sqrt(sum(pix%pix,1));
 		float pix_max = max(pix_mod);
 		int mySize = 2*ceil(pix_max)+1;
-		cout << "mySize: " << mySize <<endl;
 		
+		// Determine numCrystals in stream file
 		int folderNum = 4;
 		string line;
-		ifstream myfile ("/data/yoon/diffVol3D/crystfel4/1JB0.stream");
+		ifstream myfile (myStream.c_str());
+		//ifstream myfile ("/data/yoon/diffVol3D/crystfel4/1JB0.stream");
 		int numCrystals = 0;
 		if (myfile.is_open())
 		{
@@ -125,11 +131,13 @@ int main( int argc, char* argv[] ){
 		
 		cout << numCrystals << endl;
 		
+		// Read in stream file
 		fcube Astar;
 		Astar.zeros(3,3,numCrystals);
 		field<std::string> filenames(numCrystals);
 		string subs;
-		myfile.open ("/data/yoon/diffVol3D/crystfel4/1JB0.stream", std::ifstream::in);
+		myfile.open (myStream.c_str(), std::ifstream::in);
+		//myfile.open ("/data/yoon/diffVol3D/crystfel4/1JB0.stream", std::ifstream::in);
 		counter = 0;
 		if (myfile.is_open()) {
 			while ( getline (myfile,line) ) {
@@ -138,96 +146,190 @@ int main( int argc, char* argv[] ){
 		 			subs = line.substr(16);
 		 		} else if (line.compare("--- Begin crystal") == 0) {
 		 			filenames(counter) = subs;
+		 			
+		 			cout << subs << endl;
+		 			
 		 			getline (myfile,line); // Cell parameters
 		 			for (int i = 0; i < 3; i++) { // Loop over a*,b*,c*
 			 			getline (myfile,line);
 			 			subs = line.substr(8,18);
 			 			Astar(i,0,counter) = atof(subs.c_str());
+			 			//cout << subs << endl;
 			 			subs = line.substr(19,29);
 			 			Astar(i,1,counter) = atof(subs.c_str());
+			 			//cout << subs << endl;
 			 			subs = line.substr(30,40);
 			 			Astar(i,2,counter) = atof(subs.c_str());
+			 			//cout << subs << endl;
 		 			}
 		 			counter++;
 		 		}
   			}
   			myfile.close();
   		}
-  		cout << filenames(numCrystals-1) << endl;
-		cout << Astar(2,2,numCrystals-1) << endl;
 		
-		// Compress
-		fcube weight;
-		weight.zeros(mySize,mySize,mySize);
-		fcube intensity;
-		intensity.zeros(mySize,mySize,mySize); 
+		// Fill diffraction volume using Trilinear interpolation
 		fmat origin;
 		origin << 0.0355708 << 0.0205367 << 0.0000019 << endr
 		       << 0.0000001 << 0.0410735 << 0.0000004 << endr
   		       << -0.0000029 << -0.0000005 << 0.0605860 << endr;
   		
-  		int r = 0;
-  		r = hdf_read(line,line);
-  		//filenames(r)
-  		//for (int r = 0; r < 1; r++) {
+  		string filename;
+  		string datasetname = "/data/data";
+  		fmat myDP;
+  		  		
+  		mat B;
+  		fmat temp;
+  		fmat originRot;
+  		originRot.zeros(3,3);
+  		mat U;
+		vec s;
+		mat V;
+		mat M;
+		mat rot;
+		fmat pixRot;
+		pixRot.zeros(det.numPix,3);
+		imat xyz;
+		xyz.zeros(det.numPix,3);
+		fmat fxyz;
+		fxyz.zeros(det.numPix,3);
+		fmat cxyz;
+		cxyz.zeros(det.numPix,3);
+		float weight;
+		float photons;
+		float x,y,z,fx,fy,fz,cx,cy,cz;
+		fcube myWeight;
+		myWeight.zeros(mySize,mySize,mySize);
+		fcube myIntensity;
+		myIntensity.zeros(mySize,mySize,mySize);
+		
+		cout << "Start" << endl;
+		
+  		for (int r = 0; r < 1; r++) {//(int r = 0; r < numCrystals; r++) {
+  			cout << "filename: "<< filenames(r) << endl;
+  			filename = "/data/yoon/diffVol3D/test_x/" + filenames(r);
+			//filename = "/data/yoon/diffVol3D/crystfel"+ folderName +"/" + filenames(r);
+			myDP = hdf5read(filename,datasetname);
+			
+        	// Form rotation matrix by solving Wahba's problem
+        	originRot = Astar.slice(r);
+        	cout <<"originRot: "<< Astar.slice(r) << endl;
+        	temp.zeros(3,3);
+        	for (int i = 0; i < 3; i++) {
+        		temp += trans(origin.row(i)) * originRot.row(i);
+        	}
+        	B = conv_to<mat>::from(temp);
+        	svd(U,s,V,B);
+        	M.eye(3,3);
+        	M(2,2) = arma::det(U)*arma::det(trans(V));
+        	rot = U*M*trans(V);
+        	cout << "rot: " << rot << endl;
+ 
+        	fvec myPhotons = vectorise(myDP); // column-wise
+        	cout << "DP: " << myPhotons(92) << endl;
+        	
+        	// rotate and centre Ewald slice
+        	pixRot = conv_to<fmat>::from(rot)*trans(pix) + pix_max; 
+        	xyz = conv_to<imat>::from(floor(pixRot));
+        	fxyz = pixRot - xyz;
+        	cxyz = 1. - fxyz;
+        	for (int p = 0; p < det.numPix; p++) {
 
-  		//}
+        		photons = myPhotons(p);
+        		
+        		x = xyz(0,p);
+        		y = xyz(1,p);
+        		z = xyz(2,p);
+
+        		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+        			continue;
+        			
+        		if (x < 0 || y < 0 || z < 0)
+        			continue;	
+        		
+        		fx = fxyz(0,p);
+        		fy = fxyz(1,p);
+        		fz = fxyz(2,p);
+        		cx = cxyz(0,p);
+        		cy = cxyz(1,p);
+        		cz = cxyz(2,p);
+        		
+        		weight = cx*cy*cz;
+        		myWeight(y,x,z) += weight;
+        		myIntensity(y,x,z) += weight * photons;
+
+        		weight = cx*cy*fz;
+        		myWeight(y,x,z+1) += weight;
+        		myIntensity(y,x,z+1) += weight * photons; 
+
+        		weight = cx*fy*cz;
+        		myWeight(y+1,x,z) += weight;
+        		myIntensity(y+1,x,z) += weight * photons; 
+
+        		weight = cx*fy*fz;
+        		myWeight(y+1,x,z+1) += weight;
+        		myIntensity(y+1,x,z+1) += weight * photons;         		        
+        		
+        		weight = fx*cy*cz;
+        		myWeight(y,x+1,z) += weight;
+        		myIntensity(y,x+1,z) += weight * photons; 		       		 
+
+        		weight = fx*cy*fz;
+        		myWeight(y,x+1,z+1) += weight;
+        		myIntensity(y,x+1,z+1) += weight * photons; 
+
+        		weight = fx*fy*cz;
+        		myWeight(y+1,x+1,z) += weight;
+        		myIntensity(y+1,x+1,z) += weight * photons;
+
+        		weight = fx*fy*fz;
+        		myWeight(y+1,x+1,z+1) += weight;
+        		myIntensity(y+1,x+1,z+1) += weight * photons;
+
+        	}
+  		}
+  		
+  		int i,j;
+  		for (j = 814; j < 817; j++)
+   	  	{
+      	for (i = 365; i < 368; i++)
+      		{
+	    		cout << myIntensity(j,i,724) << " ";
+      		}
+      		cout << endl;
+      	}
+      
+      	fcube intens;
+      	intens.zeros(mySize,mySize,mySize);
+      	int numSym = 6; // 1JB0 in-plane symmetry
+      	fcube mySlice;
+      	mySlice.zeros(mySize,mySize,numSym);
+      	fcube sliceWeight;
+      	sliceWeight.zeros(mySize,mySize,numSym);
+      	for (i = 0; i < mySize; i++) {
+      		for (j = 0; j < numSym; j++) {
+      			
+      		}
+      	}
+  		//uvec ind = find(myWeight > 0); // Arma 4.0
+  		//myIntensity(ind) /= myWeight(ind);
+  		/*
+  		for (int i = 0; i < det.numPix; i++) {
+  			if (myWeight(i) != 0.) {
+  				myIntensity(i) /= myWeight(i);
+  			}
+  		}
+  		*/
 		/*
-		fmat F_hkl_sq;
-		string outputName;
-
-		CParticle rotatedParticle = CParticle();
-		rotatedParticle = particle;
-		fmat rot3D(3,3);
-		//vec u(3);
-		vec quaternion(4);	
-		int i = 0;
-		//for (int i = 0; i < numPatterns; i++) {
-			// Rotate single particle
-			//rot3D.zeros(3,3);			
-			//u = randu<vec>(3); // uniform random distribution in the [0,1] interval
-			//u << 0.501 << 0.31 << 0.82;
-			// generate uniform random quaternion on SO(3)
-			quaternion << q0 << q1 << q2 << q3;
-			
-			//cout << quaternion << endl;
-			
-			rot3D = CToolbox::quaternion2rot3D(quaternion, 1);
-			
-			//cout << rot3D << endl;
-
-			fmat myPos = particle.get_atomPos();
-			//cout << myPos << endl;
-			
-			myPos = myPos * trans(rot3D);	// rotate atom positions
-			
-			rotatedParticle.set_atomPos(&myPos);
-
-			//cout << rotatedParticle.get_atomPos() << endl;
-
-			F_hkl_sq = CDiffraction::calculate_intensity(&rotatedParticle,&det);
-			//cout<<"Calculate F_hkl: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
-			//F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
-			//timer.tic();
-			fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in; //2.105e30
-			umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);		
-			//cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-			//det.solidAngle.save("../solidAngle.dat",raw_ascii);
-			//timer.tic();
-			stringstream sstm;
-			sstm << "/data/yoon/singfel/dataMonster/diffraction_" << setfill('0') << setw(6) << i << ".dat";
-			outputName = sstm.str();
-			detector_counts.save(outputName,raw_ascii);
-			stringstream sstm1;
-			sstm1 << "/data/yoon/singfel/dataMonster/quaternion_" << setfill('0') << setw(6) << i << ".dat";
-			outputName = sstm1.str();
-			quaternion.save(outputName,raw_ascii);			
-			//cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
-		//}
+  		cube myIntensity1 = conv_to<cube>::from(myIntensity);
+  		cube myWeight1 = conv_to<cube>::from(myWeight);
+  		myIntensity1.save("myIntensity.mat",raw_ascii);
+		myWeight1.save("myWeight.mat",raw_ascii);
 		*/
 	}
 
 cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
+
   	return 0;
 }
 
