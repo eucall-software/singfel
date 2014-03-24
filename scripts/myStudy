@@ -1,0 +1,5 @@
+# Script for compiling and running makeDiffractionVolumeSingleAxisStream
+cmake .. && \
+make && \
+cp src/studyCoordinates . && \
+./runStudyCoordinates

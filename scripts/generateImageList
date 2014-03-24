@@ -1,0 +1,1 @@
+find /home/beams/EPIX34ID/yoon/singfel/dataShrine -name "im*" -print > images.lst

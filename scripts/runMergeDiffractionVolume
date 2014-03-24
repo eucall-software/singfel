@@ -1,0 +1,12 @@
+# Example run script
+# Line starting with "#" or ";" are ignored. ";" is compatible with CrystFEL files.
+./mergeDiffractionVolume \
+# Not used
+-i images.lst \
+# Not used
+-e euler.lst \
+-b aps.beam \
+-g aps.geom \
+--num_images = 3000 \
+--vol_dim = 129 \
+--output_name = myIntensityStudy.dat
