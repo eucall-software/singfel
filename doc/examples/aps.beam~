@@ -1,5 +1,0 @@
-# Example ini file
-# Line starting with "#" or ";" are ignored. ";" is compatible with CrystFEL files.
-; [Beam]
-; photon energy (eV)
-beam/photon_energy = 8000.0
