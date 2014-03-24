@@ -8,6 +8,22 @@ HDF5
 Optional Dependencies:
 MPI
 
+Installing dependencies without sudo:
+PYTHON
+This should already exist in standard Linux
+
+BOOST
+./bootstrap.sh --prefix=/path/to/boost/directory --with-python=/which/python
+./b2 install
+
+ARMADILLO
+cmake .
+make
+make install DESTDIR=/path/to/armadillo/directory
+
+HDF5
+
+
 Add the following lines to .bashrc which is used by CMake
 # HDF5
 export HDF5_DIR=/path/to/hdf5/directory
