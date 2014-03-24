@@ -3,6 +3,7 @@
 #include <armadillo>
 #include "beam.h"
 #include "io.h"
+#include "detector.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,8 @@ public:
 	static arma::fmat q_mod;
 	static arma::fmat solidAngle;
 	static arma::fmat thomson;
+	static arma::uvec badpixmap; //static arma::sp_imat badpixmap;
+	static arma::uvec goodpixmap;
 public:
 	CDetector ();
 	//CDetector (int);
@@ -46,6 +49,10 @@ public:
 	static double get_center_x();
 	static void set_center_y(double);
 	static double get_center_y();
+	void set_pixelMap(std::string);
+	arma::uvec get_goodPixelMap();
+	arma::uvec get_badPixelMap();
+	void apply_badPixels();
 	static void init_dp(beam::CBeam *beam);
 	static void set_param(Packet*);
 protected:

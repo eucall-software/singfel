@@ -51,8 +51,8 @@ using namespace toolbox;
 void hdf5write(std::string filename, std::string datasetname, arma::fmat image){
 	const H5std_string FILE_NAME( filename );
 	const H5std_string DATASET_NAME( datasetname );
-	const int    NX = 1456;		// output buffer dimensions
-	const int    NY = 1456;
+	//const int    NX = 1456;		// output buffer dimensions
+	//const int    NY = 1456;
 	
 }
 
@@ -122,13 +122,13 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
           */
 	 	 H5std_string order_string;
          H5T_order_t order = intype.getOrder( order_string );
-	 	 //cout << order_string << endl;
+	 	 cout << "Endian:" << order << endl;
 
          /*
           * Get size of the data element stored in file and print it.
           */
          size_t size = intype.getSize();
-         //cout << "Data size is " << size << endl;
+         cout << "Data size is " << size << endl;
       }
 
       /*
@@ -147,9 +147,9 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
        */
       hsize_t dims_out[2];
       int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-      //cout << "rank " << rank << ", dimensions " <<
-	  //    (unsigned long)(dims_out[0]) << " x " <<
-	  //    (unsigned long)(dims_out[1]) << endl;
+      cout << "rank " << rank << ", dimensions " <<
+	      (unsigned long)(dims_out[0]) << " x " <<
+	      (unsigned long)(dims_out[1]) << endl;
 
       /*
        * Define hyperslab in the dataset; implicitly giving strike and
@@ -484,7 +484,7 @@ cout << "pack->finish: " << pack->finish << endl;
 		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
 		fmat detector_intensity;
 		detector_intensity.copy_size(F_hkl_sq);
-		detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * beam.phi_in;//2.105e30;
+		detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * beam.get_photonsPerPulsePerArea();//beam.phi_in;//2.105e30;
 
 		string name = "../detector_counts_" + ss.str() + ".dat";
 		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);
@@ -493,7 +493,7 @@ cout << "pack->finish: " << pack->finish << endl;
 		string name1 = "../dp_" + ss.str() + ".dat";
 		det.dp.save(name1,raw_ascii);
 	
-		detector_counts = det.dp + detector_counts;
+		detector_counts = conv_to<umat>::from(det.dp) + detector_counts;
 	
 		cout<<"Calculate detector_counts: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
 

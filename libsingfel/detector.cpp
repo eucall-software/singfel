@@ -23,8 +23,18 @@ fcube CDetector::q_xyz; // slow? perhaps waste of memory
 fmat CDetector::q_mod;
 fmat CDetector::solidAngle;
 fmat CDetector::thomson;
+uvec CDetector::badpixmap;//sp_imat CDetector::badpixmap;
+uvec CDetector::goodpixmap;
 
 CDetector::CDetector (){
+    d = 0;
+    pix_width = 0;
+    pix_height = 0;
+    px = 0;
+    py = 0;
+    numPix = 0;
+    cx = 0;
+    cy = 0;
 	//cout << "init detector" << endl;
 }
 
@@ -91,7 +101,55 @@ double CDetector::get_center_y(){
 	return cy;
 }
 
+uvec CDetector::get_goodPixelMap(){
+    return goodpixmap;
+}
+
+uvec CDetector::get_badPixelMap(){
+    return badpixmap;
+}
+
+void CDetector::set_pixelMap(string x){
+	fmat temp = load_asciiImage(x);
+	badpixmap = find(temp == 1);
+	badpixmap.print("badpix: ");
+	
+	goodpixmap = find(temp == 0);
+	/*
+	badpixmap.copy_size(temp);
+	for (int i = 0; i < temp.n_rows; i++) {
+		for (int j = 0; j < temp.n_cols; j++) {
+		    if (temp(i,j) == 1) { 
+	            badpixmap(i,j) = 1;
+	        }
+	    }
+	}
+	badpixmap.print("badpixmap: ");
+	// Wrong way to access sparse elements
+	cout << badpixmap(0) << endl;
+	cout << badpixmap(1) << endl;
+	// Correct way to access sparse elements
+	sp_imat::iterator a = badpixmap.begin();
+    sp_imat::iterator b = badpixmap.end();
+    for(sp_imat::iterator i=a; i!=b; ++i) {
+        cout << *i << endl;
+    }
+    */
+}
+
+void CDetector::apply_badPixels() {
+    //fmat& myDP = in[0];
+    uvec::iterator a = badpixmap.begin();
+    uvec::iterator b = badpixmap.end();
+    for(uvec::iterator i=a; i!=b; ++i) {
+        cout << *i << endl;
+        dp(*i) = 0;
+    }
+}
+
+// set beam object variables and assign q to each pixel
 void CDetector::init_dp( beam::CBeam *beam ){
+    // this bit should be set already, get rid of this?
 	set_detector_dist(d);	
 	set_pix_width(pix_width);	
 	set_pix_height(pix_height);
@@ -110,16 +168,16 @@ void CDetector::init_dp( beam::CBeam *beam ){
 			r = sqrt(pow(rx,2)+pow(ry,2));
 			twotheta = atan2(r,d);
 			az = atan2(ry,rx);
-			q_xyz(ind_y,ind_x,0) = beam->k * sin(twotheta)*cos(az);
-			q_xyz(ind_y,ind_x,1) = beam->k * sin(twotheta)*sin(az);
-			q_xyz(ind_y,ind_x,2) = beam->k * (cos(twotheta) - 1.0);
+			q_xyz(ind_y,ind_x,0) = beam->get_wavenumber() * sin(twotheta)*cos(az);
+			q_xyz(ind_y,ind_x,1) = beam->get_wavenumber() * sin(twotheta)*sin(az);
+			q_xyz(ind_y,ind_x,2) = beam->get_wavenumber() * (cos(twotheta) - 1.0);
 			
-			if (ind_x==0 && ind_y==0) {
+			//if (ind_x==0 && ind_y==0) {
 			//cout << "cnx,cny,res: " << cx<<","<<cy<<","<<1./pix_width<<endl;
 			//cout << "fs,ss: " << ind_x<<","<<ind_y<<endl;
-			cout << "cx,lambda: " << cx <<"," << beam->lambda << endl;
-			cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
-			}
+			//cout << "cx,lambda: " << cx <<"," << beam->get_wavelength() << endl;
+			//cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
+			//}
 		}
 	}
 
@@ -185,11 +243,8 @@ cout << "r_x r_y: " << r_x(0,0) << "," << r_y(0,0) << endl;
 }
 
 void CDetector::set_param(Packet *x){
-cout << "Enter set_param" << endl;
 	umat temp(x->dp, x->py, x->px, false, true);
-cout << "temp: " << temp(0,0) << endl;
 	dp = trans(temp);
-cout << "dp: " << dp(0,0) << endl;	
 	d = x->d;
 	pix_width = x->pix_width;
 	pix_height = x->pix_height;

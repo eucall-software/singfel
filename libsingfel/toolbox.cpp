@@ -10,6 +10,8 @@
 #include <string>
 #include <sstream>
 #include <armadillo>
+#include <math.h>
+//#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace arma;
@@ -35,39 +37,20 @@ umat CToolbox::convert_to_poisson(fmat x){
 	T = gsl_rng_default;
 	gBaseRand = gsl_rng_alloc (T); 
   	randSeed = rand();                    /* returns a non-negative integer */
-//  	cout << "time: " << time(NULL) << endl;
-//cout << "randSeed: " << randSeed << endl;
-  	gsl_rng_set (gBaseRand, randSeed);    /* seed the PRNG */
-//cout << "set done" << endl;	            
-	umat y;
-//cout << "init y" << endl;		
-	y.copy_size(x);
-//cout << "copy done" << endl;		
+  	gsl_rng_set (gBaseRand, randSeed);    /* seed the PRNG */            
+	umat y;	
+	y.copy_size(x);		
 	for (unsigned i = 0; i < y.n_elem; i++) {
-		//cout << "i: " << i << endl;
-		//cout << "x(i): " << x(i) << endl;
 		if (x(i) <= FLT_MAX) {
 			y(i) = gsl_ran_poisson (gBaseRand, x(i));
 		} else {
 			cerr << "detector intensity too large for poisson" << endl;
-			y(i) = 0;
-		}
-		//cout << "y: " << y(i) << endl;	
-	}	
-//cout << "x: " << x(0) << endl;	
+			y(i) = 0; // This should be Gaussian for large intensity
+		}	
+	}		
 	gsl_rng_free(gBaseRand);
 	
 	return y;
-}
-
-fmat CToolbox::quaternion2rot3D(vec quaternion, int convention){
-	fmat rot3D;
-	float theta = 0.0;
-	vec axis(3);
-	quaternion2AngleAxis(quaternion,theta,axis);
-	//cout << "theta: " << theta << endl;
-	//cout << "axis: " << axis << endl;
-	return rot3D = angleAxis2rot3D(axis,theta);
 }
 
 void CToolbox::quaternion2AngleAxis(vec quaternion,float& theta,vec& axis){
@@ -81,6 +64,18 @@ void CToolbox::quaternion2AngleAxis(vec quaternion,float& theta,vec& axis){
 	}
 }
 
+// zxz convention
+fmat CToolbox::quaternion2rot3D(vec quaternion, int convention){
+	fmat rot3D;
+	float theta = 0.0;
+	vec axis(3);
+	quaternion2AngleAxis(quaternion,theta,axis);
+	//cout << "theta: " << theta << endl;
+	//cout << "axis: " << axis << endl;
+	return rot3D = angleAxis2rot3D(axis,theta);
+}
+
+// zxz convention
 fmat CToolbox::angleAxis2rot3D(vec axis, float theta){
 	if (axis.n_elem != 3) {
 		cout << "Number of axis element must be 3" << endl;
@@ -104,6 +99,296 @@ fmat CToolbox::angleAxis2rot3D(vec axis, float theta){
 		  << b*aBracket+cSinTheta << b*bBracket+cosTheta << b*cBracket-aSinTheta << endr
 		  << c*aBracket-bSinTheta << c*bBracket+aSinTheta << c*cBracket+cosTheta << endr;
 	return rot3D;
+}
+
+// Let's use zyz convention after Heymann (2005)
+fmat CToolbox::euler2rot3D(float psi, float theta, float phi) {
+    fmat Rphi(3,3);
+    fmat Rtheta(3,3);
+    fmat Rpsi(3,3);
+    Rphi << cos(phi) << sin(phi) << 0 << endr
+         << -sin(phi) << cos(phi) << 0 << endr
+         << 0 << 0 << 1 << endr;
+    Rtheta << cos(theta) << 0 << -sin(theta) << endr
+           << 0 << 1 << 0 << endr
+           << sin(theta) << 0 << cos(theta) << endr;
+    Rpsi << cos(psi) << sin(psi) << 0 << endr
+         << -sin(psi) << cos(psi) << 0 << endr
+         << 0 << 0 << 1 << endr;
+    fmat rot3D(3,3);
+/*
+            fmat R(3,3);
+            R(0,0) = cos(psi)*cos(phi) - cos(theta)*sin(phi)*sin(psi);
+			R(0,1) = cos(psi)*sin(phi) + cos(theta)*cos(phi)*sin(psi);
+			R(0,2) = sin(psi)*sin(theta);
+			R(1,0) = -sin(psi)*cos(phi) - cos(theta)*sin(phi)*cos(psi);
+			R(1,1) = -sin(psi)*sin(phi) + cos(theta)*cos(phi)*cos(psi);
+			R(1,2) = cos(psi)*sin(theta);
+			R(2,0) = sin(theta)*sin(phi);
+			R(2,1) = -sin(theta)*cos(phi);
+			R(2,2) = cos(theta);
+			return R;
+*/
+    return rot3D = Rphi * Rtheta * Rpsi;
+}
+
+// Let's use zyz convention after Heymann (2005)
+fvec CToolbox::rot3D2euler(fmat rot3D) {
+    fvec euler(3);
+    float theta, phi, psi;
+    theta = acos(rot3D(2,2)); // theta
+    if (theta != 0 || theta != 3.14159) {
+        phi = atan2(rot3D(2,1),rot3D(2,0));
+        psi = atan2(rot3D(1,2),rot3D(0,2));
+    } else {
+        phi = 0;
+        psi = atan2(rot3D(1,0),rot3D(0,0));
+    }
+    euler(0) = psi;
+    euler(1) = theta;
+    euler(2) = phi;
+    //cout << "euler:"<< euler << endl;
+    return euler;
+}
+
+// Insert a Ewald's slice into a diffraction volume
+//void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, imat *myGridPoints, fcube *myIntensity1, fcube *myWeight1) {
+void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
+    int mySize = myIntensity1->n_rows;
+    //cout << xyz[0] << endl;
+    fmat& pixRot = myPoints[0];
+    
+    //imat& xyz = myGridPoints[0];
+    imat xyz;
+	xyz = conv_to<imat>::from(floor(pixRot));
+    
+    fmat fxyz = pixRot - xyz;
+    fmat cxyz = 1. - fxyz;
+    float x,y,z,fx,fy,fz,cx,cy,cz;
+    float weight;
+	float photons;
+	fmat& myPhotons = myValue[0];
+	//fmat& myImg = myValue[0];
+	//fmat myPhotons = myImg.dp;
+	fcube& myIntensity = myIntensity1[0];
+	fcube& myWeight = myWeight1[0];
+	
+	uvec& goodpixmap = pixmap[0];
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+        //cout << p << endl;
+        photons = myPhotons(*p);
+
+		x = xyz(0,*p);
+		y = xyz(1,*p);
+		z = xyz(2,*p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		fx = fxyz(0,*p);
+		fy = fxyz(1,*p);
+		fz = fxyz(2,*p);
+		cx = cxyz(0,*p);
+		cy = cxyz(1,*p);
+		cz = cxyz(2,*p);
+				
+		weight = cx*cy*cz;
+		myWeight(y,x,z) += weight;
+		myIntensity(y,x,z) += weight * photons;
+
+		weight = cx*cy*fz;
+		myWeight(y,x,z+1) += weight;
+		myIntensity(y,x,z+1) += weight * photons; 
+
+		weight = cx*fy*cz;
+		myWeight(y+1,x,z) += weight;
+		myIntensity(y+1,x,z) += weight * photons; 
+
+		weight = cx*fy*fz;
+		myWeight(y+1,x,z+1) += weight;
+		myIntensity(y+1,x,z+1) += weight * photons;         		        
+				
+		weight = fx*cy*cz;
+		myWeight(y,x+1,z) += weight;
+		myIntensity(y,x+1,z) += weight * photons; 		       		 
+
+		weight = fx*cy*fz;
+		myWeight(y,x+1,z+1) += weight;
+		myIntensity(y,x+1,z+1) += weight * photons; 
+
+		weight = fx*fy*cz;
+		myWeight(y+1,x+1,z) += weight;
+		myIntensity(y+1,x+1,z) += weight * photons;
+
+		weight = fx*fy*fz;
+		myWeight(y+1,x+1,z+1) += weight;
+		myIntensity(y+1,x+1,z+1) += weight * photons;
+	}
+	/*
+    for (unsigned int p = 0; p < myPhotons.n_elem; p++) {
+        //cout << p << endl;
+        photons = myPhotons(p);
+
+		x = xyz(0,p);
+		y = xyz(1,p);
+		z = xyz(2,p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		fx = fxyz(0,p);
+		fy = fxyz(1,p);
+		fz = fxyz(2,p);
+		cx = cxyz(0,p);
+		cy = cxyz(1,p);
+		cz = cxyz(2,p);
+				
+		weight = cx*cy*cz;
+		myWeight(y,x,z) += weight;
+		myIntensity(y,x,z) += weight * photons;
+
+		weight = cx*cy*fz;
+		myWeight(y,x,z+1) += weight;
+		myIntensity(y,x,z+1) += weight * photons; 
+
+		weight = cx*fy*cz;
+		myWeight(y+1,x,z) += weight;
+		myIntensity(y+1,x,z) += weight * photons; 
+
+		weight = cx*fy*fz;
+		myWeight(y+1,x,z+1) += weight;
+		myIntensity(y+1,x,z+1) += weight * photons;         		        
+				
+		weight = fx*cy*cz;
+		myWeight(y,x+1,z) += weight;
+		myIntensity(y,x+1,z) += weight * photons; 		       		 
+
+		weight = fx*cy*fz;
+		myWeight(y,x+1,z+1) += weight;
+		myIntensity(y,x+1,z+1) += weight * photons; 
+
+		weight = fx*fy*cz;
+		myWeight(y+1,x+1,z) += weight;
+		myIntensity(y+1,x+1,z) += weight * photons;
+
+		weight = fx*fy*fz;
+		myWeight(y+1,x+1,z+1) += weight;
+		myIntensity(y+1,x+1,z+1) += weight * photons;
+	}    
+	*/
+}
+
+// Insert a Ewald's slice into a diffraction volume
+void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
+    int mySize = myIntensity1->n_rows;
+    //cout << xyz[0] << endl;
+    fmat& pixRot = myPoints[0];
+    
+    //imat& xyz = myGridPoints[0];
+    imat xyz;
+	xyz = conv_to<imat>::from(round(pixRot));
+    
+    //fmat fxyz = pixRot - xyz;
+    //fmat cxyz = 1. - fxyz;
+    float x,y,z,fx,fy,fz,cx,cy,cz;
+    float weight;
+	float photons;
+	fmat& myPhotons = myValue[0];
+	//fmat& myImg = myValue[0];
+	//fmat myPhotons = myImg.dp;
+	fcube& myIntensity = myIntensity1[0];
+	fcube& myWeight = myWeight1[0];
+	
+	uvec& goodpixmap = pixmap[0];
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+        //cout << *p << endl;
+        photons = myPhotons(*p);
+        
+        x = xyz(0,*p);
+		y = xyz(1,*p);
+		z = xyz(2,*p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		weight = 1;
+		myWeight(y,x,z) += weight;
+		myIntensity(y,x,z) += photons;
+    }
+/*	
+    for (unsigned int p = 0; p < myPhotons.n_elem; p++) {
+        //cout << p << endl;
+        photons = myPhotons(p);
+
+		x = xyz(0,p);
+		y = xyz(1,p);
+		z = xyz(2,p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		weight = 1;
+		myWeight(y,x,z) += weight;
+		myIntensity(y,x,z) += photons;
+
+	}
+*/    
+}
+
+// Insert a Ewald's slice into a diffraction volume
+void CToolbox::normalize(fcube *myIntensity1, fcube *myWeight1) {
+    fcube& myIntensity = myIntensity1[0];
+	fcube& myWeight = myWeight1[0];
+	uvec ind = find(myWeight > 0);
+	//cout << "ind: " << ind << endl;
+	myIntensity.elem(ind) = myIntensity.elem(ind) % myWeight.elem(ind); // Use sparse indexing
+}
+
+// Insert a Ewald's slice into a diffraction volume
+// active = 1: active rotation
+// interpolate = 1: trilinear
+void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
+    fmat& pix = myPoints[0];
+    cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
+    fmat& myR = myRot[0];
+    myR.print("myR: ");
+    fmat pixRot;
+	pixRot.zeros(pix.n_elem,3);
+	//imat myGrid;
+	//myGrid.zeros(pix.n_elem,3);
+	if (active == 1) {
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is active rotation
+        pixRot = trans(pixRot);
+        cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
+        //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max;
+    } else {
+        pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is passive rotation
+        //pixRot = trans(pixRot);    
+        cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
+    }
+    //myGrid = conv_to<imat>::from(floor(pixRot));
+    //interp_linear3D(myValue,&pixRot,&myGrid,myIntensity,myWeight);
+    if ( boost::algorithm::iequals(interpolate,"linear") ) {
+        interp_linear3D(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    } else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
+        interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    }
 }
 
 #ifdef COMPILE_WITH_BOOST
