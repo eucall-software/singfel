@@ -51,12 +51,10 @@ endfunction()
 
 find_path (ARMADILLO_INCLUDES Mat_meat.hpp
   PATHS 
+  $ENV{ARMA_DIR}/include
   /usr/include
   /usr/local/include
   /opt/include
-  /afs/desy.de/user/y/yoon/armadillo-3.910.1/include
-  $ENV{ARMA_DIR}/include
-  #/afs/desy.de/user/y/yoon/armadillo-3.800.2/include
   PATH_SUFFIXES armadillo armadillo_bits
   )
 
@@ -65,11 +63,11 @@ find_path (ARMADILLO_INCLUDES Mat_meat.hpp
 
 find_library (ARMADILLO_LIBRARIES armadillo
   PATHS
+  $ENV{ARMA_DIR} 
   /usr/lib
   /usr/local/lib
   /opt/lib
   /usr/lib64
-  $ENV{ARMA_DIR}
   PATH_SUFFIXES
   )
 
@@ -77,8 +75,10 @@ find_library (ARMADILLO_LIBRARIES armadillo
 ## Actions taken when all components have been found
 
 if (ARMADILLO_INCLUDES)
-  MESSAGE("ARMA INC FOUND")
-endif (ARMADILLO_INCLUDES)
+  MESSAGE("ARMA INC FOUND: ${ARMADILLO_INCLUDES}")
+elseif(NOT ARMADILLO_INCLUDES)
+  MESSAGE("WHAT!!!!!!!!!!!!!!")
+endif()
 
 if (ARMADILLO_LIBRARIES)
   MESSAGE("ARMA LIB FOUND: ${ARMADILLO_LIBRARIES}")
