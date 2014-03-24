@@ -55,6 +55,7 @@ find_path (ARMADILLO_INCLUDES Mat_meat.hpp
   /usr/local/include
   /opt/include
   /afs/desy.de/user/y/yoon/armadillo-3.910.1/include
+  $ENV{ARMA_DIR}/include
   #/afs/desy.de/user/y/yoon/armadillo-3.800.2/include
   PATH_SUFFIXES armadillo armadillo_bits
   )
@@ -67,9 +68,8 @@ find_library (ARMADILLO_LIBRARIES armadillo
   /usr/lib
   /usr/local/lib
   /opt/lib
-  /afs/desy.de/user/y/yoon/armadillo-3.910.1
-  #/afs/desy.de/user/y/yoon/armadillo-3.800.2
-#  /usr/lib64
+  /usr/lib64
+  $ENV{ARMA_DIR}
   PATH_SUFFIXES
   )
 
@@ -81,7 +81,7 @@ if (ARMADILLO_INCLUDES)
 endif (ARMADILLO_INCLUDES)
 
 if (ARMADILLO_LIBRARIES)
-  MESSAGE("ARMA LIB FOUND")
+  MESSAGE("ARMA LIB FOUND: ${ARMADILLO_LIBRARIES}")
 endif (ARMADILLO_LIBRARIES)
 
 if (ARMADILLO_INCLUDES AND ARMADILLO_LIBRARIES)
@@ -105,6 +105,9 @@ endif (ARMADILLO_INCLUDES AND ARMADILLO_LIBRARIES)
 # Newer versions use arma_version.hpp
 if (EXISTS "${ARMADILLO_INCLUDES}/arma_version.hpp")
   set(ARMA_VERSION_FILE "${ARMADILLO_INCLUDES}/arma_version.hpp")
+elseif (EXISTS "${ARMADILLO_INCLUDES}/armadillo_bits/arma_version.hpp")
+  set(ARMA_VERSION_FILE "${ARMADILLO_INCLUDES}/armadillo_bits/arma_version.hpp")
+  message (STATUS "FIND_ARMA: YEAH I FOUNZ IT!!!")
 else ()
   if (EXISTS "${ARMADILLO_INCLUDES}/version.hpp")
     set(ARMA_VERSION_FILE "${ARMADILLO_INCLUDES}/version.hpp")
@@ -120,6 +123,10 @@ if(ARMA_VERSION_FILE)
     file(READ ${ARMA_VERSION_FILE} _contents)
     if(_contents)
         if (EXISTS "${ARMADILLO_INCLUDES}/arma_version.hpp")
+          string(REGEX REPLACE ".*#define ARMA_VERSION_MAJOR \([0-9]+\).*" "\\1" ARMA_MAJOR_VERSION "${_contents}")
+          string(REGEX REPLACE ".*#define ARMA_VERSION_MINOR \([0-9]+\).*" "\\1" ARMA_MINOR_VERSION "${_contents}")
+          string(REGEX REPLACE ".*#define ARMA_VERSION_PATCH \([0-9]+\).*" "\\1" ARMA_PATCH_VERSION "${_contents}")
+        elseif (EXISTS "${ARMADILLO_INCLUDES}/armadillo_bits/arma_version.hpp")
           string(REGEX REPLACE ".*#define ARMA_VERSION_MAJOR \([0-9]+\).*" "\\1" ARMA_MAJOR_VERSION "${_contents}")
           string(REGEX REPLACE ".*#define ARMA_VERSION_MINOR \([0-9]+\).*" "\\1" ARMA_MINOR_VERSION "${_contents}")
           string(REGEX REPLACE ".*#define ARMA_VERSION_PATCH \([0-9]+\).*" "\\1" ARMA_PATCH_VERSION "${_contents}")
