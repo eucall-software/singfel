@@ -43,3 +43,17 @@ $make
 The executables will be placed in /path/to/SingFEL/build/src
 
 When recompiling, remember to delete /path/to/SingFEL/build/CmakeCache.txt
+
+# DOXYGEN
+Documentation of the source code
+Using man pages to browse documentation
+Add the following lines to .bashrc
+export MANPATH=/path/to/SingFEL/man:$MANPATH
+e.g.: $man beam_CBeam
+will display manual for the beam class
+
+Using html to browse documentation
+$firefox html/index.html
+
+Using pdf to browse documentation
+$cd latex && make && evince refman.pdf
