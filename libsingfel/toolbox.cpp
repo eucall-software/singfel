@@ -53,30 +53,45 @@ umat CToolbox::convert_to_poisson(fmat x){
 	return y;
 }
 
-void CToolbox::quaternion2AngleAxis(vec quaternion,float& theta,vec& axis){
+// Right hand rotation theta about an axis
+void CToolbox::quaternion2AngleAxis(fvec quaternion, float& theta, fvec& axis){
+	if (quaternion.n_rows == 4 && quaternion.n_cols == 1) {
+		// do nothing
+	} else if (quaternion.n_rows == 1 && quaternion.n_cols == 4){
+		// convert to row vector
+		quaternion = quaternion.t();
+	} else {
+		cout << "Not a quaternion" << endl;
+		exit(0);
+	}
 	float HA = acos(quaternion(0));
 	theta = 2 * HA;
 	if (theta < datum::eps){ // eps ~= 2.22045e-16
 		theta = 0.0;
 		axis << 1 << 0 << 0;
 	} else {	
-		axis = quaternion.subvec(1,3)/sin(HA);
+		axis = quaternion.rows(1,3)/sin(HA);
 	}
 }
 
-// zxz convention
-fmat CToolbox::quaternion2rot3D(vec quaternion, int convention){
+// Let's use zyz convention after Heymann (2005)
+fmat CToolbox::quaternion2rot3D(fvec q){
 	fmat rot3D;
-	float theta = 0.0;
-	vec axis(3);
-	quaternion2AngleAxis(quaternion,theta,axis);
+	/*rot3D << pow(q(0),2) - pow(q(1),2) - pow(q(2),2) + pow(q(3),2) << 2*( q(0)*q(1) + q(2)*q(3) ) << 2*( q(0)*q(2) - q(1)*q(3) ) << endr
+          << 2*( q(0)*q(1) - q(2)*q(3) ) << -pow(q(0),2) + pow(q(1),2) - pow(q(2),2) + pow(q(3),2) << 2*( q(1)*q(2) + q(0)*q(3) ) << endr
+          << 2*( q(0)*q(2) + q(1)*q(3) ) << 2*( q(1)*q(2) - q(0)*q(3) ) << -pow(q(0),2) - pow(q(1),2) + pow(q(2),2) + pow(q(3),2) << endr;
+    */      
+    float theta = 0.0;
+	fvec axis(3);
+	quaternion2AngleAxis(q,theta,axis);
 	//cout << "theta: " << theta << endl;
 	//cout << "axis: " << axis << endl;
-	return rot3D = angleAxis2rot3D(axis,theta);
+	//cout << "angleAxisRot: " << angleAxis2rot3D(axis,theta) << endl;
+	rot3D = angleAxis2rot3D(axis,theta);
+	return rot3D;
 }
 
-// zxz convention
-fmat CToolbox::angleAxis2rot3D(vec axis, float theta){
+fmat CToolbox::angleAxis2rot3D(fvec axis, float theta){
 	if (axis.n_elem != 3) {
 		cout << "Number of axis element must be 3" << endl;
 		exit(EXIT_FAILURE);
@@ -98,7 +113,76 @@ fmat CToolbox::angleAxis2rot3D(vec axis, float theta){
 	rot3D << a*aBracket+cosTheta << a*bBracket-cSinTheta << a*cBracket+bSinTheta << endr
 		  << b*aBracket+cSinTheta << b*bBracket+cosTheta << b*cBracket-aSinTheta << endr
 		  << c*aBracket-bSinTheta << c*bBracket+aSinTheta << c*cBracket+cosTheta << endr;
+	
 	return rot3D;
+}
+
+// Let's use zyz convention after Heymann (2005)
+fvec CToolbox::quaternion2euler(fvec q) {
+	fvec euler(3);
+	float psi, theta, phi;
+	psi=atan2( ( q(1)*q(2) - q(0)*q(3) ) , ( q(0)*q(2) + q(1)*q(3) ) );
+	theta=acos( pow(q(3),2) - pow(q(0),2) - pow(q(1),2) + pow(q(2),2) );
+	phi=atan2( ( q(0)*q(3) + q(1)*q(2) ) , ( q(1)*q(3) - q(0)*q(2) ) );
+	euler(0) = psi;
+	euler(1) = theta;
+	euler(2) = phi;
+	return euler;
+}
+
+// zyz, euler in radians
+fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
+	fvec quaternion(4);
+	if (abs(psi) < datum::eps && abs(theta) < datum::eps && abs(phi) < datum::eps ) {
+		quaternion << 1 << 0 << 0 << 0;
+	} else { 
+	fmat R(3,3);
+	//cout << "theta:" << theta << endl;
+	//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
+	//cout << "quaternion: " << quaternion << endl;
+	
+	R = euler2rot3D(psi, theta, phi);
+	
+	fvec VV(3);
+	VV << R(1,2)-R(2,1) << R(2,0)-R(0,2) << R(0,1)-R(1,0);
+    if (VV(0) == 0) {
+        VV = VV/norm(VV,2); // Added by Chuck
+    } else if (VV(0) > 0) {
+        VV = VV/norm(VV,2);
+    } else if(VV(0) < 0) {
+    	VV = VV/norm(VV,2)*-1;
+    }    
+    theta = acos(0.5*(trace(R)-1.0));
+
+    float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
+    float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
+    
+    cout << "CCisTheta: " << CCisTheta << endl;
+    
+    if (CCisNegTheta > CCisTheta) {
+        theta = -theta;
+    }
+    quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+	
+	}
+	
+	return quaternion;
+}
+
+float CToolbox::corrCoeff(fmat X, fmat Y) {
+	float cc = 0;
+	fvec x = vectorise(X);
+	fvec y = vectorise(Y);
+	
+	float meanX = mean(x);
+	float meanY = mean(y);
+	
+	x = x - meanX;
+	y = y - meanY;
+	
+	cc = (dot(x,y))/sqrt(dot(x,x)*dot(y,y));
+	
+	return cc;
 }
 
 // Let's use zyz convention after Heymann (2005)
@@ -116,19 +200,6 @@ fmat CToolbox::euler2rot3D(float psi, float theta, float phi) {
          << -sin(psi) << cos(psi) << 0 << endr
          << 0 << 0 << 1 << endr;
     fmat rot3D(3,3);
-/*
-            fmat R(3,3);
-            R(0,0) = cos(psi)*cos(phi) - cos(theta)*sin(phi)*sin(psi);
-			R(0,1) = cos(psi)*sin(phi) + cos(theta)*cos(phi)*sin(psi);
-			R(0,2) = sin(psi)*sin(theta);
-			R(1,0) = -sin(psi)*cos(phi) - cos(theta)*sin(phi)*cos(psi);
-			R(1,1) = -sin(psi)*sin(phi) + cos(theta)*cos(phi)*cos(psi);
-			R(1,2) = cos(psi)*sin(theta);
-			R(2,0) = sin(theta)*sin(phi);
-			R(2,1) = -sin(theta)*cos(phi);
-			R(2,2) = cos(theta);
-			return R;
-*/
     return rot3D = Rphi * Rtheta * Rpsi;
 }
 
@@ -149,6 +220,28 @@ fvec CToolbox::rot3D2euler(fmat rot3D) {
     euler(2) = phi;
     //cout << "euler:"<< euler << endl;
     return euler;
+}
+
+fmat CToolbox::get_wahba(fmat currentRot,fmat originRot) {
+	fmat myR;
+	mat B;
+  	mat U;
+	vec s;
+	mat V;
+	mat M;
+	fmat temp;
+	temp.zeros(3,3);
+	// Form rotation matrix by solving Wahba's problem
+	for (int i = 0; i < 3; i++) {
+		temp += trans(originRot.row(i)) * currentRot.row(i); // <-- what is this black magic? 
+	}
+	B = conv_to<mat>::from(temp);				
+	svd(U,s,V,B);
+	M.eye(3,3);
+	M(2,2) = arma::det(U)*arma::det(trans(V));
+			
+	myR = conv_to<fmat>::from(U*M*trans(V));
+	return myR;
 }
 
 // Insert a Ewald's slice into a diffraction volume
@@ -229,61 +322,6 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
 		myWeight(y+1,x+1,z+1) += weight;
 		myIntensity(y+1,x+1,z+1) += weight * photons;
 	}
-	/*
-    for (unsigned int p = 0; p < myPhotons.n_elem; p++) {
-        //cout << p << endl;
-        photons = myPhotons(p);
-
-		x = xyz(0,p);
-		y = xyz(1,p);
-		z = xyz(2,p);
-
-		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
-		    continue;
-					
-		if (x < 0 || y < 0 || z < 0)
-			continue;	
-				
-		fx = fxyz(0,p);
-		fy = fxyz(1,p);
-		fz = fxyz(2,p);
-		cx = cxyz(0,p);
-		cy = cxyz(1,p);
-		cz = cxyz(2,p);
-				
-		weight = cx*cy*cz;
-		myWeight(y,x,z) += weight;
-		myIntensity(y,x,z) += weight * photons;
-
-		weight = cx*cy*fz;
-		myWeight(y,x,z+1) += weight;
-		myIntensity(y,x,z+1) += weight * photons; 
-
-		weight = cx*fy*cz;
-		myWeight(y+1,x,z) += weight;
-		myIntensity(y+1,x,z) += weight * photons; 
-
-		weight = cx*fy*fz;
-		myWeight(y+1,x,z+1) += weight;
-		myIntensity(y+1,x,z+1) += weight * photons;         		        
-				
-		weight = fx*cy*cz;
-		myWeight(y,x+1,z) += weight;
-		myIntensity(y,x+1,z) += weight * photons; 		       		 
-
-		weight = fx*cy*fz;
-		myWeight(y,x+1,z+1) += weight;
-		myIntensity(y,x+1,z+1) += weight * photons; 
-
-		weight = fx*fy*cz;
-		myWeight(y+1,x+1,z) += weight;
-		myIntensity(y+1,x+1,z) += weight * photons;
-
-		weight = fx*fy*fz;
-		myWeight(y+1,x+1,z+1) += weight;
-		myIntensity(y+1,x+1,z+1) += weight * photons;
-	}    
-	*/
 }
 
 // Insert a Ewald's slice into a diffraction volume
@@ -298,7 +336,7 @@ void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixma
     
     //fmat fxyz = pixRot - xyz;
     //fmat cxyz = 1. - fxyz;
-    float x,y,z,fx,fy,fz,cx,cy,cz;
+    float x,y,z;
     float weight;
 	float photons;
 	fmat& myPhotons = myValue[0];
@@ -327,37 +365,16 @@ void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixma
 		weight = 1;
 		myWeight(y,x,z) += weight;
 		myIntensity(y,x,z) += photons;
-    }
-/*	
-    for (unsigned int p = 0; p < myPhotons.n_elem; p++) {
-        //cout << p << endl;
-        photons = myPhotons(p);
-
-		x = xyz(0,p);
-		y = xyz(1,p);
-		z = xyz(2,p);
-
-		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
-		    continue;
-					
-		if (x < 0 || y < 0 || z < 0)
-			continue;	
-				
-		weight = 1;
-		myWeight(y,x,z) += weight;
-		myIntensity(y,x,z) += photons;
-
-	}
-*/    
+    }   
 }
 
-// Insert a Ewald's slice into a diffraction volume
+// Normalize the diffraction volume
 void CToolbox::normalize(fcube *myIntensity1, fcube *myWeight1) {
     fcube& myIntensity = myIntensity1[0];
 	fcube& myWeight = myWeight1[0];
 	uvec ind = find(myWeight > 0);
 	//cout << "ind: " << ind << endl;
-	myIntensity.elem(ind) = myIntensity.elem(ind) % myWeight.elem(ind); // Use sparse indexing
+	myIntensity.elem(ind) = myIntensity.elem(ind) / myWeight.elem(ind); // Use sparse indexing
 }
 
 // Insert a Ewald's slice into a diffraction volume
@@ -370,20 +387,17 @@ void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
     myR.print("myR: ");
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
-	//imat myGrid;
-	//myGrid.zeros(pix.n_elem,3);
 	if (active == 1) {
-        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is active rotation
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
         pixRot = trans(pixRot);
         cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
         //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max;
     } else {
-        pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is passive rotation
-        //pixRot = trans(pixRot);    
+        //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is passive rotation
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
+        pixRot = trans(pixRot);  
         cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
     }
-    //myGrid = conv_to<imat>::from(floor(pixRot));
-    //interp_linear3D(myValue,&pixRot,&myGrid,myIntensity,myWeight);
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
         interp_linear3D(myValue,&pixRot,goodpix,myIntensity,myWeight);
     } else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
