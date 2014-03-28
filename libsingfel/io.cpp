@@ -61,28 +61,12 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
 	const H5std_string DATASET_NAME( datasetname );
 	//const int    NX_SUB = 3;	// hyperslab dimensions
 	//const int    NY_SUB = 4;
-	const int    NX = 1456;		// output buffer dimensions
-	const int    NY = 1456;
+	//const int    NX = 1456;		// output buffer dimensions
+	//const int    NY = 1456;
+	int NX, NY;
 	const int    RANK_OUT = 2;
-	
-	fmat myDP;
-	myDP.zeros(NY,NX);
-	
-	/*
-    * Output buffer initialization.
-    */
-   int i, j;
-   float data_out[NX][NY]; /* output buffer */
-   /*
-   for (j = 0; j < NX; j++)
-   {
-      for (i = 0; i < NY; i++)
-      {
-	    data_out[j][i] = 0;
-      }
-   }
-   */
    
+    fmat myDP;
    /*
     * Try block to detect exceptions raised by any of the calls inside it
     */
@@ -150,7 +134,10 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
       cout << "rank " << rank << ", dimensions " <<
 	      (unsigned long)(dims_out[0]) << " x " <<
 	      (unsigned long)(dims_out[1]) << endl;
-
+	  
+	  NX = (unsigned long)(dims_out[0]);
+	  NY = (unsigned long)(dims_out[1]);
+	  	  
       /*
        * Define hyperslab in the dataset; implicitly giving strike and
        * block NULL.
@@ -189,15 +176,19 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
        * Read data from hyperslab in the file into the hyperslab in
        * memory and display the data.
        */
+      float data_out[NX][NY]; /* output buffer */	
       dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
-	  
-	  for (j = 0; j < NY; j++)
+
+	  myDP.zeros(NY,NX); 
+	  for (int j = 0; j < NY; j++)
    	  {
-      	for (i = 0; i < NX; i++)
+      	for (int i = 0; i < NX; i++)
       	{
 	    	myDP(j,i) = data_out[j][i];
       	}
       }
+      cout << "myDP(66): " << myDP(66) << endl; // 3000
+      cout << "myDP(76): " << myDP(76) << endl; // 45000
 
    }  // end of try block
 
@@ -238,6 +229,8 @@ fmat load_asciiImage(string x){
 		cout << "Error: problem with loading file, " << x << endl;
 		exit(EXIT_FAILURE);
 	}
+	cout << "myDP(0): " << B(0) << endl;
+	cout << "myDP(5): " << B(5) << endl;
 	return B;
 }
 
@@ -249,6 +242,16 @@ fvec load_asciiEuler(string x){
 		exit(EXIT_FAILURE);
 	}
 	return B;
+}
+
+fvec load_asciiQuaternion(string x){
+	fvec quaternion;
+	bool status = quaternion.load(x,raw_ascii);
+	if(status == false){
+		cout << "Error: problem with loading file, " << x << endl;
+		exit(EXIT_FAILURE);
+	}
+	return quaternion;
 }
 
 void load_constant(int ang){

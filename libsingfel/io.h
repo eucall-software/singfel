@@ -12,6 +12,7 @@ void hdf5write(std::string,std::string,arma::fmat);
 
 arma::fmat load_asciiImage(std::string x);
 arma::fvec load_asciiEuler(std::string x);
+arma::fvec load_asciiQuaternion(std::string x);
 
 void load_constant(int);
 void load_array(int*,int);
