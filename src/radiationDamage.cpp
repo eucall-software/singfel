@@ -58,16 +58,16 @@ int main( int argc, char* argv[] ){
 	//CParticle rotatedParticle = CParticle();
 		
 	fmat rot3D(3,3);
-	vec u(3);
-	vec quaternion(4);	
+	fvec u(3);
+	fvec quaternion(4);	
 	// Rotate single particle
-	u = randu<vec>(3); // uniform random distribution in the [0,1] interval
+	u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
 	//u << 0.0 << 0.4 << 0.0; // good angle
 	// generate uniform random quaternion on SO(3)
 	quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
 			   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
 	// quaternion to rotation matrix			
-	rot3D = CToolbox::quaternion2rot3D(quaternion, 1);
+	rot3D = CToolbox::quaternion2rot3D(quaternion);
 	
 	// Beam //
 	double lambda = 2.5e-10; 							// (m) wavelength
@@ -247,11 +247,11 @@ cout << "focus_area: " << beam.get_focus_area() << endl;
 cout << "F_hkl_sq: " << F_hkl_sq(0) << endl;
 cout << "solid angle: " << det.solidAngle(0) << endl;
 cout << "thomson: " << det.thomson(0) << endl;
-cout << "phi: " << beam.phi_in << endl;		
+cout << "phi: " << beam.get_photonsPerPulse() << endl;		
 F_hkl_sq.save("../F_hkl_sq.dat",raw_ascii);
 det.solidAngle.save("../solidAngle.dat",raw_ascii);
 det.thomson.save("../thomson.dat",raw_ascii);
-		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulse();
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 			
 		if (timeSlice == numPatterns) {
