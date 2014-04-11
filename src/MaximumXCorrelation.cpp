@@ -261,7 +261,7 @@ int main( int argc, char* argv[] ){
   		cout << "Done 4Sphere" << endl;
   		//myQuaternions.print("Q: ");
   		
-  		for (int iter = 0; iter < 1; iter++) {
+  		for (int iter = 0; iter < 50; iter++) {
   		
 	  		// Expansion
 			for (int s = 0; s < numSlices; s++) {
