@@ -61,20 +61,21 @@ ELSEIF(NOT HAVE_ARMADILLO)
   MESSAGE("ARMA NOT FOUND. GOODBYE!!!")
 ENDIF()
 
-#FIND_PACKAGE(PythonInterp)
-#FIND_PACKAGE(PythonLibs)
-#FIND_PACKAGE(Boost 1.53.0 COMPONENTS python thread date_time system)
-#IF(Boost_FOUND)
-#  add_definitions(-DCOMPILE_WITH_BOOST) # set #define COMPILE_WITH_BOOST to 1 in .cpp
-#  MESSAGE("BOOST FOUND")
-#  MESSAGE("CHUCK SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES} ${BOOST_ROOT}")
+FIND_PACKAGE(PythonInterp)
+FIND_PACKAGE(PythonLibs)
+SET(BOOST_ROOT $ENV{BOOST_DIR})
+FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS python thread date_time system mpi serialization)
+IF(Boost_FOUND)
+  add_definitions(-DCOMPILE_WITH_BOOST) # set #define COMPILE_WITH_BOOST to 1 in .cpp
+  MESSAGE("BOOST FOUND")
+  MESSAGE("CHUCK SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES} ${BOOST_ROOT}")
 
 #  SET(Boost_USE_STATIC_LIBS ON)
 #  SET(Boost_USE_MULTITHREADED ON)
 #  SET(Boost_USE_STATIC_RUNTIME OFF)
 
-#  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
-#  LINK_LIBRARIES(${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES}) # Deprecated but so convenient!
+  INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+  LINK_LIBRARIES(${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES}) # Deprecated but so convenient!
 
   #PYTHON_ADD_MODULE(hello hello.cpp)
   #FILE(COPY hello.py DESTINATION .)
@@ -88,15 +89,20 @@ ENDIF()
   #FILE(COPY toolbox.py DESTINATION .)
   #ADD_TEST(toolbox2 toolbox.py)
 
-#ELSEIF(NOT Boost_FOUND)
-#  MESSAGE("Unable to find correct Boost version. Did you set BOOST_ROOT?")
-#ENDIF()
+ELSEIF(NOT Boost_FOUND)
+  MESSAGE("Unable to find correct Boost version. Did you set BOOST_ROOT?")
+ENDIF()
 ###### FIND BOOST WORKS, BUT LET'S USE LOCAL INSTALL ######
-set(Boost_INCLUDE_DIRS "$ENV{BOOST_DIR}/include")
-FILE(GLOB myBoostLibs "$ENV{BOOST_DIR}/lib/libboost*.so")
-set(Boost_LIBRARIES ${myBoostLibs})
-MESSAGE("CHUCKIE BOOST SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES}")
-INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
+#set(Boost_INCLUDE_DIRS "$ENV{BOOST_DIR}/include")
+#FILE(GLOB myBoostLibs "$ENV{BOOST_DIR}/lib/libboost*.so")
+#set(Boost_LIBRARIES ${myBoostLibs})
+#MESSAGE("CHUCKIE BOOST SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES}")
+#INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
+
+# MPICH
+find_package(MPI REQUIRED)
+include_directories(${MPI_INCLUDE_PATH})
+MESSAGE("CHUCK MPI SAYS: ${MPI_INCLUDE_PATH} ${MPI_LIBRARY_DIRS} ${MPI_LIBRARIES}")
 
 SET(CMAKE_CPP_FLAGS "-g -Wall")
 
@@ -134,14 +140,17 @@ IF(CUDA_FOUND)
 ELSEIF(NOT CUDA_FOUND)
   MESSAGE("damn! no cuda")
 
-  #ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  #TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+  #ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
   #ADD_EXECUTABLE(singlePattern spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(singlePattern ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
   #ADD_EXECUTABLE(singlePatternQuaternion spQuaternion.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(singlePatternQuaternion ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+
+  #ADD_EXECUTABLE(spQuaternion_chignolin spQuaternion_chignolin.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(spQuaternion_chignolin ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
   
   #ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
@@ -153,7 +162,32 @@ ELSEIF(NOT CUDA_FOUND)
   #TARGET_LINK_LIBRARIES(makeDiffractionVolumeSingleAxisStream ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
   #MESSAGE("CHUCK SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
 
-  ADD_EXECUTABLE(mergeDiffractionVolume mergeDiffractionVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
-  MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
+  #ADD_EXECUTABLE(mergeDiffractionVolume_chignolin mergeDiffractionVolume_chignolin.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(mergeDiffractionVolume_chignolin ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
+  #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
+
+  #ADD_EXECUTABLE(mergeDiffractionVolume_1JB0 mergeDiffractionVolume_1JB0.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(mergeDiffractionVolume_1JB0 ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
+  #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")  
+  
+  #ADD_EXECUTABLE(mergeDiffractionVolume_testX mergeDiffractionVolume_testX.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(mergeDiffractionVolume_testX ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
+  #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")   
+  
+  #ADD_EXECUTABLE(MaximumXCorrelation MaximumXCorrelation.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(MaximumXCorrelation ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
+  #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
+  
+  ADD_EXECUTABLE(MaximumXCorrelationMPI MaximumXCorrelationMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(MaximumXCorrelationMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
+  MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES}")  
+  #if(MPI_COMPILE_FLAGS)
+  #set_target_properties(MaximumXCorrelationMPI PROPERTIES
+  #  COMPILE_FLAGS "${MPI_COMPILE_FLAGS}")
+  #endif()
+  #if(MPI_LINK_FLAGS)
+  #set_target_properties(MaximumXCorrelationMPI PROPERTIES
+  #  LINK_FLAGS "${MPI_LINK_FLAGS}")
+  #endif()
+
 ENDIF()
