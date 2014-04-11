@@ -195,42 +195,157 @@ int main( int argc, char* argv[] ){
 		myWeight.zeros(mySize,mySize,mySize);
 		fcube myIntensity;
 		myIntensity.zeros(mySize,mySize,mySize);
-		
+		int numPixels = mySize * mySize;
+		fmat myImages;
+		myImages.zeros(numImages,numPixels);
+		fmat mySlices;
+		mySlices.zeros(numSlices,numPixels);
+				
 		cout << "Start" << endl;
 		cout << mySize << endl;
 		
-		int active = 1;
+		int active;
 		string interpolate = "linear";
-
-
-
-  		for (int r = 0; r < numImages; r++) {
+		
+		fmat rot3D(3,3);
+		fvec u(3);
+		fvec quaternion(4);
+		// Setup initial diffraction volume by merging randomly
+		for (int r = 0; r < numImages; r++) {
 	  		// Get image
 	  		std::stringstream sstm;
   			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
 			filename = sstm.str();
 			myDP = load_asciiImage(filename);
+			cout << "myDP: " << myDP(35,24) << endl;
+			
 	        // Get rotation matrix
-  			std::stringstream sstm1;
-			sstm1 << quaternionList << setfill('0') << setw(6) << r << ".dat";
-			string quaternionName = sstm1.str();
-			fvec quaternion;
-			quaternion = load_asciiQuaternion(quaternionName);
+  			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
+			// generate uniform random quaternion on SO(3)
+			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
+					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
 			
+			/*
+			if (r == 0) {
+				quaternion << 1 << 0 << 0 << 0;
+			} else if (r == 1) {
+				quaternion << 0 << 1 << 0 << 0;
+			} else if (r == 2) {
+				quaternion << 0 << 0 << 1 << 0;
+			} */
 			myR = CToolbox::quaternion2rot3D(quaternion);
-			
+			active = 1;
 			CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+			//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
   		}
+  		cout << "Done random merge" << endl;
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
-  		//myIntensity.save(output,raw_ascii);
-  		fmat mySlice;
-  		for (int i = 0; i < numSlices; i++) {
-  			std::stringstream sstm;
-  			sstm << output << setfill('0') << setw(6) << i << ".dat";
-			string outputName = sstm.str();
-			mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
+  		cout << "Done normalize" << endl;
+  		
+  		/*
+  			// Save output
+	  		fmat mySlice;
+	  		for (int i = 0; i < mySize; i++) {
+	  			std::stringstream sstm;
+	  			sstm << output << setfill('0') << setw(6) << i << ".dat";
+				string outputName = sstm.str();
+				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
+			}
+  		*/
+  		
+  		// Distribution of quaternions
+  		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  		//myQuaternions.print("4Sphere: ");
+  		cout << "Done 4Sphere" << endl;
+  		//myQuaternions.print("Q: ");
+  		
+  		for (int iter = 0; iter < 1; iter++) {
+  		
+	  		// Expansion
+			for (int s = 0; s < numSlices; s++) {
+				//cout << s << endl;
+			    // Get rotation matrix
+				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(s)));
+				//cout << "Got myR" << endl;
+				active = 1;
+				CToolbox::slice3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, active, interpolate);
+				
+				/*
+				fmat mySlice;
+				std::stringstream sstm;
+	  			sstm << output << setfill('0') << setw(6) << s << ".dat";
+				string outputName = sstm.str();
+				mySlice = myDP.save(outputName,raw_ascii);
+				*/
+				
+				mySlices.row(s) = reshape(myDP,1,numPixels);
+	  		}
+
+	  		// Maximization
+	  		cout << "Calculating similarity metric" << endl;
+	  		fmat lse(numImages,numSlices); // least squared error
+	  		fmat imgRep;
+			imgRep.zeros(numSlices,numPixels);
+	  		for (int i = 0; i < numImages; i++) {
+	  			cout << i << endl;
+	  			
+	  			imgRep = repmat(myImages.row(i), numSlices, 1);
+	  			
+	  			//cout << "imgRep: " << imgRep(i,0) << " " << imgRep(i,1) << endl;
+	  			//cout << "imgRep: " << imgRep(i,40) << " " << imgRep(i,41) << endl;
+	  			//cout << "mySlices: " << mySlices(i,40) << " " << mySlices(i,41) << endl;
+	  			
+	  			//cout << imgRep(i,40) - mySlices(i,40) << endl;
+	  			
+	  			lse.row(i) = trans(sum(pow(imgRep-mySlices,2),1));
+	  		}
+	  		uvec bestFit(numImages);
+	  		//lse.print("lse:");
+	  		float lowest;
+	  		for (int i = 0; i < numImages; i++) {
+	  			lowest = lse(i,0);
+	  			bestFit(i) = 0;
+				for (int j = 0; j < numSlices; j++) {
+					if (lowest > lse(i,j)) {
+						lowest = lse(i,j);
+						bestFit(i) = j; // minimum lse index
+					}
+	  			}
+	  		}
+	  		//bestFit.print("bestFit: ");
+	  		
+	  		// Compression
+	  		myWeight.zeros(mySize,mySize,mySize);
+			myIntensity.zeros(mySize,mySize,mySize);
+	  		for (int r = 0; r < numImages; r++) {
+		  		// Get image
+		  		std::stringstream sstm;
+	  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
+				filename = sstm.str();
+				myDP = load_asciiImage(filename);
+			    // Get rotation matrix
+			    cout << myQuaternions.row(bestFit(r)) << endl;
+				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(bestFit(r))));
+				active = 1;
+				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+	  		}
+	  		// Normalize here
+	  		CToolbox::normalize(&myIntensity,&myWeight);
+		
+		
+			// Save output
+	  		fmat mySlice;
+	  		for (int i = 0; i < mySize; i++) {
+	  			std::stringstream sstm;
+	  			sstm << output << setfill('0') << setw(6) << i << ".dat";
+				string outputName = sstm.str();
+				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
+			}
+			
 		}
+		
     }
 
 	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;

@@ -11,7 +11,8 @@
 #include <sstream>
 #include <armadillo>
 #include <math.h>
-//#include <boost/algorithm/string.hpp>
+
+#include <boost/math/special_functions/factorials.hpp>
 
 using namespace std;
 using namespace arma;
@@ -75,12 +76,8 @@ void CToolbox::quaternion2AngleAxis(fvec quaternion, float& theta, fvec& axis){
 }
 
 // Let's use zyz convention after Heymann (2005)
-fmat CToolbox::quaternion2rot3D(fvec q){
-	fmat rot3D;
-	/*rot3D << pow(q(0),2) - pow(q(1),2) - pow(q(2),2) + pow(q(3),2) << 2*( q(0)*q(1) + q(2)*q(3) ) << 2*( q(0)*q(2) - q(1)*q(3) ) << endr
-          << 2*( q(0)*q(1) - q(2)*q(3) ) << -pow(q(0),2) + pow(q(1),2) - pow(q(2),2) + pow(q(3),2) << 2*( q(1)*q(2) + q(0)*q(3) ) << endr
-          << 2*( q(0)*q(2) + q(1)*q(3) ) << 2*( q(1)*q(2) - q(0)*q(3) ) << -pow(q(0),2) - pow(q(1),2) + pow(q(2),2) + pow(q(3),2) << endr;
-    */      
+fmat CToolbox::quaternion2rot3D(fvec q){ // it doesn't accept frowvec
+	fmat rot3D;     
     float theta = 0.0;
 	fvec axis(3);
 	quaternion2AngleAxis(q,theta,axis);
@@ -244,10 +241,92 @@ fmat CToolbox::get_wahba(fmat currentRot,fmat originRot) {
 	return myR;
 }
 
+// Given number of points, distribute evenly on hyper surface of a 4-sphere
+fmat CToolbox::pointsOn4Sphere(int numPts) {
+	fmat quaternion;
+	quaternion.zeros(2*numPts,4);
+	const int N = 4;	
+	float surfaceArea = N * pow(datum::pi,N/2) /  (N/2); // for even N
+	float delta = exp(log(surfaceArea/numPts)/3);
+	int iter = 0;
+	int ind = 0;
+	int maxIter = 1000;
+	float deltaW1,deltaW2,deltaW3;
+	float q0, q1, q2, q3;
+	float w1, w2, w3;
+	frowvec q(4); 
+	while (ind != numPts && iter < maxIter) {
+		ind = 0;
+		deltaW1 = delta;
+		for (w1 = 0.5*deltaW1; w1 < datum::pi; w1+=deltaW1) {
+			q0 = cos(w1);
+			deltaW2 = deltaW1/sin(w1);
+			for (w2 = 0.5*deltaW2; w2 < datum::pi; w2+=deltaW2) {
+				q1 = sin(w1) * cos(w2);
+				deltaW3 = deltaW2/sin(w2);
+				for (w3 = 0.5*deltaW3; w3 < 2*datum::pi; w3+=deltaW3) {
+					q2 = sin(w1)*sin(w2)*cos(w3);
+					q3 = sin(w1)*sin(w2)*sin(w3);
+					q << q0 << q1 << q2 << q3 << endr;
+					quaternion.row(ind)= q;
+					ind += 1;
+				}
+			}
+		}
+		delta *= exp(log((float)ind/numPts)/3);
+		iter += 1;
+	}
+	return quaternion.rows(0, numPts-1);
+}
+
+// Take an Ewald's slice from a diffraction volume
+void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1) {
+    int mySize = myIntensity1->n_rows;
+    
+    fmat& mySlice = myValue[0];
+    fmat& pixRot = myPoints[0];
+    
+    imat xyz;
+	xyz = conv_to<imat>::from(floor(pixRot));
+    
+    fmat fxyz = pixRot - xyz;
+    fmat cxyz = 1. - fxyz;
+    float x,y,z,fx,fy,fz,cx,cy,cz;
+	fcube& myIntensity = myIntensity1[0];
+	
+	uvec& goodpixmap = pixmap[0];
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+
+		x = xyz(1,*p);
+		y = xyz(0,*p);
+		z = xyz(2,*p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		fx = fxyz(1,*p);
+		fy = fxyz(0,*p);
+		fz = fxyz(2,*p);
+		cx = cxyz(1,*p);
+		cy = cxyz(0,*p);
+		cz = cxyz(2,*p);
+
+		mySlice(*p) = cx*(cy*(cz*myIntensity(y,x,z) + fz*myIntensity(y,x,z+1)) + fy*(cz*myIntensity(y+1,x,z) + fz*myIntensity(y+1,x,z+1))) + fx*(cy*(cz*myIntensity(y,x+1,z) + fz*myIntensity(y,x+1,z+1)) + fy*(cz*myIntensity(y+1,x+1,z) + fz*myIntensity(y+1,x+1,z+1)));
+  
+	}
+}
+
 // Insert a Ewald's slice into a diffraction volume
 //void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, imat *myGridPoints, fcube *myIntensity1, fcube *myWeight1) {
 void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
+    
+    cout << "mySize: " << endl;
     //cout << xyz[0] << endl;
     fmat& pixRot = myPoints[0];
     
@@ -273,8 +352,8 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
         //cout << p << endl;
         photons = myPhotons(*p);
 
-		x = xyz(0,*p);
-		y = xyz(1,*p);
+		x = xyz(1,*p);
+		y = xyz(0,*p);
 		z = xyz(2,*p);
 
 		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
@@ -283,11 +362,11 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
 		if (x < 0 || y < 0 || z < 0)
 			continue;	
 				
-		fx = fxyz(0,*p);
-		fy = fxyz(1,*p);
+		fx = fxyz(1,*p);
+		fy = fxyz(0,*p);
 		fz = fxyz(2,*p);
-		cx = cxyz(0,*p);
-		cy = cxyz(1,*p);
+		cx = cxyz(1,*p);
+		cy = cxyz(0,*p);
 		cz = cxyz(2,*p);
 				
 		weight = cx*cy*cz;
@@ -352,8 +431,8 @@ void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixma
         //cout << *p << endl;
         photons = myPhotons(*p);
         
-        x = xyz(0,*p);
-		y = xyz(1,*p);
+        x = xyz(1,*p);
+		y = xyz(0,*p);
 		z = xyz(2,*p);
 
 		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
@@ -382,27 +461,49 @@ void CToolbox::normalize(fcube *myIntensity1, fcube *myWeight1) {
 // interpolate = 1: trilinear
 void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
     fmat& pix = myPoints[0];
-    cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
+    //cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
     fmat& myR = myRot[0];
-    myR.print("myR: ");
+    //myR.print("myR: ");
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
         pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
         pixRot = trans(pixRot);
-        cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
+        //cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
         //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max;
     } else {
         //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is passive rotation
         pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
         pixRot = trans(pixRot);  
-        cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
+        //cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
     }
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
         interp_linear3D(myValue,&pixRot,goodpix,myIntensity,myWeight);
     } else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
         interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
     }
+}
+
+// Extract an Ewald's slice from a diffraction volume
+// active = 1: active rotation
+// interpolate = 1: trilinear
+void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, int active, string interpolate ) {
+    fmat& pix = myPoints[0];
+    fmat& myR = myRot[0];
+    fmat pixRot;
+	pixRot.zeros(pix.n_elem,3);
+	if (active == 1) {
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
+        pixRot = trans(pixRot);
+    } else {
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
+        pixRot = trans(pixRot);  
+    }
+    if ( boost::algorithm::iequals(interpolate,"linear") ) {
+        extract_interp_linear3D(myValue,&pixRot,goodpix,myIntensity);
+    }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
+    //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    //}
 }
 
 #ifdef COMPILE_WITH_BOOST
