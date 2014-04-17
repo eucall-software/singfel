@@ -68,8 +68,6 @@ int main( int argc, char* argv[] ){
             output = argv[ n+2 ];
         }
     }
-
-	timerMaster.tic();
 	
 	// Particle
 	CParticle particle = CParticle();
@@ -178,16 +176,15 @@ int main( int argc, char* argv[] ){
 	cout << "Half period resolution: " << dmin << " m" << endl;
 
 	if(!USE_CUDA) {
+		
 		CDiffraction::get_atomicFormFactorList(&particle,&det);
 		
-		//timer.tic();
 		fmat F_hkl_sq;
 		string outputName;
 
-
 		fmat myPos = particle.get_atomPos();
-		CParticle rotatedParticle = CParticle();	
 		
+		CParticle rotatedParticle = CParticle();	
 		rotatedParticle.load_atomType(atomTypeFile.c_str()); 	// rowvec atomType 
 		rotatedParticle.load_atomPos(posFile.c_str());		// mat pos
 		rotatedParticle.load_xyzInd(xyzIndFile.c_str());		// rowvec xyzInd (temporary)
@@ -197,10 +194,8 @@ int main( int argc, char* argv[] ){
 		fmat rot3D(3,3);
 		fvec u(3);
 		fvec quaternion(4);	
-		//int i = 0;
 		for (int i = 0; i < numImages; i++) {
 			timer.tic();
-			
 			// Rotate single particle			
 			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
 			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
@@ -214,10 +209,9 @@ int main( int argc, char* argv[] ){
 		
 			F_hkl_sq = CDiffraction::calculate_intensity(&rotatedParticle,&det);
 			
-			fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea(); //2.105e30
+			fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 			umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);	
-				
-			//cout<<"Calculate dp: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
+
 			stringstream sstm2;
 			sstm2 << output << "detector_intensity_" << setfill('0') << setw(6) << i << ".dat";
 			outputName = sstm2.str();
