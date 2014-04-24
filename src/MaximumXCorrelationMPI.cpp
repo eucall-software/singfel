@@ -43,13 +43,13 @@ using namespace toolbox;
 #define DIETAG 2
 static void master(mpi::communicator* comm, int mode);
 static void slave(mpi::communicator* comm, int mode);
-static void master_expansion(mpi::communicator* comm);
+static void master_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* quaternions);
 static void slave_expansion(mpi::communicator* comm);
 static void master_maximization(mpi::communicator* comm);
 static void slave_maximization(mpi::communicator* comm);
 static void master_compression(mpi::communicator* comm);
 static void slave_compression(mpi::communicator* comm);
-static float get_next_work_item(void);
+static int get_next_work_item(fmat* workPool, int workID);
 static void process_results(float result);
 static float do_work(float work);
 
@@ -194,26 +194,22 @@ int main( int argc, char* argv[] ){
 		}
 	//}
 	
-	for (int iter = 0; iter < numIterations; iter++) { // number of iterations
-		for (int mode = 1; mode <= 3; mode++) { // loop through 3 steps
-			if (world.rank() == 0) {
-				master(comm,mode);
-		  	} else {
-		  		slave(comm,mode);
-		  	}
-		  	world.barrier();
-		  	if (world.rank() == 0) {
-		  		cout << "Barrier passed: " << mode << endl;
-		  	}
-	  	}
-	}
+	// Initialize intensity volume
+	string filename;
+  	fmat myDP;
+  	fmat myR;
+  	myR.zeros(3,3);
+	fcube myWeight;
+	myWeight.zeros(mySize,mySize,mySize);
+	fcube myIntensity;
+	myIntensity.zeros(mySize,mySize,mySize);
+	int numPixels = mySize * mySize;
+	fmat myImages;
+	myImages.zeros(numImages,numPixels);
+	fmat mySlices;
+	mySlices.zeros(numSlices,numPixels);
 
-  	return 0;
-/*
-
-
-	if(!USE_CUDA) {
-
+	if (world.rank() == 0) {
 		int counter = 0;
 		fmat pix;
 		pix.zeros(det.numPix,3);
@@ -234,23 +230,7 @@ int main( int argc, char* argv[] ){
         pix = pix * inc_res;
         pix_mod = sqrt(sum(pix%pix,1));		
 		pix_max = max(pix_mod);
-		
-  		string filename;
-  		fmat myDP;
-  		fmat myR;
-  		myR.zeros(3,3);
-  		//float psi,theta,phi;
-		fcube myWeight;
-		myWeight.zeros(mySize,mySize,mySize);
-		fcube myIntensity;
-		myIntensity.zeros(mySize,mySize,mySize);
-		int numPixels = mySize * mySize;
-		fmat myImages;
-		myImages.zeros(numImages,numPixels);
-		fmat mySlices;
-		mySlices.zeros(numSlices,numPixels);
-
-				
+						
 		cout << "Start" << endl;
 		cout << mySize << endl;
 		
@@ -285,7 +265,36 @@ int main( int argc, char* argv[] ){
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
   		cout << "Done normalize" << endl;
-  		
+	}
+	
+	// Main iteration
+	for (int iter = 0; iter < numIterations; iter++) { // number of iterations
+		//for (int mode = 1; mode <= 3; mode++) { // loop through 3 steps
+			fcube* intenseVol = &myIntensity;
+			if (world.rank() == 0) {
+				// Distribution of quaternions
+  				fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  				myQuaternions.print("myQuaternions:");
+  				fmat* Quaternion_mem = &myQuaternions;
+				master_expansion(comm,intenseVol,Quaternion_mem);
+		  	} else {
+		  		slave_expansion(comm);
+		  	}
+		  	world.barrier();
+		  	if (world.rank() == 0) {
+		  		cout << "Barrier passed" << endl; // " << mode << endl;
+		  	}
+	  	//}
+	}
+
+	cout << "Enter the dragon" << endl;
+
+  	return 0;
+/*
+
+
+	if(!USE_CUDA) {
+
   		// Distribution of quaternions
   		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
   		//myQuaternions.print("4Sphere: ");
@@ -371,6 +380,7 @@ int main( int argc, char* argv[] ){
 */
 }
 
+/*
 static void master(mpi::communicator* comm, int mode) {
 	if (mode == 1) {
 		//Master in expansion mode
@@ -396,113 +406,176 @@ static void slave(mpi::communicator* comm, int mode) {
 		slave_compression(comm);
 	}
 }
+*/
 
-static void master_expansion(mpi::communicator* comm) {
+static void master_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* quaternions) {
 	cout << "Master in expansion mode" << endl;
 	sleep(1);
 	
-  	int ntasks, rank;
-  	float work;
+	//cout << myIntensity->at(45,45,45) << endl;
+	//cout << myIntensity->slice( 45 ) << endl;
+	//cout << quaternions->row(3) << endl;
+	
+  	int ntasks, rank, numProcesses, numSlaves;
+  	int work;
   	float result;
-  	MPI_Status status;
+  	int workID = 0;
+  	fvec quaternion;
+  	boost::mpi::status status;//MPI_Status status;
 
-  	// Find out how many processes there are in the default communicator
-
-	ntasks = comm->size();
+	numProcesses = comm->size(); // 3
+	numSlaves = numProcesses-1; // 2
+	ntasks = quaternions->n_rows; // 5
+	if (ntasks < numSlaves) { // 5 < 2
+		numProcesses = ntasks+1; // 
+	}
+	cout << "numProcesses: " << numProcesses << endl;
+	// Find out how many processes there are in the default communicator
 	//http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-		// 033: Escape
-		// 1: Effect = Bold
-		// 30+1: Color = Red
-	cout << "\033[1;31mhow many processes?: \033[0m" << ntasks << endl;
+	// 033: Escape
+	// 1: Effect = Bold
+	// 30+1: Color = Red
+	//cout << "\033[1;31mhow many processes?: \033[0m" << ntasks << endl;
   	//MPI_Comm_size(MPI_COMM_WORLD, &ntasks);
 
   	// Seed the slaves; send one unit of work to each slave.
 
-  	for (rank = 1; rank < ntasks; ++rank) {
+  	for (rank = 1; rank < numProcesses; ++rank) {
 
     	// Find the next item of work to do
 
-   		work = get_next_work_item();
-
-    	// Send it to each rank
-
-		comm->send(rank, WORKTAG, std::string("Hello"));
-    	//MPI_Send(&work,             // message buffer 
-        //     1,                 // one data item 
-        //     MPI_INT,           // data item is an integer 
-        //     rank,              // destination process rank
-        //     WORKTAG,           // user chosen message tag 
-        //     MPI_COMM_WORLD);   // default communicator 
+   		work = get_next_work_item(quaternions, workID);
+		cout << "work: " << work << endl;
+		// Check if work is NULL
+		if (work != NULL) {
+			// Send it to each rank
+			//fvec mvec = vectorise(myIntensity->slice(45));
+			//std::vector<float> msg = conv_to< std::vector<float> >::from(mvec);
+			cout << rank << ": " << quaternions->row(workID) << endl;
+			std::vector<float> msg = conv_to< std::vector<float> >::from(quaternions->row(workID));
+		
+			//comm->send(rank, WORKTAG, std::string("Hello"));
+			comm->send(rank, WORKTAG, msg);
+			//MPI_Send(&work,             // message buffer 
+		    //     1,                 // one data item 
+		    //     MPI_INT,           // data item is an integer 
+		    //     rank,              // destination process rank
+		    //     WORKTAG,           // user chosen message tag 
+		    //     MPI_COMM_WORLD);   // default communicator 
+		    workID++;
+        }
   	}
-/*
+
   	// Loop over getting new work requests until there is no more work to be done
 
-  	work = get_next_work_item();
+  	work = get_next_work_item(quaternions, workID);
+  	cout << "work: " << work << endl;
+  	
   	while (work != NULL) {
-
+		cout << "Enter the while loop" << endl;
     	// Receive results from a slave
-
-    	MPI_Recv(&result,           // message buffer
-             1,                 // one data item 
-             MPI_DOUBLE,        // of type double real 
-             MPI_ANY_SOURCE,    // receive from any sender 
-             MPI_ANY_TAG,       // any type of message 
-             MPI_COMM_WORLD,    // default communicator 
-             &status);          // info about the received message 
-
+		std::vector<float> msg; //std::string msg;
+    	status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msg);
+    	cout << "Received msg from: " << status.source() << endl;
+    	    std::cout << status.source() << ": The contents of msg> ";
+	  		for (std::vector<float>::iterator it = msg.begin(); it != msg.end(); ++it)
+				std::cout << ' ' << *it;
+	  		std::cout << '\n';    	
+			std::cout.flush();
+    	//MPI_Recv(&result,           // message buffer
+        //     1,                 // one data item 
+        //     MPI_DOUBLE,        // of type double real 
+        //     MPI_ANY_SOURCE,    // receive from any sender 
+        //     MPI_ANY_TAG,       // any type of message 
+        //     MPI_COMM_WORLD,    // default communicator 
+        //     &status);          // info about the received message 
+		
+		
     	// Send the slave a new work unit 
-
-    	MPI_Send(&work,             // message buffer
-             1,                 // one data item 
-             MPI_INT,           // data item is an integer 
-             status.MPI_SOURCE, // to who we just received from 
-             WORKTAG,           // user chosen message tag 
-             MPI_COMM_WORLD);   // default communicator 
-
+		std::vector<float> msgSend = conv_to< std::vector<float> >::from(quaternions->row(workID));
+		comm->send(status.source(), WORKTAG, msgSend);
+		workID++;
+    	
+    	
+    	//MPI_Send(&work,             // message buffer
+        //     1,                 // one data item 
+        //     MPI_INT,           // data item is an integer 
+        //     status.MPI_SOURCE, // to who we just received from 
+        //     WORKTAG,           // user chosen message tag 
+        //     MPI_COMM_WORLD);   // default communicator 
+		
     	// Get the next unit of work to be done 
 
-    	work = get_next_work_item();
+    	work = get_next_work_item(quaternions, workID);
+    	cout << "work: " << work << endl;
   	}
+
+	cout << "Master finished sending all jobs" << endl;
 
   	// There's no more work to be done, so receive all the outstanding results from the slaves.
 
-  	for (rank = 1; rank < ntasks; ++rank) {
-    	MPI_Recv(&result, 1, MPI_DOUBLE, MPI_ANY_SOURCE,
-             MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-  	}
+	std::vector<float> msg;
+	for (rank = 1; rank < numProcesses; ++rank) {
+    	status = comm->recv(rank, boost::mpi::any_tag, msg);
+    	std::cout << rank << ": The contents of msg> ";
+	  		for (std::vector<float>::iterator it = msg.begin(); it != msg.end(); ++it)
+				std::cout << ' ' << *it;
+	  		std::cout << '\n';    	
+			std::cout.flush();
+	}
+  	//for (rank = 1; rank < ntasks; ++rank) {
+    //	MPI_Recv(&result, 1, MPI_DOUBLE, MPI_ANY_SOURCE,
+    //         MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+  	//}
 
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
+	for (rank = 1; rank < numProcesses; ++rank) {
+		comm->send(rank, DIETAG, msg);
+		cout << "Killed: " << rank << endl;
+	}
+  	//for (rank = 1; rank < ntasks; ++rank) {
+    //	MPI_Send(0, 0, MPI_INT, rank, DIETAG, MPI_COMM_WORLD);
+  	//}	
 
-  	for (rank = 1; rank < ntasks; ++rank) {
-    	MPI_Send(0, 0, MPI_INT, rank, DIETAG, MPI_COMM_WORLD);
-  	}	
-*/
 }
 
 static void slave_expansion(mpi::communicator* comm) {
 	cout << comm->rank() << ": Slave in expansion mode" << endl;
-	sleep(3);
+	sleep(1);
 	
 	float work;
 	float results;
-	MPI_Status status;
-
+	boost::mpi::status status;//MPI_Status status;
+	int master = 0;
 	while (1) {
 
 		// Receive a message from the master
 
-		std::string msg;
-    	comm->recv(0, boost::mpi::any_tag, msg);
-    	cout << "\033[3;32mSlave: \033[0m" << msg << endl;
-    	std::cout.flush();
-    	return;
+		std::vector<float> msg; //std::string msg;
+    	status = comm->recv(master, boost::mpi::any_tag, msg);
+    	cout << comm->rank() << ": received msg from master" << endl;
+    	cout << "status tag: " << status.tag() << endl;
+    	//cout << "status: " << status.source() << endl;
+    	
+    	//cout << "\033[3;32mSlave: \033[0m" << msg << endl;
+    	/*if (comm->rank() == 1) {
+			std::cout << "The contents of msg:";
+	  		for (std::vector<float>::iterator it = msg.begin(); it != msg.end(); ++it)
+				std::cout << ' ' << *it;
+	  		std::cout << '\n';    	
+			std::cout.flush();
+    	}*/
+    	
+    	sleep(1);
+    	
 		//MPI_Recv(&work, 1, MPI_INT, 0, MPI_ANY_TAG,
 		//         MPI_COMM_WORLD, &status);
 
 		// Check the tag of the received message.
-
-		if (status.MPI_TAG == DIETAG) {
-		  return;
+		
+		if (status.tag() == DIETAG) {
+			cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
+		  	return;
 		}
 
 		// Do the work
@@ -511,8 +584,16 @@ static void slave_expansion(mpi::communicator* comm) {
 
 		// Send the result back
 
+		comm->send(master, WORKTAG, msg);
 		//MPI_Send(&result, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-
+		/*MPI_Send(&work,             // message buffer
+             1,                 // one data item 
+             MPI_INT,           // data item is an integer 
+             status.MPI_SOURCE, // to who we just received from 
+             WORKTAG,           // user chosen message tag 
+             MPI_COMM_WORLD);   // default communicator 
+             */
+		//return;
 	}
 }
 
@@ -536,13 +617,14 @@ static void slave_compression(mpi::communicator* comm) {
 	sleep(3);
 }
 
-static float get_next_work_item(void)
+static int get_next_work_item(fmat* workPool, int workID)
 {
   /* Fill in with whatever is relevant to obtain a new unit of work
      suitable to be given to a slave. */
-     frowvec temp(5);
-     temp << 1 << 2 << 3 << 4 << 5 << endr;
-     return 0.0;
+    if (workPool->n_rows > workID) {
+		return 1;
+    }
+	return NULL;
 }
 
 static void 
