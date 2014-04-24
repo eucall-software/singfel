@@ -1,3 +1,6 @@
+#ifndef SINGFEL_TOOLBOX_H
+#define SINGFEL_TOOLBOX_H
+
 #include <iostream>
 #include <stdio.h>      /* printf, NULL */
 #include <stdlib.h>     /* srand, rand */
@@ -12,7 +15,7 @@
 #include <armadillo>
 #include <math.h>
 
-#include <boost/math/special_functions/factorials.hpp>
+//#include <boost/math/special_functions/factorials.hpp>
 
 using namespace std;
 using namespace arma;
@@ -530,3 +533,5 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
 		;
 	}
 #endif
+
+#endif /* SINGFEL_TOOLBOX_H */
