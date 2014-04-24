@@ -32,9 +32,11 @@ public:
 	static float corrCoeff(arma::fmat, arma::fmat);
 	
 	static arma::fmat get_wahba(arma::fmat,arma::fmat);
-	//static void interp_linear3D(arma::fmat*, arma::fmat*, arma::fcube*, arma::fcube*);
-	//static void interp_nearestNeighbor(arma::fmat*, arma::fmat*, arma::fcube*, arma::fcube*);
-	//static void merge3D(arma::fmat*, arma::fmat*, arma::fmat*, float, arma::fcube*, arma::fcube*, int);
+	static arma::fmat pointsOn4Sphere(int);
+	
+	
+	static void extract_interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*);
+	static void slice3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, int active = 0, std::string interpolate="nearest");
 	
 	static void interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void interp_nearestNeighbor(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
