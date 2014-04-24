@@ -8,21 +8,29 @@ HDF5
 Optional Dependencies:
 MPI
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Installing dependencies without sudo:
 PYTHON
 This should already exist in standard Linux
 
 BOOST
 ./bootstrap.sh --prefix=/path/to/boost/directory --with-python=/which/python
+Add "using mpi ;" in /path/to/boost/directory/project-config.jam
 ./b2 install
 
 ARMADILLO
 cmake .
 make
 make install DESTDIR=/path/to/armadillo/directory
+Note: If you to use svd(), uncomment #define ARMA_USE_LAPACK in 
+/path/to/armadillo/directory/include/armadillo_bits/config.hpp
+You don't need to recompile armadillo
 
 HDF5
-
+./configure --prefix=/path/to/hdf/directory --enable-cxx
+make
+make install
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Add the following lines to .bashrc which is used by CMake
 # HDF5
@@ -35,6 +43,10 @@ export BOOST_DIR=/path/to/boost/directory
 # SINGFEL
 export LIBRARY_PATH=/path/to/SingFEL/build/src:$LIBRARY_PATH
 export LD_RUN_PATH=/path/to/SingFEL/build/src:$LD_RUN_PATH
+
+# MPICH
+export PATH=/data/yoon/mpich-install/bin:$PATH
+export LD_LIBRARY_PATH=/opt/intel/2013/lib/intel64:$LD_LIBRARY_PATH
 
 To compile programs:
 $mkdir build
