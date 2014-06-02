@@ -187,8 +187,6 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
 	    	myDP(j,i) = data_out[j][i];
       	}
       }
-      cout << "myDP(66): " << myDP(66) << endl; // 3000
-      cout << "myDP(76): " << myDP(76) << endl; // 45000
 
    }  // end of try block
 
