@@ -25,9 +25,7 @@ void CDiffraction::calculate_atomicFactor(particle::CParticle *particle, detecto
 	f_hkl.zeros(detector->py,detector->px,particle->numAtomTypes);
 	fmat q_mod_Bragg = detector->q_mod * (1e-10/2);
 	gsl_interp_accel *acc = gsl_interp_accel_alloc();
-	
-//cout << particle->numQSamples << endl;
-	
+		
 	gsl_spline *spline = gsl_spline_alloc(gsl_interp_cspline, particle->numQSamples); // 200 should be function of numQSamples
 	double qs[particle->numQSamples], ft[particle->numQSamples];
 	// silly copying of arma::rowvec to vector
@@ -107,6 +105,6 @@ fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::
 			F_hkl_sq(ind_y,ind_x) = as_scalar( pow(f * cos(map),2) + pow(f * sin(map),2) ); // 1xN Nx1
 		}
 	}
-	
+	//cout << "q_xyz: " << detector->q_xyz(0,0,0) << detector->q_xyz(0,0,1) << detector->q_xyz(0,0,2);
 	return F_hkl_sq;
 }
