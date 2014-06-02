@@ -117,7 +117,7 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 
 MESSAGE("${CMAKE_MODULE_PATH}")
 
-#find_package(CUDA)
+find_package(CUDA)
 IF(CUDA_FOUND)
   MESSAGE("cuda found")
   MESSAGE("${CUDA_LIBRARIES}")
@@ -125,23 +125,23 @@ IF(CUDA_FOUND)
     
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
 
-  CUDA_ADD_EXECUTABLE(radiationSINGFEL_gpu radiationDamage.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationSINGFEL_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(radiationSINGFEL radiationDamageS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
-  CUDA_ADD_EXECUTABLE(singlePattern_gpu spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(singlePattern_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+#  CUDA_ADD_EXECUTABLE(singlePattern_gpu spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+#  TARGET_LINK_LIBRARIES(singlePattern_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  CUDA_ADD_EXECUTABLE(singlePatternQuaternion_gpu spQuaternion.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(singlePatternQuaternion_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+#  CUDA_ADD_EXECUTABLE(singlePatternQuaternion_gpu spQuaternion.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+#  TARGET_LINK_LIBRARIES(singlePatternQuaternion_gpu ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  CUDA_ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu ${LIBSINGFEL}/io.cpp)
-  TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
+#  CUDA_ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu ${LIBSINGFEL}/io.cpp)
+#  TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
 ELSEIF(NOT CUDA_FOUND)
   MESSAGE("damn! no cuda")
 
-  #ADD_EXECUTABLE(radiationSINGFEL radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  #TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  ADD_EXECUTABLE(radiationSINGFEL radiationDamageS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationSINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
   #ADD_EXECUTABLE(singlePattern spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(singlePattern ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
@@ -194,7 +194,7 @@ ELSEIF(NOT CUDA_FOUND)
   #TARGET_LINK_LIBRARIES(mergeDiffractionVolume_4HWY ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
   #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}") 
 
-  ADD_EXECUTABLE(unitTest unitTest.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  ADD_EXECUTABLE(unitTest unitTest.cpp ${LIBSINGFEL}/temp.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(unitTest ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
 ENDIF()
