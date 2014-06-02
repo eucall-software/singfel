@@ -2,6 +2,7 @@
 #include <math.h>
 #include "detector.h"
 #include "toolbox.h"
+#include "io.h"
 using namespace std;
 using namespace arma;
 using namespace detector;
@@ -12,7 +13,7 @@ double CDetector::pix_width;		// (m)
 double CDetector::pix_height;		// (m)
 int CDetector::px;					// number of pixels in x
 int CDetector::py;					// number of pixels in y
-int CDetector::numPix;
+int CDetector::numPix;				// total number of pixels
 double CDetector::cx;				// center of detector in x
 double CDetector::cy;				// center of detector in y
 umat CDetector::dp;					// diffraction pattern
@@ -110,10 +111,19 @@ uvec CDetector::get_badPixelMap(){
 }
 
 void CDetector::set_pixelMap(string x){
-	fmat temp = load_asciiImage(x);
+	fmat temp;
+	if (x.empty()) { // badpixelmap is not specified		
+		if (py > 0 && px > 0) {
+			temp.zeros(py,px);
+		} else {
+			cout << "Please set detector dimensions before calling set_pixelMap" << endl;
+			exit(0);
+		}
+	} else { // load badpixelmap
+		temp = load_asciiImage(x);
+	}
 	badpixmap = find(temp == 1);
-	badpixmap.print("badpix: ");
-	
+	//badpixmap.print("badpix: ");
 	goodpixmap = find(temp == 0);
 	/*
 	badpixmap.copy_size(temp);
@@ -142,7 +152,7 @@ void CDetector::apply_badPixels() {
     uvec::iterator a = badpixmap.begin();
     uvec::iterator b = badpixmap.end();
     for(uvec::iterator i=a; i!=b; ++i) {
-        cout << *i << endl;
+        //cout << *i << endl;
         dp(*i) = 0;
     }
 }
@@ -155,15 +165,16 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	set_pix_height(pix_height);
 	set_numPix(py,px);
 	set_center_x(cx);
-	set_center_y(cy);
-//cout << "Got here" << endl;	
+	set_center_y(cy);	
 
-	// Used for LCLS making diffraction volume
+	// Used for single particle. Set 1/pix_width=9090 for LCLS
 	q_xyz.zeros(py,px,3);
 	float rx, ry, r, twotheta, az;
+	float r_sq;
+	solidAngle.zeros(py,px);
 	for (int ind_x = 0; ind_x < px; ind_x++) {
 		for (int ind_y = 0; ind_y < py; ind_y++) {
-			rx = (ind_x - cx) * pix_width;
+			rx = (ind_x - cx) * pix_width; // equivalent to dividing by pixel resolution
 			ry = (ind_y - cy) * pix_width;
 			r = sqrt(pow(rx,2)+pow(ry,2));
 			twotheta = atan2(r,d);
@@ -172,37 +183,19 @@ void CDetector::init_dp( beam::CBeam *beam ){
 			q_xyz(ind_y,ind_x,1) = beam->get_wavenumber() * sin(twotheta)*sin(az);
 			q_xyz(ind_y,ind_x,2) = beam->get_wavenumber() * (cos(twotheta) - 1.0);
 			
+			r_sq =  pow(rx,2) + pow(ry,2) + pow(d,2); // real space
+			solidAngle(ind_y,ind_x) = pix_width * pix_height * cos(twotheta) / r_sq; // real space (Unitless)
+			
 			//if (ind_x==0 && ind_y==0) {
 			//cout << "cnx,cny,res: " << cx<<","<<cy<<","<<1./pix_width<<endl;
 			//cout << "fs,ss: " << ind_x<<","<<ind_y<<endl;
-			//cout << "cx,lambda: " << cx <<"," << beam->get_wavelength() << endl;
+			//cout << "cx,lambda,k: " << cx <<"," << beam->get_wavelength() << "," << beam->get_wavenumber() << "," << 1/beam->get_wavelength() << endl;
 			//cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
 			//}
 		}
 	}
-
-/* // Hard coded 9090
-	// Used for LCLS making diffraction volume
-	q_xyz.zeros(py,px,3);
-	float rx, ry, r, twotheta, az;
-	for (int ind_x = 0; ind_x < px; ind_x++) {
-		for (int ind_y = 0; ind_y < py; ind_y++) {
-			rx = (ind_x - cx) / 9090.0;
-			ry = (ind_y - cy) / 9090.0;
-			r = sqrt(pow(rx,2)+pow(ry,2));
-			twotheta = atan2(r,d);
-			az = atan2(ry,rx);
-			q_xyz(ind_y,ind_x,0) = beam->k * sin(twotheta)*cos(az);
-			q_xyz(ind_y,ind_x,1) = beam->k * sin(twotheta)*sin(az);
-			q_xyz(ind_y,ind_x,2) = beam->k * (cos(twotheta) - 1.0);
-			//if (ind_x==331 && ind_y==513) {
-			//cout << "cnx,cny,res: " << cx<<","<<cy<<","<<1./pix_width<<endl;
-			//cout << "fs,ss: " << ind_x<<","<<ind_y<<endl;
-			//cout << "rx,ry,r,twotheta: " <<rx<<","<<ry<<","<<r<<","<<twotheta<<","<<az<<","<<q_xyz(ind_y,ind_x,0)<<","<<q_xyz(ind_y,ind_x,1)<<","<<q_xyz(ind_y,ind_x,2)<<endl;
-			//}
-		}
-	}
-*/
+	q_mod = CToolbox::mag(q_xyz);
+//cout << "done" << endl;	
 /*		
 	q_xyz.zeros(py,px,3);
 	fmat r_x, r_y, k;
