@@ -229,8 +229,8 @@ fmat load_asciiImage(string x){
 		cout << "Error: problem with loading file, " << x << endl;
 		exit(EXIT_FAILURE);
 	}
-	cout << "myDP(0): " << B(0) << endl;
-	cout << "myDP(5): " << B(5) << endl;
+	//cout << "myDP(0): " << B(0) << endl;
+	//cout << "myDP(5): " << B(5) << endl;
 	return B;
 }
 
@@ -437,7 +437,7 @@ void calculate_dp(Packet *pack){
 		//timer.tic();
 		fmat detector_intensity;
 		detector_intensity.copy_size(F_hkl_sq);
-		detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * beam.phi_in;//2.105e30;//beam.phi_in;
+		detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * beam.get_photonsPerPulsePerArea();//2.105e30;//beam.phi_in;
 
 		//timer.tic();
 		stringstream ss;	//create a stringstream
