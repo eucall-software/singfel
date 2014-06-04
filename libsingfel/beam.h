@@ -26,6 +26,7 @@ public:
 	static double photonEnergy2wavlength(double);
 	static double wavelength2photonEnergy(double);
 	static void set_photon_energy(double);
+	static double get_photon_energy();
 	static double get_wavelength();
 	static double get_wavenumber();
 	static void set_focus(double);

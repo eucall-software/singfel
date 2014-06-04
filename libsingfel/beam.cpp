@@ -68,6 +68,10 @@ void CBeam::set_photon_energy(double ev){
 	update();
 }
 
+double CBeam::get_photon_energy(){
+	return photon_energy;
+}
+
 double CBeam::get_wavelength(){
 	return lambda;
 }
