@@ -48,10 +48,10 @@ int main( int argc, char* argv[] ){
     string beamFile;
     string geomFile;
     //int numImages = 0;
-    int gpu = 0;
+    int gpu = 0; // not used
     string output;
     
-    int numPatterns;// = atoi(argv[1]);
+    int numTrajectories;// = atoi(argv[1]);
 	string inputDir;// = argv[2];
 	string outputDir;// = argv[3];
 	int patternID;// = atoi(argv[4]);
@@ -62,7 +62,7 @@ int main( int argc, char* argv[] ){
     for (int n = 1; n < argc; n++) {
     cout << argv [ n ] << endl; 
         if(boost::algorithm::iequals(argv[ n ], "--num_trajectories")) {
-            numPatterns = atoi(argv[ n+2 ]);
+            numTrajectories = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--input_dir")) {
             inputDir = argv[ n+2 ];
         } else if (boost::algorithm::iequals(argv[ n ], "--output_dir")) {
@@ -80,14 +80,12 @@ int main( int argc, char* argv[] ){
         }
     }
 
-cout << "numPatterns: " << numPatterns << endl;
-
     /*
 	cout << "The name used to start the program: " << argv[ 0 ] << "\nArguments are:\n";
     for (int n = 1; n < argc; n++)
     	cout << setw( 2 ) << n << ": " << argv[ n ] << '\n';
 
-	int numPatterns = atoi(argv[1]);
+	int numTrajectories = atoi(argv[1]);
 	string inputDir = argv[2];
 	string outputDir = argv[3];
 	int patternID = atoi(argv[4]);
@@ -233,44 +231,73 @@ cout << "numPatterns: " << numPatterns << endl;
 	double theta = atan((px/2*pix_height)/d);
 	double qmax = 2/beam.get_wavelength()*sin(theta/2);
 	double dmin = 1/(2*qmax);
-	//cout << "max q to the edge: " << qmax << " m^-1" << endl;
-	//cout << "Half period resolution: " << dmin << " m" << endl;
+	cout << "max q to the edge: " << qmax << " m^-1" << endl;
+	cout << "Half period resolution: " << dmin*1e10 << " Angstroms" << endl;
 	
 	umat detector_counts;		
 	detector_counts.zeros(py,px);
 
 	double total_phot = 0;
 	int sliceInterval = 5;
-	for (int timeSlice = 5; timeSlice <= numPatterns; timeSlice+=sliceInterval) {
+	for (int timeSlice = 5; timeSlice <= numTrajectories; timeSlice+=sliceInterval) {
 		//cout << timeSlice << endl;
 	
 		stringstream sstm0;
 		sstm0 << "/snp_" << setfill('0') << setw(3) << timeSlice;
-		string filename;
-		filename = sstm0.str();
+		string datasetname;
+		datasetname = sstm0.str();
 		
 		// Particle //
 		CParticle particle = CParticle();
+/*
+		fvec myN = hdf5readT<fvec>("/data/yoon/singfel/pmi_out_000001.h5","/data/snp_001/Nph");
+		float myNN = myN[0];
+		cout << "myN: " << myN << "," << myNN << endl;
+				
+		fmat myAtomPos1 = hdf5readT<fmat>("/data/yoon/singfel/pmi_out_000001.h5","/data/snp_001/r");
+		myAtomPos1.print("myAtomPos1: ");
+
+		frowvec myQ = hdf5readT<frowvec>("/data/yoon/singfel/pmi_out_000001.h5","/data/snp_001/Q");
+		myQ.print("myQ: ");
+
+		fmat myFF = hdf5readT<fmat>("/data/yoon/singfel/pmi_out_000001.h5","/data/snp_001/ff");
+		myFF.print("myFF: ");
+		
+		fmat myAtomType = hdf5read("/data/yoon/singfel/pmi_out_000001.h5","/data/snp_001/r");
+		myAtomType.print("myAtomType: ");
+*/		
+		particle.load_atomType(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/T"); 	// rowvec atomType
+		particle.load_atomPos(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/r");		// mat pos
+		particle.load_ionList(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/xyz");		// rowvec ion list
+		particle.load_ffTable(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/ff");	// mat ffTable (atomType x qSample)
+		particle.load_qSample(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
+/*
 		particle.load_atomType(inputDir+filename+"_T.dat"); 	// rowvec atomType 
 		particle.load_atomPos(inputDir+filename+"_r.dat");		// mat pos
 		particle.load_ionList(inputDir+filename+"_xyz.dat");		// rowvec ion list
 		particle.set_xyzInd(&particle.ionList);		// rowvec xyzInd (tells you which row of ffTable to use)
 		particle.load_ffTable(inputDir+filename+"_ff.dat");	// mat ffTable (atomType x qSample)
 		particle.load_qSample(inputDir+filename+"_Q.dat");	// rowvec q vector sin(theta)/lambda
-
+*/
 		// Rotate atom positions
 		fmat myPos = particle.get_atomPos();
 		myPos = myPos * trans(rot3D);
 		particle.set_atomPos(&myPos);
 		
 		// Beam //
-		mat phot;
+		//mat phot;
 		double n_phot = 0;
-		sstm0.str("");
+		cout << "HERE" << endl;
 		for (int i = 0; i < sliceInterval; i++) {
+			stringstream sstm0;
 			sstm0 << "/snp_" << setfill('0') << setw(3) << timeSlice-i;
-			phot.load(inputDir+filename+"_Nph.dat");
-			n_phot += conv_to< double >::from(phot);	// number of photons per pulse
+			string datasetname;
+			datasetname = sstm0.str();
+			//phot.load(inputDir+filename+"_Nph.dat");
+			vec myNph = hdf5readT<vec>(inputDir+"/pmi_out_000001.h5","/data"+datasetname+"/Nph");
+			beam.set_photonsPerPulse(myNph[0]);
+			//n_phot += conv_to< double >::from(phot);	// number of photons per pulse
+			n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
 		}
 		total_phot += n_phot;
 		//n_phot = 2e13;
@@ -299,20 +326,74 @@ cout << "numPatterns: " << numPatterns << endl;
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 		cout << "c: " << detector_counts(48,48) << endl;
 		cout << "sum: " << sum(sum(detector_counts)) << endl;
-		//if (timeSlice == numPatterns) {
+		if (timeSlice == numTrajectories) {
 			stringstream sstm;
-			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_diffraction_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_quaternion_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);
 			stringstream sstm2;
-			sstm2 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_intensity_" << setfill('0') << setw(6) << timeSlice << ".dat";
+			sstm2 << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_intensity_" << setfill('0') << setw(6) 
+			<< timeSlice << ".dat";
 			outputName = sstm2.str();
-			detector_intensity.save(outputName,raw_ascii);		
-		//}
+			detector_intensity.save(outputName,raw_ascii);
+			//int success = hdf5write("filename.h5","datasetname", detector_intensity);
+			/*
+			fmat A(6,10);
+			int counter = 0;
+			for (int i = 0; i < 10; i++){
+			for (int j = 0; j < 6; j++){
+				A(j,i) = 3.14*counter++;
+			}
+			}
+			A.print("this A:");
+			*/
+			stringstream sstm3;
+			sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+			<< "1" << ".h5";
+			outputName = sstm3.str();
+			int appendDataset = 0;
+			int createSubgroup = 0;
+			int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+			//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
+			fmat angle = conv_to< fmat >::from(quaternion);
+			angle = angle.t();
+			appendDataset = 1;
+			success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
+			createSubgroup = 1;
+			fmat dist(1,1);
+			dist(0) = det.get_detector_dist();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat pixelWidth(1,1);
+			pixelWidth(0) = det.get_pix_width();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
+			fmat pixelHeight(1,1);
+			pixelHeight(0) = det.get_pix_height();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+			fmat mask = ones<fmat>(px_in,px_in);
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+			createSubgroup = 1;
+			fmat photonEnergy(1,1);
+			photonEnergy(0) = beam.get_photon_energy();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat photons(1,1);
+			photons(0) = beam.get_photonsPerPulse();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+			createSubgroup = 0;
+			fmat focusArea(1,1);
+			focusArea(0) = beam.get_focus_area();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
+		}
 	} else if (USE_CHUNK) {
 		cout<< "USE_CHUNK" << endl;
 		int max_chunkSize = 100;
@@ -366,13 +447,17 @@ cout << "numPatterns: " << numPatterns << endl;
 		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 		
-		if (timeSlice == numPatterns) {
+		if (timeSlice == numTrajectories) {
 			stringstream sstm;
-			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_diffraction_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_quaternion_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);		
 		}
@@ -392,13 +477,17 @@ det.thomson.save("../thomson.dat",raw_ascii);
 		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulse();
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 			
-		if (timeSlice == numPatterns) {
+		if (timeSlice == numTrajectories) {
 			stringstream sstm;
-			sstm << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_diffraction_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_diffraction_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm.str();
 			detector_counts.save(outputName,raw_ascii);
 			stringstream sstm1;
-			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) << trajectory << "_quaternion_" << setfill('0') << setw(6) << patternID << ".dat";
+			sstm1 << outputDir << "/trj" << setfill('0') << setw(4) 
+			<< trajectory << "_quaternion_" << setfill('0') << setw(6) 
+			<< patternID << ".dat";
 			outputName = sstm1.str();
 			quaternion.save(outputName,raw_ascii);		
 		}	
