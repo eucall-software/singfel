@@ -459,7 +459,44 @@ int main( int argc, char* argv[] ){
 			<< trajectory << "_quaternion_" << setfill('0') << setw(6) 
 			<< patternID << ".dat";
 			outputName = sstm1.str();
-			quaternion.save(outputName,raw_ascii);		
+			quaternion.save(outputName,raw_ascii);
+			stringstream sstm3;
+			sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+			<< "1" << ".h5";
+			outputName = sstm3.str();
+			int appendDataset = 0;
+			int createSubgroup = 0;
+			int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+			//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
+			fmat angle = conv_to< fmat >::from(quaternion);
+			angle = angle.t();
+			appendDataset = 1;
+			success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
+			createSubgroup = 1;
+			fmat dist(1,1);
+			dist(0) = det.get_detector_dist();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat pixelWidth(1,1);
+			pixelWidth(0) = det.get_pix_width();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
+			fmat pixelHeight(1,1);
+			pixelHeight(0) = det.get_pix_height();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+			fmat mask = ones<fmat>(px_in,px_in);
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+			createSubgroup = 1;
+			fmat photonEnergy(1,1);
+			photonEnergy(0) = beam.get_photon_energy();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat photons(1,1);
+			photons(0) = beam.get_photonsPerPulse();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+			createSubgroup = 0;
+			fmat focusArea(1,1);
+			focusArea(0) = beam.get_focus_area();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
 		}
 	}
 #else
@@ -489,7 +526,44 @@ det.thomson.save("../thomson.dat",raw_ascii);
 			<< trajectory << "_quaternion_" << setfill('0') << setw(6) 
 			<< patternID << ".dat";
 			outputName = sstm1.str();
-			quaternion.save(outputName,raw_ascii);		
+			quaternion.save(outputName,raw_ascii);
+			stringstream sstm3;
+			sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+			<< "1" << ".h5";
+			outputName = sstm3.str();
+			int appendDataset = 0;
+			int createSubgroup = 0;
+			int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+			//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
+			fmat angle = conv_to< fmat >::from(quaternion);
+			angle = angle.t();
+			appendDataset = 1;
+			success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
+			createSubgroup = 1;
+			fmat dist(1,1);
+			dist(0) = det.get_detector_dist();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat pixelWidth(1,1);
+			pixelWidth(0) = det.get_pix_width();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
+			fmat pixelHeight(1,1);
+			pixelHeight(0) = det.get_pix_height();
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+			fmat mask = ones<fmat>(px_in,px_in);
+			success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+			createSubgroup = 1;
+			fmat photonEnergy(1,1);
+			photonEnergy(0) = beam.get_photon_energy();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+			createSubgroup = 0;
+			fmat photons(1,1);
+			photons(0) = beam.get_photonsPerPulse();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+			createSubgroup = 0;
+			fmat focusArea(1,1);
+			focusArea(0) = beam.get_focus_area();
+			success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
 		}	
 	//}
 #endif
