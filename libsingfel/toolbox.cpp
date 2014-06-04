@@ -287,6 +287,9 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
     int mySize = myIntensity1->n_rows;
     
     fmat& mySlice = myValue[0];
+    
+    //mySlice.print("mySlice: ");
+    
     fmat& pixRot = myPoints[0];
     
     imat xyz;
@@ -329,7 +332,7 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     
-    cout << "mySize: " << endl;
+    //cout << "mySize: " << endl;
     //cout << xyz[0] << endl;
     fmat& pixRot = myPoints[0];
     
@@ -502,6 +505,7 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
         pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
         pixRot = trans(pixRot);  
     }
+    //pixRot.print("pixRot: ");
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
         extract_interp_linear3D(myValue,&pixRot,goodpix,myIntensity);
     }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {

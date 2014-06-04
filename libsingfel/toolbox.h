@@ -19,6 +19,7 @@ public:
     CToolbox(std::string n) : name(n) {}
     std::string name;
 	static arma::mat mag(arma::cube);
+
 	static arma::fmat mag(arma::fcube);
 	static arma::umat convert_to_poisson(arma::fmat);
 	// Let's use zyz convention after Heymann (2005)

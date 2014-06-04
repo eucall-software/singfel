@@ -22,7 +22,9 @@ public:
 	CBeam ();
 	static void set_wavelength(double);
 	static double wavelength2wavenumber(double);
+	static double wavenumber2wavelength(double);
 	static double photonEnergy2wavlength(double);
+	static double wavelength2photonEnergy(double);
 	static void set_photon_energy(double);
 	static double get_wavelength();
 	static double get_wavenumber();

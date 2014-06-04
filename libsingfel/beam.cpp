@@ -7,7 +7,7 @@ using namespace arma;
 double CBeam::lambda; 							// (m) wavelength
 double CBeam::photon_energy; 					// (eV) photon energy
 double CBeam::k;								// (m^-1)
-double CBeam::focus;							// (m)
+double CBeam::focus;							// (m) beam focus diameter
 double CBeam::focus_area; 						// (m^2)
 double CBeam::n_phot;							// number of photons per pulse
 double CBeam::phi_in;  							// number of photon per pulse per area (m^-2)
@@ -27,6 +27,12 @@ void CBeam::update(){
     if (photon_energy != 0) {
         lambda = photonEnergy2wavlength(photon_energy);
         k = wavelength2wavenumber(lambda);
+    } else if (lambda != 0) {
+        k = wavelength2wavenumber(lambda);
+        photon_energy = wavelength2photonEnergy(lambda);
+    } else if (k != 0) {
+        lambda = wavenumber2wavelength(k);
+        photon_energy = wavelength2photonEnergy(lambda);
     }
     if (focus != 0) {
         set_focusArea();
@@ -45,8 +51,16 @@ double CBeam::wavelength2wavenumber(double lambda){
 	return 1/lambda;
 }
 
+double CBeam::wavenumber2wavelength(double k){
+	return 1/k;
+}
+
 double CBeam::photonEnergy2wavlength(double photonEnergy){
 	return 1.2398e-6/photonEnergy;
+}
+
+double CBeam::wavelength2photonEnergy(double wavelength){
+	return 1.2398e-6/wavelength;
 }
 
 void CBeam::set_photon_energy(double ev){
