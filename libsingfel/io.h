@@ -74,10 +74,10 @@ template<typename T> int hdf5writeT(std::string filename, std::string groupname,
 	H5File* file;
 	// Check if file exists, if not create a new file
 	if(appendDataset) {
-		std::cout << "file does exist" << std::endl;
+		//std::cout << "file does exist" << std::endl;
 		file = new H5File(FILE_NAME, H5F_ACC_RDWR);
 	} else {
-		std::cout << "file does not exist" << std::endl;
+		//std::cout << "file does not exist" << std::endl;
 		// Create a file.
 		file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
 	}
@@ -98,25 +98,25 @@ template<typename T> int hdf5writeT(std::string filename, std::string groupname,
 	*/
 	Group* group;
 	try { // to determine if the dataset exists in the group
-		cout << " Trying to open group" << endl;
+		//cout << " Trying to open group" << endl;
 		group = new Group( file->openGroup( groupname ));
-		cout << " Opened existing group" << endl;
+		//cout << " Opened existing group" << endl;
 	}
 	catch( FileIException not_found_error ) {
-		cout << " Group not found." << endl;
+		//cout << " Group not found." << endl;
 		// create group
 		group = new Group( file->createGroup( groupname ));
-		cout << " Group created." << endl;
+		//cout << " Group created." << endl;
 	}
 
 	if (createSubgroup) {
 		group = new Group( file->createGroup( subgroupname ));
-		cout << " Subgroup created." << endl;
+		//cout << " Subgroup created." << endl;
 	}
 
 	if (!subgroupname.empty()){
 		group = new Group( file->openGroup( subgroupname ));
-		cout << " writing to subgroup." << endl;
+		//cout << " writing to subgroup." << endl;
 	}
 
 	/*
