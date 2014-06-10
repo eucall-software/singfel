@@ -232,12 +232,17 @@ cout << "DONE!!!!!" << endl;
 		
 				// Particle //
 				CParticle particle = CParticle();
+
+cout << "Load particle" << endl; 
 	
 				particle.load_atomType(filename,datasetname+"/T"); 	// rowvec atomType
 				particle.load_atomPos(filename,datasetname+"/r");		// mat pos
 				particle.load_ionList(filename,datasetname+"/xyz");		// rowvec ion list
 				particle.load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
 				particle.load_qSample(filename,datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
+
+cout << "Done particle" << endl; 
+cout << "Atom pos: " << particle.get_atomPos() << endl;
 
 				// Rotate atom positions
 				fmat myPos = particle.get_atomPos();
@@ -251,7 +256,9 @@ cout << "DONE!!!!!" << endl;
 					stringstream sstm0;
 					sstm0 << "/data/snp_" << setfill('0') << setw(3) << timeSlice-i;
 					datasetname = sstm0.str();
+cout << "Read Nph" << endl; 					
 					vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
+cout << "Done Nph" << endl; 
 					beam.set_photonsPerPulse(myNph[0]);
 					n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
 				}
@@ -459,6 +466,11 @@ cout << "DONE!!!!!" << endl;
 						tt(j,i) = 0.1*counter++;
 					tt.print("tt:");
 					success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mat", tt,createSubgroup);
+					
+					fmat myT = hdf5readT<fmat>(outputName,"/params/geom/mat");
+					myT.print("myT:");
+					//double myDist = hdf5readT<double>(outputName,"/params/geom/detectorDist");
+					//myDist.print("myDist:");
 /*			
 					createSubgroup = 0;
 					cube ttt(3,2,4);

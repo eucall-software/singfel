@@ -24,7 +24,8 @@ CParticle::CParticle (){
 
 void CParticle::load_atomType(string filename, string datasetname){ // load from hdf5
 	atomType = hdf5readT<irowvec>(filename,datasetname);
-	//atomType.print("atomType: ");
+	//atomType = hdf5readVector<irowvec>(filename,datasetname);
+	atomType.print("atomType: ");
 	numAtomTypes = atomType.n_elem;
 }
 
@@ -57,9 +58,10 @@ void CParticle::set_atomType(Packet *x){ // load from Packet structure
 
 void CParticle::load_atomPos(string filename, string datasetname){ // load from hdf5
 	atomPos = hdf5readT<fmat>(filename,datasetname);
+	//atomPos = hdf5readVector<fmat>(filename,datasetname);
 	numAtoms = atomPos.n_rows;
 	formFactorList = zeros<urowvec>(1,numAtoms);
-	//CParticle::atomPos.print("set_atomPos: ");
+	CParticle::atomPos.print("set_atomPos: ");
 }
 
 void CParticle::load_atomPos(string x){ // load from ascii
@@ -87,6 +89,7 @@ fmat CParticle::get_atomPos(){
 
 void CParticle::load_ionList(string filename, string datasetname){ // load from hdf5
 	ionList = hdf5readT<irowvec>(filename,datasetname);
+	//ionList = hdf5readVector<irowvec>(filename,datasetname);
 	//CParticle::ionList.print("ionList: ");
 	CParticle::set_xyzInd(&ionList);
 }
@@ -127,6 +130,7 @@ void CParticle::set_xyzInd(irowvec *ionList){
 
 void CParticle::load_ffTable(string filename, string datasetname){ // load from hdf5
 	ffTable = hdf5readT<fmat>(filename,datasetname);
+	//ffTable = hdf5readVector<fmat>(filename,datasetname);
 	//CParticle::ffTable.print("ffTable: ");
 }
 
@@ -144,6 +148,7 @@ void CParticle::set_ffTable(Packet *x){
 
 void CParticle::load_qSample(string filename, string datasetname){ // load from hdf5
 	qSample = hdf5readT<frowvec>(filename,datasetname);
+	//qSample = hdf5readVector<frowvec>(filename,datasetname);
 	numQSamples = qSample.n_elem;
 	//CParticle::qSample.print("qSample: ");
 }
