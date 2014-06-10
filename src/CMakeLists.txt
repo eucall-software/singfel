@@ -64,7 +64,7 @@ ENDIF()
 FIND_PACKAGE(PythonInterp)
 FIND_PACKAGE(PythonLibs)
 SET(BOOST_ROOT $ENV{BOOST_DIR})
-FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS python thread date_time system mpi serialization)
+FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS python thread date_time system mpi serialization filesystem)
 IF(Boost_FOUND)
   add_definitions(-DCOMPILE_WITH_BOOST) # set #define COMPILE_WITH_BOOST to 1 in .cpp
   MESSAGE("BOOST FOUND")
