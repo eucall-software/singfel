@@ -23,6 +23,9 @@
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <boost/filesystem.hpp>
+using namespace boost::filesystem;
+
 using namespace std;
 using namespace arma;
 using namespace detector;
@@ -129,10 +132,23 @@ int main( int argc, char* argv[] ){
 		}
 	}
 	CBeam beam = CBeam();
+	string filename;
+	stringstream sstm;
+	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(6) << pmiStartID << ".h5";
+	filename = sstm.str();
+//cout << filename << endl;
+//cout << "get vector" << endl;
+//	fmat myTemp = hdf5readT<fmat>(filename,"/data/snp_001/r");
+//cout << "get photon energy" << endl;
+//	fvec myPhotonEnergy = hdf5readT<fvec>(filename,"/history/parent/detail/params/photonEnergy");
+//cout << myPhotonEnergy << endl;
+//	beam.set_photonsPerPulse(myPhotonEnergy[0]);
+					
 	beam.set_photon_energy(photon_energy);
 	beam.set_focus(focus_radius*2); // radius to diameter
 	//beam.set_photonsPerPulse(fluence);
 	//beam.set_photonsPerPulsePerArea();
+cout << "DONE!!!!!" << endl;
 
 	/****** Detector ******/
 	double d = 0;					// (m) detector distance
@@ -249,7 +265,7 @@ int main( int argc, char* argv[] ){
 
 			#ifdef COMPILE_WITH_CUDA
 			if (!USE_CHUNK) {
-				cout<< "USE_CUDA && NO_CHUNK" << endl;
+				//cout<< "USE_CUDA && NO_CHUNK" << endl;
 
 				CDiffraction::get_atomicFormFactorList(&particle,&det);		
 
@@ -270,42 +286,47 @@ int main( int argc, char* argv[] ){
 					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
-					int appendDataset = 0;
+					
+					std::cout << file_size(filename) << endl;
+					copy_file("/data/S2E/data/simulation_test/diffr/out.h5", outputName);
+/*					
+					//int appendDataset = 0;
 					int createSubgroup = 0;
-					int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+					int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,createSubgroup);
 					//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
 					fmat angle = conv_to< fmat >::from(quaternion);
 					angle = angle.t();
-					appendDataset = 1;
-					success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
+					//appendDataset = 1;
+					success = hdf5writeT(outputName,"data","","/data/angle", angle,createSubgroup);
 					createSubgroup = 1;
 					fmat dist(1,1);
 					dist(0) = det.get_detector_dist();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,createSubgroup);
 					createSubgroup = 0;
 					fmat pixelWidth(1,1);
 					pixelWidth(0) = det.get_pix_width();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
 					fmat pixelHeight(1,1);
 					pixelHeight(0) = det.get_pix_height();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
 					fmat mask = ones<fmat>(px_in,px_in);
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);			
 					createSubgroup = 1;
 					fmat photonEnergy(1,1);
 					photonEnergy(0) = beam.get_photon_energy();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,createSubgroup);
 					createSubgroup = 0;
 					fmat photons(1,1);
 					photons(0) = beam.get_photonsPerPulse();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,createSubgroup);			
 					createSubgroup = 0;
 					fmat focusArea(1,1);
 					focusArea(0) = beam.get_focus_area();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
+*/					
 				}
 			} else if (USE_CHUNK) {
-				cout<< "USE_CUDA && USE_CHUNK" << endl;
+				//cout<< "USE_CUDA && USE_CHUNK" << endl;
 				int max_chunkSize = 100;
 				int chunkSize = 0;
 
@@ -362,43 +383,45 @@ int main( int argc, char* argv[] ){
 					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
-					int appendDataset = 0;
+/*					
+					//int appendDataset = 0;
 					int createSubgroup = 0;
-					int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+					int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,createSubgroup);
 					//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
 					fmat angle = conv_to< fmat >::from(quaternion);
 					angle = angle.t();
-					appendDataset = 1;
-					success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
+					//appendDataset = 1;
+					success = hdf5writeT(outputName,"data","","/data/angle", angle,createSubgroup);
 					createSubgroup = 1;
 					fmat dist(1,1);
 					dist(0) = det.get_detector_dist();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,createSubgroup);
 					createSubgroup = 0;
 					fmat pixelWidth(1,1);
 					pixelWidth(0) = det.get_pix_width();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
 					fmat pixelHeight(1,1);
 					pixelHeight(0) = det.get_pix_height();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
 					fmat mask = ones<fmat>(px_in,px_in);
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+					success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);			
 					createSubgroup = 1;
 					fmat photonEnergy(1,1);
 					photonEnergy(0) = beam.get_photon_energy();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,createSubgroup);
 					createSubgroup = 0;
 					fmat photons(1,1);
 					photons(0) = beam.get_photonsPerPulse();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,createSubgroup);			
 					createSubgroup = 0;
 					fmat focusArea(1,1);
 					focusArea(0) = beam.get_focus_area();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
+					success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
+*/					
 				}
 			}
-		#else
-			cout<< "USE_CPU" << endl;
+			#else
+			//cout<< "USE_CPU" << endl;
 				timer.tic();
 				CDiffraction::get_atomicFormFactorList(&particle,&det);
 
@@ -413,41 +436,60 @@ int main( int argc, char* argv[] ){
 					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
-					int appendDataset = 0;
+					
 					int createSubgroup = 0;
-					int success = hdf5writeT(outputName,"data","","/data/data", detector_intensity,appendDataset,createSubgroup);
+					int success = hdf5writeVector(outputName,"data","","/data/data", detector_intensity,createSubgroup);
 					//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
-					fmat angle = conv_to< fmat >::from(quaternion);
-					angle = angle.t();
-					appendDataset = 1;
-					success = hdf5writeT(outputName,"data","","/data/angle", angle,appendDataset,createSubgroup);
-					createSubgroup = 1;
-					fmat dist(1,1);
-					dist(0) = det.get_detector_dist();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/detectorDist", dist,appendDataset,createSubgroup);
+					
+					
 					createSubgroup = 0;
-					fmat pixelWidth(1,1);
-					pixelWidth(0) = det.get_pix_width();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,appendDataset,createSubgroup);
-					fmat pixelHeight(1,1);
-					pixelHeight(0) = det.get_pix_height();
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,appendDataset,createSubgroup);
+					//appendDataset = 1;
+					fvec angle = quaternion;
+					success = hdf5writeVector(outputName,"data","","/data/angle", angle,createSubgroup);
+					
+					createSubgroup = 1;
+					double dist = det.get_detector_dist();
+					success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/detectorDist", dist,createSubgroup);
+
+					createSubgroup = 0;
+					fmat tt(3,2);
+					int counter = 0;
+					for (int i = 0; i < 2; i++)
+					for (int j = 0; j < 3; j++)
+						tt(j,i) = 0.1*counter++;
+					tt.print("tt:");
+					success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mat", tt,createSubgroup);
+/*			
+					createSubgroup = 0;
+					cube ttt(3,2,4);
+					counter = 0;
+					for (int k = 0; k < 4; k++)
+					for (int i = 0; i < 2; i++)
+					for (int j = 0; j < 3; j++)
+						ttt(j,i,k) = counter++;
+					ttt.print("ttt:");
+					success = hdf5writeCube(outputName,"params","params/geom","/params/geom/cube", ttt,createSubgroup);
+*/
+					
+					createSubgroup = 0;
+					double pixelWidth = det.get_pix_width();
+					success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
+					double pixelHeight = det.get_pix_height();
+					success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
 					fmat mask = ones<fmat>(px_in,px_in);
-					success = hdf5writeT(outputName,"params","params/geom","/params/geom/mask", mask,appendDataset,createSubgroup);			
+					success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);
 					createSubgroup = 1;
-					fmat photonEnergy(1,1);
-					photonEnergy(0) = beam.get_photon_energy();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,appendDataset,createSubgroup);
+					double photonEnergy = beam.get_photon_energy();
+					success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,createSubgroup);
 					createSubgroup = 0;
-					fmat photons(1,1);
-					photons(0) = beam.get_photonsPerPulse();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/photons", photons,appendDataset,createSubgroup);			
+					double photons = total_phot;
+					success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photons", photons,createSubgroup);			
 					createSubgroup = 0;
-					fmat focusArea(1,1);
-					focusArea(0) = beam.get_focus_area();
-					success = hdf5writeT(outputName,"params","params/beam","/params/beam/focusArea", focusArea,appendDataset,createSubgroup);
+					double focusArea = beam.get_focus_area();
+					success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
+
 				}
-		#endif
+			#endif
 			}
 		}
 	}

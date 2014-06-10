@@ -16,6 +16,16 @@
 #endif  // H5_NO_STD
 #endif
 
+#include <iostream>
+#include <iomanip>
+#include <stdlib.h>
+#include <stdio.h>
+#ifdef OLD_HEADER_FILENAME
+#include <iostream.h>
+#else
+#include <iostream>
+#endif
+
 #include "H5Cpp.h"
 
 #ifndef H5_NO_NAMESPACE
@@ -27,217 +37,440 @@
 using namespace std;
 using namespace arma;
 
-/*
-#include <fstream>
-bool fexists(const std::string filename) {
-  ifstream ifile(filename.c_str());
-  return ifile;
-}*/
 
-template<typename T> int hdf5writeT(std::string filename, std::string groupname, std::string subgroupname, std::string datasetname, T data, int appendDataset, int createSubgroup){
+template<typename T> int hdf5writeCube(std::string filename, std::string groupname, std::string subgroupname, std::string datasetname, T data, int createSubgroup){
+
 	const H5std_string FILE_NAME( filename );
 	const H5std_string DATASET_NAME( datasetname );
 	
-	// TO DO: Use tokenizer to get groupname from datasetname
-	
-	int myDim1 = data.n_rows; // 6
-	int myDim2 = data.n_cols; // 10
+	int myRank;
+	int DIM0, DIM1, DIM2;
+	if (typeid(data) == typeid(cube)) {
+		DIM0 = data.n_rows;
+		DIM1 = data.n_cols;
+		DIM2 = data.n_slices;
+		myRank = 3;
+	}
 
-	// TO DO: Handle cubes and vectors
-	
-	const int MSPACE1_RANK = 1; // Rank of the first dataset in memory
-	const int MSPACE1_DIM = myDim1*myDim2; // Dataset size in memory
-	//const int MSPACE2_RANK = 1; // Rank of the second dataset in memory
-	//const int MSPACE2_DIM = 4; // Dataset size in memory
-	const int FSPACE_RANK = 2; // Dataset rank as it is stored in the file
-	const int FSPACE_DIM1 = myDim1; // Dimension sizes of the dataset as it is
-	const int FSPACE_DIM2 = myDim2; // stored in the file
-	//const int MSPACE_RANK = 2; // Rank of the first dataset in memory
-	//const int MSPACE_DIM1 = 8; // We will read dataset back from the file
-	//const int MSPACE_DIM2 = 9; // to the dataset in memory with these
-	// dataspace parameters
-	//const int NPOINTS = 4; // Number of points that will be selected
-	// and overwritten
-	int i,j; // loop indices */
-	 
-	/*
-	* Try block to detect exceptions raised by any of the calls inside it
-	*/
+	// Try block to detect exceptions raised by any of the calls inside it
 	try
 	{
-	/*
-	* Turn off the auto-printing when failure occurs so that we can
-	* handle the errors appropriately
-	*/
-	Exception::dontPrint();
+		// Turn off the auto-printing when failure occurs so that we can
+		// handle the errors appropriately
+		Exception::dontPrint();
 	
-	H5File* file;
-	// Check if file exists, if not create a new file
-	if(appendDataset) {
-		//std::cout << "file does exist" << std::endl;
-		file = new H5File(FILE_NAME, H5F_ACC_RDWR);
-	} else {
-		//std::cout << "file does not exist" << std::endl;
-		// Create a file.
-		file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
-	}
-/*
-	if ( !boost::filesystem::exists( filename ) ) {
-		std::cout << "file does not exist" << std::endl;
-		// Create a file.
-		file = new H5File( FILE_NAME, H5F_ACC_TRUNC );
-	} else {
-		std::cout << "file does exist" << std::endl;
-		file = new H5File(FILE_NAME, H5F_ACC_RDWR);
-	}
-*/
+		H5File file;
+		// Check if file exists, if not create a new file
+		if ( !boost::filesystem::exists( filename ) ) {
+			//std::cout << "file does not exist" << std::endl;
+			// Create a file.
+			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
+		} else {
+			//std::cout << "file does exist" << std::endl;
+			file = H5File(FILE_NAME, H5F_ACC_RDWR);
+		}
 
-	// Check if group exists
-	/*
-	* Access the group.
-	*/
-	Group* group;
-	try { // to determine if the dataset exists in the group
-		//cout << " Trying to open group" << endl;
-		group = new Group( file->openGroup( groupname ));
-		//cout << " Opened existing group" << endl;
-	}
-	catch( FileIException not_found_error ) {
-		//cout << " Group not found." << endl;
-		// create group
-		group = new Group( file->createGroup( groupname ));
-		//cout << " Group created." << endl;
-	}
+		// Check if group exists
+		// Access the group.
+		Group group;
+		try { // to determine if the dataset exists in the group
+			//cout << " Trying to open group" << endl;
+			group = Group( file.openGroup( groupname ));
+			//cout << " Opened existing group" << endl;
+		}
+		catch( FileIException not_found_error ) {
+			//cout << " Group not found." << endl;
+			// create group
+			group = Group( file.createGroup( groupname ));
+			//cout << " Group created." << endl;
+		}
 
-	if (createSubgroup) {
-		group = new Group( file->createGroup( subgroupname ));
-		//cout << " Subgroup created." << endl;
-	}
+		if (createSubgroup) {
+			group = Group( file.createGroup( subgroupname ));
+			//cout << " Subgroup created." << endl;
+		}
 
-	if (!subgroupname.empty()){
-		group = new Group( file->openGroup( subgroupname ));
-		//cout << " writing to subgroup." << endl;
-	}
+		if (!subgroupname.empty()){
+			group = Group( file.openGroup( subgroupname ));
+			//cout << " writing to subgroup." << endl;
+		}
+		
 
-	/*
-	* Create property list for a dataset and set up fill values.
-	*/
-	int fillvalue = 0; /* Fill value for the dataset */
-	DSetCreatPropList plist;
-	if (typeid(data) == typeid(mat)) {
-		plist.setFillValue(PredType::NATIVE_DOUBLE, &fillvalue); // init with zeros
-	} else if (typeid(data) == typeid(fmat)) {
-    	plist.setFillValue(PredType::NATIVE_FLOAT, &fillvalue); // init with zeros
-	} else if (typeid(data) == typeid(imat)) {
-		plist.setFillValue(PredType::NATIVE_INT, &fillvalue); // init with zeros
-	} else if (typeid(data) == typeid(umat)) {
-		plist.setFillValue(PredType::NATIVE_UINT, &fillvalue); // init with zeros
-	}
-	/*
-	* Create dataspace for the dataset in the file.
-	*/
-	hsize_t fdim[] = {FSPACE_DIM1, FSPACE_DIM2}; // dim sizes of ds (on disk)
-	DataSpace fspace( FSPACE_RANK, fdim );
-	/*
-	* Create dataset and write it into the file.
-	*/
-	DataSet* dataset;
-	if (typeid(data) == typeid(mat)) {
-			dataset = new DataSet(file->createDataSet(
-	DATASET_NAME, PredType::NATIVE_DOUBLE, fspace, plist));
-	} else if (typeid(data) == typeid(fmat)) {
-    		dataset = new DataSet(file->createDataSet(
-	DATASET_NAME, PredType::NATIVE_FLOAT, fspace, plist));
-	} else if (typeid(data) == typeid(imat)) {
-			dataset = new DataSet(file->createDataSet(
-	DATASET_NAME, PredType::NATIVE_INT, fspace, plist));
-	} else if (typeid(data) == typeid(umat)) {
-			dataset = new DataSet(file->createDataSet(
-	DATASET_NAME, PredType::NATIVE_UINT, fspace, plist));
-	}
+		  // WRITE CUBE
 
-	/*
-	* Select hyperslab for the dataset in the file, using 3x2 blocks,
-	* (4,3) stride and (2,4) count starting at the position (0,1).
-	*/
-	hsize_t start[2]; // Start of hyperslab
-	hsize_t stride[2]; // Stride of hyperslab
-	hsize_t count[2]; // Block count
-	hsize_t block[2]; // Block sizes
-	start[0] = 0; start[1] = 0;
-	stride[0] = 1; stride[1] = 1;
-	count[0] = myDim1; count[1] = myDim2; // how many unit cells (2x4)
-	block[0] = 1; block[1] = 1; // unit cell size (3x2)
-	fspace.selectHyperslab( H5S_SELECT_SET, count, start, stride, block);
-	/*
-	* Create dataspace for the first dataset.
-	*/
-	hsize_t dim1[] = {MSPACE1_DIM}; /* Dimension size of the first dataset 50
-	(in memory) */
-	DataSpace mspace1( MSPACE1_RANK, dim1 );
-	/*
-	* Select hyperslab.
-	* We will use 48 elements of the vector buffer starting at the
-	* second element. Selected elements are 1 2 3 . . . 48
-	*/
-	start[0] = 0;
-	stride[0] = 1;
-	count[0] = myDim1*myDim2;
-	block[0] = 1;
-	mspace1.selectHyperslab( H5S_SELECT_SET, count, start, stride, block);
-	/*
-	* Write selection from the vector buffer to the dataset in the file.
-	*/
+		  // Create the data space for the dataset.
+		  if (typeid(data) == typeid(cube)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				dims[2] = DIM2;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_DOUBLE );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				double dataW[DIM0][DIM1][DIM2];
+				for (int k = 0; k < DIM2; k++){
+				for (int j = 0; j < DIM1; j++){
+				for (int i = 0; i < DIM0; i++){
+					dataW[i][j][k] = data.at(i,j,k);
+				}
+				}
+				}
+				dataset.write( dataW, PredType::NATIVE_DOUBLE );
+			} else if (typeid(data) == typeid(fcube)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				dims[2] = DIM2;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_FLOAT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				float dataW[DIM0][DIM1][DIM2];
+				for (int k = 0; k < DIM2; k++){
+				for (int j = 0; j < DIM1; j++){
+				for (int i = 0; i < DIM0; i++){
+					dataW[i][j][k] = data.at(i,j,k);
+				}
+				}
+				}
+				dataset.write( dataW, PredType::NATIVE_FLOAT );
+			} else if (typeid(data) == typeid(icube)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				dims[2] = DIM2;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_INT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				int dataW[DIM0][DIM1][DIM2];
+				for (int k = 0; k < DIM2; k++){
+				for (int j = 0; j < DIM1; j++){
+				for (int i = 0; i < DIM0; i++){
+					dataW[i][j][k] = data.at(i,j,k);
+				}
+				}
+				}
+				dataset.write( dataW, PredType::NATIVE_INT );
+			} else if (typeid(data) == typeid(ucube)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				dims[2] = DIM2;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_UINT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				unsigned int dataW[DIM0][DIM1][DIM2];
+				for (int k = 0; k < DIM2; k++){
+				for (int j = 0; j < DIM1; j++){
+				for (int i = 0; i < DIM0; i++){
+					dataW[i][j][k] = data.at(i,j,k);
+				}
+				}
+				}
+				dataset.write( dataW, PredType::NATIVE_UINT );
+			}
+			
+	}
+	catch( FileIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	// catch failure caused by the DataSet operations
+	catch( DataSetIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	// catch failure caused by the DataSpace operations
+	catch( DataSpaceIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	return 0;
+}
+
+template<typename T> int hdf5writeVector(std::string filename, std::string groupname, std::string subgroupname, std::string datasetname, T data, int createSubgroup){
+
+	const H5std_string FILE_NAME( filename );
+	const H5std_string DATASET_NAME( datasetname );
 	
-	int counter = 0;
-	if (typeid(data) == typeid(mat)) {
-		double vector[MSPACE1_DIM]; // vector buffer for dset 50
-		for (i = 0; i < myDim1 ; i++){
-			for (j = 0; j < myDim2 ; j++){
-				vector[counter] = data(i,j); // write out as is
-				counter++;
-			}
-		}
-		dataset->write( vector, PredType::NATIVE_DOUBLE, mspace1, fspace );
-	} else if (typeid(data) == typeid(fmat)) {
-    	float vector[MSPACE1_DIM]; // vector buffer for dset 50
-		for (i = 0; i < myDim1 ; i++){
-			for (j = 0; j < myDim2 ; j++){
-				vector[counter] = data(i,j); // write out as is
-				counter++;
-			}
-		}
-		dataset->write( vector, PredType::NATIVE_FLOAT, mspace1, fspace );
-	} else if (typeid(data) == typeid(imat)) {
-		int vector[MSPACE1_DIM]; // vector buffer for dset 50
-		for (i = 0; i < myDim1 ; i++){
-			for (j = 0; j < myDim2 ; j++){
-				vector[counter] = data(i,j); // write out as is
-				counter++;
-			}
-		}
-		dataset->write( vector, PredType::NATIVE_INT, mspace1, fspace );
-	} else if (typeid(data) == typeid(umat)) {
-		unsigned int vector[MSPACE1_DIM]; // vector buffer for dset 50
-		for (i = 0; i < myDim1 ; i++){
-			for (j = 0; j < myDim2 ; j++){
-				vector[counter] = data(i,j); // write out as is
-				counter++;
-			}
-		}
-		dataset->write( vector, PredType::NATIVE_UINT, mspace1, fspace );
+	int myRank;
+	int DIM0, DIM1, DIM2;
+	if (typeid(data) == typeid(vec) || typeid(data) == typeid(fvec) || typeid(data) == typeid(ivec) || typeid(data) == typeid(uvec) || typeid(data) == typeid(rowvec) || typeid(data) == typeid(frowvec) || typeid(data) == typeid(irowvec) || typeid(data) == typeid(urowvec)) {
+		DIM0 = data.n_elem;
+		myRank = 1;
+	} else if (typeid(data) == typeid(mat) || typeid(data) == typeid(fmat) || typeid(data) == typeid(imat) || typeid(data) == typeid(umat)) {
+		DIM0 = data.n_rows;
+		DIM1 = data.n_cols;
+		myRank = 2;
 	}
+
+	// Try block to detect exceptions raised by any of the calls inside it
+	try
+	{
+		// Turn off the auto-printing when failure occurs so that we can
+		// handle the errors appropriately
+		Exception::dontPrint();
 	
-	/*
-	* Reset the selection for the file dataspace fid.
-	*/
-	fspace.selectNone();
-	/*
-	* Close the dataset and the file.
-	*/
-	delete dataset;
-	delete group;
-	delete file;
+		H5File file;
+		// Check if file exists, if not create a new file
+		if ( !boost::filesystem::exists( filename ) ) {
+			//std::cout << "file does not exist" << std::endl;
+			// Create a file.
+			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
+		} else {
+			//std::cout << "file does exist" << std::endl;
+			file = H5File(FILE_NAME, H5F_ACC_RDWR);
+		}
+
+		// Check if group exists
+		// Access the group.
+		Group group;
+		try { // to determine if the dataset exists in the group
+			//cout << " Trying to open group" << endl;
+			group = Group( file.openGroup( groupname ));
+			//cout << " Opened existing group" << endl;
+		}
+		catch( FileIException not_found_error ) {
+			//cout << " Group not found." << endl;
+			// create group
+			group = Group( file.createGroup( groupname ));
+			//cout << " Group created." << endl;
+		}
+
+		if (createSubgroup) {
+			group = Group( file.createGroup( subgroupname ));
+			//cout << " Subgroup created." << endl;
+		}
+
+		if (!subgroupname.empty()){
+			group = Group( file.openGroup( subgroupname ));
+			//cout << " writing to subgroup." << endl;
+		}
+		
+
+		  // WRITE VECTOR
+
+		  // Create the data space for the dataset.
+		  if (typeid(data) == typeid(vec) || typeid(data) == typeid(rowvec)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_DOUBLE );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				double dataW[DIM0];
+				for (int j = 0; j < DIM0; j++){
+					cout << data.at(j) << endl;
+					dataW[j] = data.at(j);
+				}
+				dataset.write( dataW, PredType::NATIVE_DOUBLE );
+			} else if (typeid(data) == typeid(fvec) || typeid(data) == typeid(frowvec)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_FLOAT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				float dataW[DIM0];
+				for (int j = 0; j < DIM0; j++){
+					cout << data.at(j) << endl;
+					dataW[j] = data.at(j);
+				}
+				dataset.write( dataW, PredType::NATIVE_FLOAT );
+			} else if (typeid(data) == typeid(ivec) || typeid(data) == typeid(irowvec)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_INT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				int dataW[DIM0];
+				for (int j = 0; j < DIM0; j++){
+					cout << data.at(j) << endl;
+					dataW[j] = data.at(j);
+				}
+				dataset.write( dataW, PredType::NATIVE_INT );
+			} else if (typeid(data) == typeid(uvec) || typeid(data) == typeid(urowvec)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_UINT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				unsigned int dataW[DIM0];
+				for (int j = 0; j < DIM0; j++){
+					cout << data.at(j) << endl;
+					dataW[j] = data.at(j);
+				}
+				dataset.write( dataW, PredType::NATIVE_UINT );
+			} else if (typeid(data) == typeid(mat)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_DOUBLE );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				double dataW[DIM0][DIM1];
+				for (int j = 0; j < DIM0; j++)
+					for (int i = 0; i < DIM1; i++)
+						dataW[j][i] = data.at(j,i);
+				dataset.write( dataW, PredType::NATIVE_DOUBLE );
+			} else if (typeid(data) == typeid(fmat)) {
+			cout << "Enter fmat" << endl;
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+			cout << myRank << " " << DIM0 << " " << DIM1 << endl;	
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_FLOAT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				float dataW[DIM0][DIM1];
+				for (int j = 0; j < DIM0; j++)
+					for (int i = 0; i < DIM1; i++)
+						dataW[j][i] = data.at(j,i);
+				dataset.write( dataW, PredType::NATIVE_FLOAT );
+			} else if (typeid(data) == typeid(imat)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_INT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				int dataW[DIM0][DIM1];
+				for (int j = 0; j < DIM0; j++)
+					for (int i = 0; i < DIM1; i++)
+						dataW[j][i] = data.at(j,i);
+				dataset.write( dataW, PredType::NATIVE_INT );
+			} else if (typeid(data) == typeid(umat)) {
+				hsize_t dims[myRank];              // dataset dimensions
+				dims[0] = DIM0;
+				dims[1] = DIM1;
+				DataSpace dataspace ( myRank, dims );
+				PredType datatype( PredType::NATIVE_UINT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				unsigned int dataW[DIM0][DIM1];
+				for (int j = 0; j < DIM0; j++)
+					for (int i = 0; i < DIM1; i++)
+						dataW[j][i] = data.at(j,i);
+				dataset.write( dataW, PredType::NATIVE_UINT );
+			}
+			
+	}
+	catch( FileIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	// catch failure caused by the DataSet operations
+	catch( DataSetIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	// catch failure caused by the DataSpace operations
+	catch( DataSpaceIException error )
+	{
+	error.printError();
+	return -1;
+	}
+	return 0;
+}
+
+template<typename T> int hdf5writeScalar(std::string filename, std::string groupname, std::string subgroupname, std::string datasetname, T data, int createSubgroup){
+
+	const H5std_string FILE_NAME( filename );
+	const H5std_string DATASET_NAME( datasetname );
+	 
+	// Try block to detect exceptions raised by any of the calls inside it
+	try
+	{
+		// Turn off the auto-printing when failure occurs so that we can
+		// handle the errors appropriately
+		Exception::dontPrint();
+	
+		H5File file;
+		// Check if file exists, if not create a new file
+		if ( !boost::filesystem::exists( filename ) ) {
+			//std::cout << "file does not exist" << std::endl;
+			// Create a file.
+			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
+		} else {
+			//std::cout << "file does exist" << std::endl;
+			file = H5File(FILE_NAME, H5F_ACC_RDWR);
+		}
+
+		// Check if group exists
+		// Access the group.
+		Group group;
+		try { // to determine if the dataset exists in the group
+			//cout << " Trying to open group" << endl;
+			group = Group( file.openGroup( groupname ));
+			//cout << " Opened existing group" << endl;
+		}
+		catch( FileIException not_found_error ) {
+			//cout << " Group not found." << endl;
+			// create group
+			group = Group( file.createGroup( groupname ));
+			//cout << " Group created." << endl;
+		}
+
+		if (createSubgroup) {
+			group = Group( file.createGroup( subgroupname ));
+			//cout << " Subgroup created." << endl;
+		}
+
+		if (!subgroupname.empty()){
+			group = Group( file.openGroup( subgroupname ));
+			//cout << " writing to subgroup." << endl;
+		}
+
+		  // WRITE SCALAR
+
+		  // Create the data space for the dataset.
+		  int myRank = 1;
+		  hsize_t dims[myRank];              // dataset dimensions
+		  dims[0] = 1;
+		  DataSpace dataspace ( 0, dims );
+		  // Data type
+			if (typeid(data) == typeid(double)) {
+				PredType datatype( PredType::NATIVE_DOUBLE );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				double dataW[1];
+				dataW[0] = data;      
+				dataset.write( dataW, PredType::NATIVE_DOUBLE );
+			} else if (typeid(data) == typeid(float)) {
+				PredType datatype( PredType::NATIVE_FLOAT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				float dataW[1];
+				dataW[0] = data;      
+				dataset.write( dataW, PredType::NATIVE_FLOAT );
+			} else if (typeid(data) == typeid(int)) {
+				PredType datatype( PredType::NATIVE_INT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				int dataW[1];
+				dataW[0] = data;      
+				dataset.write( dataW, PredType::NATIVE_INT );
+			} else if (typeid(data) == typeid(uint)) {
+				PredType datatype( PredType::NATIVE_UINT );
+				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );
+				dataset = file.openDataSet( DATASET_NAME );
+				unsigned int dataW[1];
+				dataW[0] = data;      
+				dataset.write( dataW, PredType::NATIVE_UINT );
+			}
 	} // end of try block
 	// catch failure caused by the H5File operations
 	catch( FileIException error )
@@ -259,6 +492,19 @@ template<typename T> int hdf5writeT(std::string filename, std::string groupname,
 	}
 	return 0;
 }
+/*
+template<typename T> int hdf5writeT(std::string filename, std::string groupname, std::string subgroupname, std::string datasetname, T data, int createSubgroup){
+	if (typeid(data) == typeid(double) || typeid(data) == typeid(float) || typeid(data) == typeid(int) || typeid(data) == typeid(uint)) {
+		hdf5writeScalar(filename, groupname, subgroupname, datasetname, data, createSubgroup);
+	} else if (typeid(data) == typeid(vec) || typeid(data) == typeid(fvec) || typeid(data) == typeid(ivec) || typeid(data) == typeid(uvec) || typeid(data) == typeid(rowvec) || typeid(data) == typeid(frowvec) || typeid(data) == typeid(irowvec) || typeid(data) == typeid(urowvec)) {
+		hdf5writeVector(filename, groupname, subgroupname, datasetname, data, createSubgroup);
+	} else if (typeid(data) == typeid(mat) || typeid(data) == typeid(fmat) || typeid(data) == typeid(imat) || typeid(data) == typeid(umat)) {
+		hdf5writeVector(filename, groupname, subgroupname, datasetname, data, createSubgroup);
+	} else if (typeid(data) == typeid(cube) || typeid(data) == typeid(fcube) || typeid(data) == typeid(icube) | typeid(data) == typeid(ucube)) {
+		hdf5writeCube(filename, groupname, subgroupname, datasetname, data, createSubgroup);
+	}
+}
+*/
 
 template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 	const H5std_string FILE_NAME( filename );
@@ -267,103 +513,63 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
    
     T myData;
 	
-   /*
-    * Try block to detect exceptions raised by any of the calls inside it
-    */
+   // Try block to detect exceptions raised by any of the calls inside it
    try
    {
-      /*
-       * Turn off the auto-printing when failure occurs so that we can
-       * handle the errors appropriately
-       */
+      // Turn off the auto-printing when failure occurs so that we can
+      // handle the errors appropriately
 		Exception::dontPrint();
 	
-	  /*
-       * Open the specified file and the specified dataset in the file.
-       */
+	  // Open the specified file and the specified dataset in the file.
       	H5File file( FILE_NAME, H5F_ACC_RDONLY );
       	DataSet dataset = file.openDataSet( DATASET_NAME );
 
-      /*
-       * Get the class of the datatype that is used by the dataset.
-       */
+      // Get the class of the datatype that is used by the dataset.
       	H5T_class_t type_class = dataset.getTypeClass();
 
-      /*
-       * Get class of datatype and print message if it's a float.
-       */
+      // Get class of datatype and print message if it's a float.
       if( type_class == H5T_FLOAT ) {
 	 	//cout << "Data set has FLOAT type" << endl;
 
-         /*
-	  	  * Get the integer datatype
-          */
+         // Get the integer datatype
 	 	 FloatType intype = dataset.getFloatType();
 
-         /*
-          * Get order of datatype and print message if it's a little endian.
-          */
+         // Get order of datatype and print message if it's a little endian.
 	 	 H5std_string order_string;
          H5T_order_t order = intype.getOrder( order_string );
 	 	 //cout << "Endian:" << order << endl;
 
-         /*
-          * Get size of the data element stored in file and print it.
-          */
+         // Get size of the data element stored in file and print it.
          size_t size = intype.getSize();
          //cout << "Data size is " << size << endl;
       } else if( type_class == H5T_INTEGER ) {
 	 	//cout << "Data set has INTEGER type" << endl;
-	 	 /*
-	  	  * Get the integer datatype
-          */
+	 	 // Get the integer datatype
 	 	 IntType intype = dataset.getIntType();
 
-         /*
-          * Get order of datatype and print message if it's a little endian.
-          */
+         // Get order of datatype and print message if it's a little endian.
 	 	 H5std_string order_string;
          H5T_order_t order = intype.getOrder( order_string );
 	 	 //cout << "Endian:" << order << endl;
 
-         /*
-          * Get size of the data element stored in file and print it.
-          */
+         // Get size of the data element stored in file and print it.
          size_t size = intype.getSize();
          //cout << "Data size is " << size << endl;
 	  }
-      /*
-       * Get dataspace of the dataset.
-       */
+      // Get dataspace of the dataset.
       DataSpace dataspace = dataset.getSpace();
 
-      /*
-       * Get the number of dimensions in the dataspace.
-       */
+      // Get the number of dimensions in the dataspace.
       int rank = dataspace.getSimpleExtentNdims();
 
-      /*
-       * Get the dimension size of each dimension in the dataspace and
-       * display them.
-       */
+      // Get the dimension size of each dimension in the dataspace and
+      // display them.
       hsize_t dims_out[rank];
       int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-      /*
-		if (rank == 1) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << endl;
-		} else if (rank == 2) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << " x " <<
-				(unsigned long)(dims_out[1]) << endl;
-		} else if (rank == 3) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << " x " <<
-				(unsigned long)(dims_out[1]) << " x " <<
-				(unsigned long)(dims_out[2]) << endl;
-		}
-		*/
-		if (rank == 1) {
+
+		if (rank == 0 ) {
+			NX = 1;
+		} else if (rank == 1) {
 			NX = (unsigned long)(dims_out[0]);
 		} else if (rank == 2) {
 			NX = (unsigned long)(dims_out[0]);
@@ -374,13 +580,14 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			NZ = (unsigned long)(dims_out[2]);
 		}
 		  
-		/*
-		* Define hyperslab in the dataset; implicitly giving strike and
-		* block NULL.
-		*/
+		// Define hyperslab in the dataset; implicitly giving strike and
+		// block NULL.
 		hsize_t      offset[rank];	// hyperslab offset in the file
 		hsize_t      count[rank];	// size of the hyperslab in the file
-		if (rank == 1) {
+		if (rank == 0 ) {
+			offset[0] = 0;
+			count[0]  = NX;
+		} else if (rank == 1) {
 			offset[0] = 0;
 			count[0]  = NX;
 		} else if (rank == 2) {
@@ -398,11 +605,11 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 		}
 		dataspace.selectHyperslab( H5S_SELECT_SET, count, offset );
 
-		/*
-		* Define the memory dataspace.
-		*/
-      hsize_t     dimsm[rank];              /* memory space dimensions */
-		if (rank == 1) {
+		// Define the memory dataspace.
+      hsize_t     dimsm[rank];              // memory space dimensions
+		if (rank == 0) {
+			dimsm[0] = NX;
+		} else if (rank == 1) {
 			dimsm[0] = NX;
 		} else if (rank == 2) {
 			dimsm[0] = NX;
@@ -414,12 +621,13 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 		}
       DataSpace memspace( rank, dimsm );
 	  
-      /*
-       * Define memory hyperslab.
-       */
+      // Define memory hyperslab.
       hsize_t      offset_out[rank];	// hyperslab offset in memory
       hsize_t      count_out[rank];	// size of the hyperslab in memory
-		if (rank == 1) {
+		if (rank == 0 ) {
+			offset_out[0] = 0;
+      		count_out[0]  = NX;		
+		} else if (rank == 1) {
 			offset_out[0] = 0;
       		count_out[0]  = NX;
 		} else if (rank == 2) {
@@ -439,12 +647,10 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 		}
       memspace.selectHyperslab( H5S_SELECT_SET, count_out, offset_out );
 	  
-      /*
-       * Read data from hyperslab in the file into the hyperslab in
-       * memory and display the data.
-       */
+      // Read data from hyperslab in the file into the hyperslab in
+      // memory and display the data.
 		if (typeid(myData) == typeid(mat)) {
-			double data_out[NX][NY]; /* output buffer */	
+			double data_out[NX][NY]; // output buffer	
 			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
 			myData.zeros(NX,NY); 
 			for (int j = 0; j < NY; j++) {
@@ -453,7 +659,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 			}      
 		} else if (typeid(myData) == typeid(fmat)) {
-			float data_out[NX][NY]; /* output buffer */	
+			float data_out[NX][NY]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
 			myData.zeros(NX,NY); 
 			for (int j = 0; j < NY; j++) {
@@ -462,7 +668,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 			}      
 		} else if (typeid(myData) == typeid(imat)) {
-			int data_out[NX][NY]; /* output buffer */	
+			int data_out[NX][NY]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace );
 			myData.zeros(NX,NY); 
 			for (int j = 0; j < NY; j++) {
@@ -471,7 +677,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 			}      
 		} else if (typeid(myData) == typeid(umat)) {
-			unsigned int data_out[NX][NY]; /* output buffer */	
+			unsigned int data_out[NX][NY]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
 			myData.zeros(NX,NY); 
 			for (int j = 0; j < NY; j++) {
@@ -481,7 +687,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}      
 		} else if (typeid(myData) == typeid(vec) || 
                    typeid(myData) == typeid(rowvec)) {
-			double data_out[NX]; /* output buffer */	
+			double data_out[NX]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
 			myData.zeros(NX); 
 			for (int i = 0; i < NX; i++) {
@@ -489,7 +695,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 		} else if (typeid(myData) == typeid(fvec) || 
                    typeid(myData) == typeid(frowvec)) {
-			float data_out[NX]; /* output buffer */	
+			float data_out[NX]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
 			myData.zeros(NX); 
 			for (int i = 0; i < NX; i++) {
@@ -497,7 +703,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 		} else if (typeid(myData) == typeid(ivec) || 
                    typeid(myData) == typeid(irowvec)) {
-			int data_out[NX]; /* output buffer */	
+			int data_out[NX]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace );
 			myData.zeros(NX); 
 			for (int i = 0; i < NX; i++) {
@@ -505,7 +711,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 		} else if (typeid(myData) == typeid(uvec) || 
                    typeid(myData) == typeid(urowvec)) {
-			unsigned int data_out[NX]; /* output buffer */	
+			unsigned int data_out[NX]; // output buffer
 			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
 			myData.zeros(NX);
 			for (int i = 0; i < NX; i++) {
