@@ -12,6 +12,7 @@ irowvec CParticle::atomType;				// atom type list
 fmat CParticle::atomPos;						// atom position
 fmat CParticle::ffTable;					// form factor table (atomType x qSample)
 frowvec CParticle::qSample;				// q vector sin(theta)/lambda
+fvec CParticle::orientation;			// orientation
 
 irowvec CParticle::ionList;
 irowvec CParticle::xyzInd;				// TEMPORARY
@@ -164,6 +165,16 @@ void CParticle::load_qSample(string x){
 	}
 	numQSamples = qSample.n_elem;
 //	CParticle::qSample.print("set_qSample: ");
+}
+
+void CParticle::load_particleOrientation(string filename, string datasetname){ // load from hdf5
+	rowvec temp = hdf5readT<rowvec>(filename,datasetname);
+	orientation = conv_to<fvec>::from(temp);
+	//CParticle::orientation.print("set particle orientation: ");
+}
+
+fvec CParticle::get_particleOrientation(){
+	return orientation;
 }
 
 void CParticle::set_qSample(Packet *x){
