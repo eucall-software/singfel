@@ -22,7 +22,7 @@ public:
 	static arma::fmat atomPos;				// atom position
 	static arma::fmat ffTable;			// form factor table (atomType x qSample)
 	static arma::frowvec qSample;		// q vector sin(theta)/lambda
-	
+	static arma::fvec orientation;	// orientation of particle in quaternion
 	static arma::irowvec ionList;			// TEMPORARY	
 	
 	static arma::irowvec xyzInd;			// TEMPORARY
@@ -52,6 +52,8 @@ public:
 	static void set_ffTable(Packet*);
 	static void load_qSample(string filename, string datasetname); // load hdf5
 	static void load_qSample(string);
+	static void load_particleOrientation(string filename, string datasetname); // load hdf5
+	static arma::fvec get_particleOrientation();
 	static void set_qSample(Packet*);
 	static void set_param(Packet*);
 protected:
