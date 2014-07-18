@@ -39,29 +39,19 @@ using namespace toolbox;
 
 #define USE_CUDA 0
 
-#define QUATERNIONTAG 1 // quaternion
-#define VOLTAG 3	// intensity volume
-#define PIXTAG 4	// qx,qy,qz for all pixels
-#define GOODPIXTAG 5 // good pixels
-#define DPTAG 6	// diffraction pattern
-#define DIETAG 2 // die signal
-#define SAVESLICESTAG 8 // save slices signal
-#define SAVELSETAG 9 // save LSE signal
-#define INDTAG 10 // image index signal
+#define MODELTAG 1	// mySlices matrix
+#define DPTAG 2	// diffraction pattern
+#define DIETAG 3 // die signal
+#define SAVESLICESTAG 4 // save slices signal
+#define SAVELSETAG 5 // save LSE signal
+#define INDTAG 6 // image index signal
 #define DONETAG 7 // done signal
-//static void master(mpi::communicator* comm, int mode);
-//static void slave(mpi::communicator* comm, int mode);
-static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myImages, int mySize, int iter);
-static void slave_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myDP, fmat* myImages);
-static void master_maximization(mpi::communicator* comm);
-static void slave_maximization(mpi::communicator* comm);
-static void master_compression(mpi::communicator* comm);
-static void slave_compression(mpi::communicator* comm);
-static int get_next_work_item(fmat* workPool, int workID);
-static void process_results(float result);
-static int do_work(fmat* pix, uvec* goodpix, int pix_max, fcube* myIntensity, fvec* quaternion, fmat* myDP);
+static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myImages, int mySize, int iter, int numIterations, int numSlices);
+static void slave_expansion(mpi::communicator* comm, fmat* pix, float pix_max, uvec* goodpix, fmat* myDP, fmat* myImages, int mySize);
 
 int main( int argc, char* argv[] ){
+
+	wall_clock timerMaster;
 
 	// Initialize MPI
   	mpi::environment env;
@@ -80,7 +70,8 @@ int main( int argc, char* argv[] ){
 		int numSlices = 0;
 		string output;
 		// Let's parse input
-		// image.lst and euler.lst are not neccessarily in the same order! So can not use like this. 		// Perhaps use hdf5 to combine the two.
+		// image.lst and euler.lst are not neccessarily in the same order! So can not use like this. 		
+		// Perhaps use hdf5 to combine the two.
 		for (int n = 1; n < argc; n++) {
 		cout << argv [ n ] << endl; 
 		    if(boost::algorithm::iequals(argv[ n ], "-i")) {
@@ -237,30 +228,28 @@ int main( int argc, char* argv[] ){
     pix = pix * inc_res;
     pix_mod = sqrt(sum(pix%pix,1));		
 	pix_max = max(pix_mod);
+
+	timerMaster.tic();
 		
-	//if (world.rank() == master) {
-				
-		//cout << "Start" << endl;
-		//cout << mySize << endl;
+	int active;
+	string interpolate = "linear";
 		
-		int active;
-		string interpolate = "linear";
-		
-		fmat rot3D(3,3);
-		fvec u(3);
-		fvec quaternion(4);
-		// Setup initial diffraction volume by merging randomly
-		for (int r = 0; r < numImages; r++) {
-	  		// Get image
-	  		std::stringstream sstm;
-  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
-			filename = sstm.str();
-			myDP = load_asciiImage(filename);
-			//cout << "myDP: " << myDP.n_rows << "x" << myDP.n_cols << endl;
-			//cout << "myDP: " << myDP(35,24) << endl;
+	fmat rot3D(3,3);
+	fvec u(3);
+	fvec quaternion(4);
+	// Setup initial diffraction volume by merging randomly
+	for (int r = 0; r < numImages; r++) {
+	  	// Get image
+	  	std::stringstream sstm;
+  		sstm << imageList << setfill('0') << setw(6) << r << ".dat";
+		filename = sstm.str();
+		myDP = load_asciiImage(filename);
+		//cout << "myDP: " << myDP.n_rows << "x" << myDP.n_cols << endl;
+		//cout << "myDP: " << myDP(35,24) << endl;
 			
-	        // Get rotation matrix
-  			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
+		if (world.rank() == master) {
+		    // Get rotation matrix
+	  		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
 			// generate uniform random quaternion on SO(3)
 			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
 					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
@@ -268,65 +257,65 @@ int main( int argc, char* argv[] ){
 			myR = CToolbox::quaternion2rot3D(quaternion);
 			active = 1;
 			CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
-			//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
-  		}
-  		cout << "Done random merge" << endl;
-  		// Normalize here
-  		CToolbox::normalize(&myIntensity,&myWeight);
-  		cout << "Done normalize" << endl;
-	//}
-	world.barrier();
-	cout << "Barrier passed" << endl;
+		}
+		myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+		//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
+  	}
+  	if (world.rank() == master) {
+		cout << "Done random merge" << endl;
+		// Normalize here
+		CToolbox::normalize(&myIntensity,&myWeight);
+		cout << "Done normalize" << endl;
+  	}
+	world.barrier();	
+	if (world.rank() == master) {
+		cout << "Random merge time: " << timerMaster.toc() <<" seconds."<<endl;
+	}
 	
 	// Main iteration
 	fmat myQuaternions;
 	for (int iter = 0; iter < numIterations; iter++) { // number of iterations
-		//for (int mode = 1; mode <= 3; mode++) { // loop through 3 steps
-			if (world.rank() == 0) {
-				// Distribution of quaternions
-				if (iter == 0) {
-  					myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
-  				}
-  				//myQuaternions.print("myQuaternions:");
-				master_expansion(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, &myImages, mySize, iter);
-		  	} else {
-		  		slave_expansion(comm, &myIntensity, &pix, pix_max, &goodpix, &myDP, &myImages);
-		  	}
-		  	world.barrier();
-		  	if (world.rank() == 0) {
-		  		cout << "Barrier passed" << endl; // " << mode << endl;
-		  	}
-	  	//}
+		if (world.rank() == master) {
+			if (iter == 0) {
+				// Equal distribution of quaternions
+  				myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  			}
+  			//myQuaternions.print("myQuaternions:");
+  			cout << "iteration: " << iter << endl;
+			master_expansion(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, &myImages, mySize, iter, numIterations, numSlices);
+		} else {
+			slave_expansion(comm, &pix, pix_max, &goodpix, &myDP, &myImages, mySize);
+		}
+		world.barrier();
+		if (world.rank() == master) {
+			cout << "Barrier passed" << endl; // " << mode << endl;
+		}
 	}
-
-	//cout << "Enter the dragon" << endl;
 
   	return 0;
 }
 
-static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myImages, int mySize, int iter) {
-	cout << "Master in expansion mode" << endl;
-	//sleep(1);
+static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myImages, int mySize, int iter, int numIterations, int numSlices) {
+
 	
-	//cout << myIntensity->at(45,45,45) << endl;
-	//cout << myIntensity->slice( 45 ) << endl;
-	//cout << quaternions->row(3) << endl;
+	wall_clock timerMaster;
+	
+	// ########### EXPANSION ##############
+	cout << "Start expansion" << endl;
+	timerMaster.tic();
+
 	int numImages = myImages->n_rows;
 	
   	int ntasks, rank, numProcesses, numSlaves;
-  	int numMaster = 1;
-  	int work;
-  	float result;
-  	int workID = 0;
+  	const int numMaster = 1;
   	fvec quaternion;
-  	boost::mpi::status status;//MPI_Status status;
+  	boost::mpi::status status;
 
-	numProcesses = comm->size(); // 3
-	numSlaves = numProcesses-1; // 2
-	ntasks = quaternions->n_rows; // 5
-	if (ntasks < numSlaves) { // 5 < 2
-		numProcesses = ntasks + numMaster; // 
+	numProcesses = comm->size();
+	numSlaves = numProcesses-1;
+	ntasks = quaternions->n_rows;
+	if (ntasks < numSlaves) {
+		numProcesses = ntasks + numMaster;
 	}
 	//cout << "numProcesses: " << numProcesses << endl;
 	// Find out how many processes there are in the default communicator
@@ -337,324 +326,211 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	//cout << "\033[1;31mhow many processes?: \033[0m" << ntasks << endl;
   	//MPI_Comm_size(MPI_COMM_WORLD, &ntasks);
 
-	// Vectorise a cube into a vector (There must be a faster way to do this)
-	//cout.precision(5);
-	//cout.setf(ios::fixed);
-	//myIntensity->raw_print(cout, "intensity =");
-	
+	// Vectorize my diffraction volume
 	fvec intensityVector(myIntensity->n_elem);
-    for(int i = 0; i < myIntensity->n_elem; i++) {
+    for(unsigned int i = 0; i < myIntensity->n_elem; i++) {
     	intensityVector(i) =  myIntensity->at(i); // column-wise
 	}
-	//cout.precision(5);
-	//cout.setf(ios::fixed);
-	//intensityVector.raw_print(cout, "intensityVector =");
 	std::vector<float> data = conv_to< std::vector<float> >::from(intensityVector);
-	//intensityVector.print("intensityVector: ");
-	//std::vector<float> msg1 = conv_to< std::vector<float> >::from(a);
 
-  	// Seed the slaves; send one unit of work to each slave.
-	// Also, send merged intensity volume
-  	for (rank = 1; rank < numProcesses; ++rank) {
-
-    	// Find the next item of work to do
-
-   		work = get_next_work_item(quaternions, workID);
-		//cout << "work: " << work << endl;
-		// Check if work is NULL
-		if (work != NULL) {
-			// Send it to each rank
-			//fvec mvec = vectorise(myIntensity->slice(45));
-			//std::vector<float> msg = conv_to< std::vector<float> >::from(mvec);
-			//cout << rank << ": " << quaternions->row(workID) << endl;
-			std::vector<float> id(1);
-			id.at(0) = (float) workID;
-			std::vector<float> quat = conv_to< std::vector<float> >::from(quaternions->row(workID));
-			
-			//comm->send(rank, WORKTAG, std::string("Hello"));
-			comm->send(rank, INDTAG, id);
-			comm->send(rank, QUATERNIONTAG, quat);
-			comm->send(rank, VOLTAG, data);
-			//MPI_Send(&work,             // message buffer 
-		    //     1,                 // one data item 
-		    //     MPI_INT,           // data item is an integer 
-		    //     rank,              // destination process rank
-		    //     WORKTAG,           // user chosen message tag 
-		    //     MPI_COMM_WORLD);   // default communicator 
-		    workID++;
-        }
-  	}
-
-  	// Loop over getting new work requests until there is no more work to be done
-
-  	work = get_next_work_item(quaternions, workID);
-  	//cout << "work: " << work << endl;
-  	
-  	int msgDone;
-  	while (work != NULL) {
-		//cout << "Enter the while loop" << endl;
-    	// Receive results from a slave
-		//std::vector<float> msg; //std::string msg;
-    	//status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msg);
-    	status = comm->recv(boost::mpi::any_source, DONETAG, msgDone);
-    	//cout << "Received msg from: " << status.source() << endl;
-    	//    std::cout << status.source() << ": The contents of msg> ";
-	  	//	for (std::vector<float>::iterator it = msg.begin(); it != msg.end(); ++it)
-		//		std::cout << ' ' << *it;
-	  	//	std::cout << '\n';    	
-		//	std::cout.flush();
-    	
-    	//MPI_Recv(&result,           // message buffer
-        //     1,                 // one data item 
-        //     MPI_DOUBLE,        // of type double real 
-        //     MPI_ANY_SOURCE,    // receive from any sender 
-        //     MPI_ANY_TAG,       // any type of message 
-        //     MPI_COMM_WORLD,    // default communicator 
-        //     &status);          // info about the received message 
-		
-		
-    	// Send the slave a new work unit 
-    	std::vector<float> id(1);
-		id.at(0) = (float) workID;
-		std::vector<float> msgSend = conv_to< std::vector<float> >::from(quaternions->row(workID));
-		workID++;
-		
-		comm->send(status.source(), INDTAG, id);
-		comm->send(status.source(), QUATERNIONTAG, msgSend);
-		comm->send(status.source(), VOLTAG, data);
-    	
-    	//MPI_Send(&work,             // message buffer
-        //     1,                 // one data item 
-        //     MPI_INT,           // data item is an integer 
-        //     status.MPI_SOURCE, // to who we just received from 
-        //     WORKTAG,           // user chosen message tag 
-        //     MPI_COMM_WORLD);   // default communicator 
-		
-    	// Get the next unit of work to be done 
-
-    	work = get_next_work_item(quaternions, workID);
-    	//cout << "work: " << work << endl;
-  	}
-
-	cout << "Master finished sending all jobs" << endl;
-
-  	// There's no more work to be done, so receive all the outstanding results from the slaves.
-
-	
-	for (rank = 1; rank < numProcesses; ++rank) {
-    	status = comm->recv(rank, boost::mpi::any_tag, msgDone);
-    	//std::cout << rank << ": The contents of msg> ";
-	  	//	for (std::vector<float>::iterator it = msg.begin(); it != msg.end(); ++it)
-		//		std::cout << ' ' << *it;
-	  	//	std::cout << '\n';    	
-		//	std::cout.flush();
-		//cout << "Received: " << rank << endl;
+	int active = 1;
+	string interpolate = "linear";
+	int numPixels = mySize*mySize;
+	fmat mySlices;
+	mySlices.zeros(numSlices,numPixels);
+	fmat myR;
+	myR.zeros(3,3);
+	fmat myDP(mySize,mySize);
+	for (int s = 0; s < numSlices; s++) {
+		// Get rotation matrix
+		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(s)));
+		CToolbox::slice3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
+		//CToolbox::merge3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, &myWeight, active, interpolate);
+		mySlices.row(s) = reshape(myDP,1,numPixels);
 	}
-  	//for (rank = 1; rank < ntasks; ++rank) {
-    //	MPI_Recv(&result, 1, MPI_DOUBLE, MPI_ANY_SOURCE,
-    //         MPI_ANY_TAG, MPI_COMM_WORLD, &status);
-  	//}
-
-// SAVE SLICES FOR VIEWING
-	// Tell all the slaves to save slices by sending an empty message with the SAVESLICESTAG.
+	
+	//cout << "Done mySlices" << endl;
+	
+	// Send
+	// 1) Start and end indices of model slices
+	// 2) Subset of model slices
+	// 3) Compute signal
+	int slicesPerSlave = floor( (float) numSlices / (float) (numProcesses-1) );
+	int leftOver = numSlices - slicesPerSlave * numSlaves;
+	uvec s(numSlaves);
+	s.fill(slicesPerSlave);
+	for (int i = 0; i < numSlaves; i++) {
+		if (leftOver > 0) {
+			s(i) += 1;
+			leftOver--;
+		}
+	}
+	int startInd = 0;
+	int endInd = 0;
 	std::vector<float> msg;
 	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, SAVESLICESTAG, msg);
-	}
-
-// START MAXIMIZATION
-	cout << "Start maximization" << endl;
-	for (rank = 1; rank < numProcesses; ++rank) {
+		endInd = startInd + s(rank-1) - 1;
+		
+		// Vectorize my model slices
+		int numElem = numPixels * s(rank-1);
+		fvec modelVector( numElem );
+		fmat myChunkSlices = mySlices.rows(startInd,endInd);
+		for(int i = 0; i < numElem; i++) {
+			modelVector(i) =  myChunkSlices.at(i); // column-wise
+		}
+		std::vector<float> model = conv_to< std::vector<float> >::from(modelVector);
+		
+		std::vector<float> id(2);
+		id.at(0) = (float) startInd;
+		id.at(1) = (float) endInd;
+			
+		comm->send(rank, INDTAG, id);
+		comm->send(rank, MODELTAG, model);
 		comm->send(rank, DPTAG, msg);
-	}
+		
+		startInd += s(rank-1);
+  	}
 
+	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
+
+	// SAVE SLICES FOR VIEWING
+	// Tell all the slaves to save slices by sending an empty message with the SAVESLICESTAG.
+//	for (rank = 1; rank < numProcesses; ++rank) {
+//		comm->send(rank, SAVESLICESTAG, msg);
+//	}
+
+	// ########### MAXIMIZATION ##############
+	cout << "Start maximization" << endl;
+	
+	timerMaster.tic();
+	
 	std::vector<float> msgLSE;
-	fmat myTable;
-	int numSlices;
-  	// There's no more work to be done, so receive all the outstanding results from the slaves.
+	fmat myTable(numImages,numSlices);
+	int numWorkerSlices;
+	int currentCol = 0;
+  	// Receive chunks of LSE from the slaves.
 	for (rank = 1; rank < numProcesses; ++rank) {
     	status = comm->recv(rank, boost::mpi::any_tag, msgLSE);
-		//cout << "Received: " << rank << endl;
 		fvec lse = conv_to< fvec >::from(msgLSE);
-		numSlices = lse.n_elem / (numImages+1);
-		fmat lseMat = reshape(lse,(numImages+1),numSlices);
-		//cout << "msgLSE: " << lseMat << endl;
-		if (rank == 1) {
-			myTable = lseMat;
-		} else {
-			myTable.insert_cols(0,lseMat);
-		}
+		numWorkerSlices = s(rank-1);//lse.n_elem / numImages;
+		myTable.cols(currentCol,currentCol+s(rank-1)-1) = reshape(lse,numImages,numWorkerSlices);
+		currentCol += s(rank-1);
 	}
 	
 	// SAVE LSE FOR VIEWING
 	// Tell all the slaves to save LSE by sending an empty message with the SAVELSETAG.
-	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, SAVELSETAG, msg);
-	}
+	//for (rank = 1; rank < numProcesses; ++rank) {
+	//	comm->send(rank, SAVELSETAG, msg);
+	//}
 	
-	numSlices = myTable.n_cols;
-	//cout << "myTable: " << myTable << endl;
-	irowvec myInd = conv_to< irowvec >::from(myTable.row(0));
-	//cout << "myInd: " << myInd << endl;
 	// Master calculates the maximum for each diffraction pattern
 	uvec bestFit(numImages);
 	float lowest;
 	for (int i = 0; i < numImages; i++) {
-		lowest = myTable(i+1,0);
+		lowest = myTable(i,0);
 		bestFit(i) = 0;
 		for (int j = 0; j < numSlices; j++) {
-			if (lowest > myTable(i+1,j)) {
-				lowest = myTable(i+1,j);
+			if (lowest > myTable(i,j)) {
+				lowest = myTable(i,j);
 				bestFit(i) = j; // minimum lse index
 			}
 		}
 	}
-	bestFit.print("bestFit: ");
+	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 	
-	// COMPRESSION
-	cout << "Compression" << endl;
+	// ########### COMPRESSION ##############
+	cout << "Start compression" << endl;
+	timerMaster.tic();
+	
 	fcube myWeight;
 	myWeight.zeros(mySize,mySize,mySize);
 	myIntensity->zeros(mySize,mySize,mySize);
-	fmat myR;
-	int active = 1;
-	string interpolate = "linear";
-	fmat myDP;
+	active = 1;
+	interpolate = "linear";
 	for (int r = 0; r < numImages; r++) {
 		// Get image
 		myDP = reshape(myImages->row(r),mySize,mySize);
 		// Get rotation matrix
-		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(myInd(bestFit(r)))));
-		active = 1;
+		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(bestFit(r))));
 		CToolbox::merge3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, &myWeight, active, interpolate);
 	}
 	// Normalize here
 	CToolbox::normalize(myIntensity,&myWeight);
-		
-	// Save output
-	fmat mySlice;
+	
+	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
+	
+	// ########### Save diffraction volume ##############
 	for (int i = 0; i < mySize; i++) {
 		std::stringstream sstm;
 		sstm << "/data/yoon/singfel/dataMPI/vol" << iter << "_" << setfill('0') << setw(6) << i << ".dat";
 		string outputName = sstm.str();
-		mySlice = myIntensity->slice(i).save(outputName,raw_ascii);
+		myIntensity->slice(i).save(outputName,raw_ascii);
 	}
 
 // KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, msg);
-		//cout << "Finsh working: " << rank << endl;
-	}
-  	//for (rank = 1; rank < ntasks; ++rank) {
-    //	MPI_Send(0, 0, MPI_INT, rank, DIETAG, MPI_COMM_WORLD);
-  	//}	
-	iter++;
+  	//if (iter == numIterations) {
+		for (rank = 1; rank < numProcesses; ++rank) {
+			comm->send(rank, DIETAG, msg);
+			//cout << "Finsh working: " << rank << endl;
+		}
+	//}
 }
 
-static void slave_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, fmat* myDP, fmat* myImages) {
-	cout << comm->rank() << ": Slave in expansion mode" << endl;
+static void slave_expansion(mpi::communicator* comm, fmat* pix, float pix_max, uvec* goodpix, fmat* myDP, fmat* myImages, int mySize) {
+	//cout << comm->rank() << ": Slave in expansion mode" << endl;
 	//sleep(1);
 	
 	int numImages = myImages->n_rows;
-	int numSlices = 0;
+	int numChunkSlices = 0;
 	int numPixels = myDP->n_elem;
-	float work;
-	float results;
+	//float work;
+	//float results;
 	boost::mpi::status status;//MPI_Status status;
 	int master = 0;
 	// Expansion related variables
 	fvec quaternion(4);
 	std::vector<float> msg; //std::string msg;
-	fmat mySlices = zeros<fmat>(1,numPixels);
-	fvec imageIndices;
 	// Maximization related variables
 	fmat diffraction = zeros<fmat>(myDP->n_rows,myDP->n_cols);
 	fmat lse;
-	int dpCount = 0;
 	fmat imgRep;
-	imgRep.zeros(numSlices,numPixels);
+	fmat myChunkSlices;
+	fcube myIntensity;
 	
-		
 	while (1) {
 
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg);
 
+		// Receive how many slices assigned to this slave
     	if (status.tag() == INDTAG) {
-    		numSlices++;
-    		imageIndices.resize(numSlices);
     		fvec id = conv_to< fvec >::from(msg);
-    		imageIndices.at(numSlices-1) = id(0);
-    		//cout << "imageIndices: " << imageIndices << endl;
+    		int startInd = (int) id(0);
+    		int endInd = (int) id(1);
+    		numChunkSlices = endInd - startInd + 1;
     	}
-    	
-    	if (status.tag() == QUATERNIONTAG) {
-    		quaternion = conv_to< fvec >::from(msg);
-    		//quaternion.print("quaternion: ");
-    	}
-    	
-    	if (status.tag() == VOLTAG) {
-    		for(int i = 0; i < msg.size(); i++) {
-    			myIntensity->at(i) =  msg.at(i); // column-wise
+  	
+		// Receive a subset of model slices
+    	if (status.tag() == MODELTAG) {
+    		myChunkSlices.zeros(numChunkSlices,numPixels);
+    		for(unsigned int i = 0; i < msg.size(); i++) {
+    			myChunkSlices.at(i) =  msg.at(i); // column-wise
 			}
-    		//cout.precision(5);
-			//cout.setf(ios::fixed);
-			//myIntensity->raw_print(cout, "SLAVE intensity =");
-			
-			// Do the work
-			//cout << "Enter the dragon" << endl;
-			int result = do_work(pix, goodpix, pix_max, myIntensity, &quaternion, myDP);
-			//myDP->print("myDP: ");
-			if (numSlices == 1) {
-				mySlices.row(numSlices-1) = trans(vectorise(*myDP));
-			} else {
-				mySlices.insert_rows(numSlices-1, trans(vectorise(*myDP)));
-			}
-
-			// Say we are done computing
-
-			comm->send(master, DONETAG, 0);
-			//MPI_Send(&result, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-			/*MPI_Send(&work,             // message buffer
-             1,                 // one data item 
-             MPI_INT,           // data item is an integer 
-             status.MPI_SOURCE, // to who we just received from 
-             WORKTAG,           // user chosen message tag 
-             MPI_COMM_WORLD);   // default communicator 
-             */
-			//return;
     	}
-    	
+ 	
+    	// Calculate least squared error
     	if (status.tag() == DPTAG) {
-    		lse.zeros(numImages+1,numSlices); // first row specifies dp indices
-    		// calculate least squared error
-    		//cout << "numImages: " << numImages << endl;
-    		//cout << "numSlices: " << numSlices << endl;
-    		//cout << "imageIndices: " << imageIndices << endl;
-    		lse.row(0) = conv_to< frowvec >::from(imageIndices);
-    		//cout << "lse row0: " << lse.row(0) << endl;
+    		imgRep.zeros(numChunkSlices,numPixels);
+    		lse.zeros(numImages,numChunkSlices);
     		for (int i = 0; i < numImages; i++) {
-    			//cout << "i: " << i << endl;
-    			//cout << myImages->row(i) << endl;
-    			//cout << "myImage pixel: " << myImages->at(i,0) << endl;
-				imgRep = repmat(myImages->row(i), numSlices, 1);
-				//cout << "imgRep: " << imgRep.n_rows << "x" << imgRep.n_cols << endl;
-				//cout << "mySlices: " << mySlices.n_rows << "x" << mySlices.n_cols << endl;
-				lse.row(i+1) = trans(sum(pow(imgRep-mySlices,2),1));
+				imgRep = repmat(myImages->row(i), numChunkSlices, 1);
+				lse.row(i) = trans(sum(pow(imgRep-myChunkSlices,2),1));
 			}
-
-			//lse.print("lse: ");
-			
+			// Send back LSE to master
 			std::vector<float> msgLSE = conv_to< std::vector<float> >::from(vectorise(lse));
-			// Say we are done computing
-
 			comm->send(master, DONETAG, msgLSE);
     	}
-    	
-    	//cout << comm->rank() << ": received msg from master" << endl;
-    	//cout << "status tag: " << status.tag() << endl;
-    	//cout << "status: " << status.source() << endl;
     	
     	//cout << "\033[3;32mSlave: \033[0m" << msg << endl;
     	/*if (comm->rank() == 1) {
@@ -664,21 +540,14 @@ static void slave_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* p
 	  		std::cout << '\n';    	
 			std::cout.flush();
     	}*/
-    	
-    	//sleep(1);
-    	
-		//MPI_Recv(&work, 1, MPI_INT, 0, MPI_ANY_TAG,
-		//         MPI_COMM_WORLD, &status);
-
-		// Check the tag of the received message.
-		
+	
 		if (status.tag() == SAVESLICESTAG) {
 			cout << "Saving slices to file" << endl;
 			string outputName;
 			stringstream sstm3;
 			sstm3 << "/data/yoon/singfel/dataMPI/mySlices_" << setfill('0') << setw(3) << comm->rank() << ".dat";
 			outputName = sstm3.str();
-			mySlices.save(outputName,raw_ascii);
+			myChunkSlices.save(outputName,raw_ascii);
 		}
 
 		if (status.tag() == SAVELSETAG) {
@@ -689,76 +558,12 @@ static void slave_expansion(mpi::communicator* comm, fcube* myIntensity, fmat* p
 			outputName = sstm3.str();
 			lse.save(outputName,raw_ascii);
 		}
-				
+			
 		if (status.tag() == DIETAG) {
-			cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
+			//cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
 		  	return;
 		}
 
 	}
-}
-
-static void master_maximization(mpi::communicator* comm) {
-	cout << "Master in maximization mode" << endl;
-	sleep(1);
-}
-
-static void slave_maximization(mpi::communicator* comm) {
-	cout << comm->rank() << ": Slave in maximization mode" << endl;
-	sleep(1);
-}
-
-static void master_compression(mpi::communicator* comm) {
-	cout << "Master in compression mode" << endl;
-	sleep(1);
-}
-
-static void slave_compression(mpi::communicator* comm) {
-	cout << comm->rank() << ": Slave in compression mode" << endl;
-	sleep(1);
-}
-
-static int get_next_work_item(fmat* workPool, int workID) {
-  /* Fill in with whatever is relevant to obtain a new unit of work
-     suitable to be given to a slave. */
-    if (workPool->n_rows > workID) {
-		return 1;
-    }
-	return NULL;
-}
-
-static int get_next_diffraction_pattern(fmat* myImages, int workID) {
-  /* Fill in with whatever is relevant to obtain a new unit of work
-     suitable to be given to a slave. */
-    if (myImages->n_rows > workID) {
-		return 1;
-    }
-	return NULL;
-}
-
-static void process_results(float result) {
-  /* Fill in with whatever is relevant to process the results returned
-     by the slave */
-}
-
-static int do_work(fmat* pix, uvec* goodpix, int pix_max, fcube* myIntensity, fvec* quaternion, fmat* myDP) {
-  /* Fill in with whatever is necessary to process the work and
-     generate a result */
-    
-    //cout << "Do_work" << endl;
-    fmat myR;
-    //cout << quaternion->col(0) << endl;
-	// Get rotation matrix
-	myR = CToolbox::quaternion2rot3D(quaternion->col(0)); // transpose
-	//cout << "Got myR" << endl;
-	//myR.print("myR: ");
-	
-	int active = 1;
-	string interpolate = "linear";
-	//cout << "Got here" << endl;
-	CToolbox::slice3D(myDP, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
-	
-	//cout << "Got here1" << endl;
-	return 0;
 }
 
