@@ -282,7 +282,98 @@ fmat CToolbox::pointsOn4Sphere(int numPts) {
 	return quaternion.rows(0, numPts-1);
 }
 
+// Calculate a set of sampling points on a polar grid given a cartesian grid
+void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, float rhoMax){
+	// samplePoints: polar grid positions (number of rotational samples x number of radial samples x 2)
+	// rhoMin: starting radial value in pixels
+	// rhoMax: last radial value in pixels
+	int numRotSamples = samplePoints->n_rows;
+	cout << "numRotSamples: " << numRotSamples << endl;
+	float deltaTheta = (2 * datum::pi) / numRotSamples; // radians
+	fvec rotPositions(numRotSamples);
+	for (int i = 0; i < numRotSamples; i++) {
+		rotPositions(i) = i*deltaTheta;
+	}
+
+	int numRadSamples = samplePoints->n_cols;
+	cout << "numRadSamples: " << numRadSamples << endl;
+	fvec radPositions(numRadSamples);
+	float deltaRad = floor(rhoMax - rhoMin + 1) / numRadSamples;
+	
+	for (int j = 0; j < numRadSamples; j++) {
+		radPositions(j) = j*deltaRad + rhoMin; 
+	}
+	
+	// Origin at centre of matrix
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+			samplePoints->at(i,j,0) = radPositions(j) * cos(rotPositions(i)); // x position
+			samplePoints->at(i,j,1) = radPositions(j) * sin(rotPositions(i)); // y position
+		}
+	}
+	// Shift origin to top left corner of matrix
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+			samplePoints->at(i,j,0) += (detectorWidth-1)/2.; // x position
+			samplePoints->at(i,j,1) += (detectorWidth-1)/2.; // y position
+		}
+	}
+	
+}
+
+// Interpolate detector intensities onto a set of sampling points
+void CToolbox::interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP){
+	// newDP: new interpolated diffraction pattern
+	// samplePoints: new sampling positions
+	// cartDP: diffraction pattern on a cartesian grid
+	int numRotSamples = samplePoints->n_rows;
+	int numRadSamples = samplePoints->n_cols;
+	
+	int xl, xu, yl, yu;
+	float fx, fy, cx, cy;
+
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+		//	cout << "i,j: " << i << "," << j << endl;
+			xl = floor(samplePoints->at(i,j,0));
+			xu = xl + 1;
+			yl = floor(samplePoints->at(i,j,1));
+			yu = yl + 1;
+			fx = samplePoints->at(i,j,0) - xl;
+			fy = samplePoints->at(i,j,1) - yl;
+			cx = xu - samplePoints->at(i,j,0);
+			cy = yu - samplePoints->at(i,j,1);
+		/*
+		//if (i == 4 && j == 3) {
+				cout << samplePoints->at(i,j,0) << "," << samplePoints->at(i,j,1) << endl;
+		
+				cout << xl << endl;
+				cout << xu << endl;
+				cout << yl << endl;
+				cout << yu << endl;
+				
+				cout << fx << endl;
+				cout << fy << endl;
+				cout << cx << endl;
+				cout << cy << endl;
+				
+				cout << cartDP->at(yl,xl) << endl;
+				cout << cartDP->at(yl,xu) << endl;
+				cout << cartDP->at(yu,xl) << endl;
+				cout << cartDP->at(yu,xu) << endl;
+		//}
+		*/
+			newDP->at(i,j) = cartDP->at(yl,xl)*cx*cy + cartDP->at(yl,xu)*fx*cy + cartDP->at(yu,xl)*cx*fy + cartDP->at(yu,xu)*fx*fy;
+	
+		}
+	}
+	
+	
+	
+}
+
 // Take an Ewald's slice from a diffraction volume
+// Rename: extract_slice
 void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1) {
     int mySize = myIntensity1->n_rows;
     
@@ -329,6 +420,7 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 
 // Insert a Ewald's slice into a diffraction volume
 //void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, imat *myGridPoints, fcube *myIntensity1, fcube *myWeight1) {
+// Rename: insert_slice
 void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     
