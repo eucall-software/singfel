@@ -120,6 +120,8 @@ fmat CToolbox::angleAxis2rot3D(fvec axis, float theta){
 /* NOT USED */
 // Let's use zyz convention after Heymann (2005)
 fvec CToolbox::quaternion2euler(fvec q) {
+	// input: quaternion
+	// output: euler(psi,theta,phi)
 	fvec euler(3);
 	// first rotation about phi, then theta, then psi
 	float psi, theta, phi;
@@ -135,11 +137,7 @@ fvec CToolbox::quaternion2euler(fvec q) {
 		phi = atan2(myR(2,1),myR(2,0));
 		psi = atan2(myR(1,2),-myR(0,2));
 	}
-	
-	//psi=atan2( ( q(1)*q(2) - q(0)*q(3) ) , ( q(0)*q(2) + q(1)*q(3) ) );
-	//theta=acos( pow(q(3),2) - pow(q(0),2) - pow(q(1),2) + pow(q(2),2) );
-	//phi=atan2( ( q(0)*q(3) + q(1)*q(2) ) , ( q(1)*q(3) - q(0)*q(2) ) );
-	
+
 	euler(0) = psi;
 	euler(1) = theta;
 	euler(2) = phi;
