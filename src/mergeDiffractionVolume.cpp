@@ -278,7 +278,7 @@ int main( int argc, char* argv[] ){
 			euler.print("euler:");
 			cout << "phi: " << phi << endl;
 			
-			myR = CToolbox::euler2rot3D(psi,theta,phi);
+			myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
 			myR.print("myR: ");
 			//cout << psi << endl;
 			//cout << theta << endl;
