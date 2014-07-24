@@ -117,13 +117,29 @@ fmat CToolbox::angleAxis2rot3D(fvec axis, float theta){
 	return rot3D;
 }
 
+/* NOT USED */
 // Let's use zyz convention after Heymann (2005)
 fvec CToolbox::quaternion2euler(fvec q) {
 	fvec euler(3);
+	// first rotation about phi, then theta, then psi
 	float psi, theta, phi;
-	psi=atan2( ( q(1)*q(2) - q(0)*q(3) ) , ( q(0)*q(2) + q(1)*q(3) ) );
-	theta=acos( pow(q(3),2) - pow(q(0),2) - pow(q(1),2) + pow(q(2),2) );
-	phi=atan2( ( q(0)*q(3) + q(1)*q(2) ) , ( q(1)*q(3) - q(0)*q(2) ) );
+	fmat myR = quaternion2rot3D(q);
+	cout << "quaternion2euler::myR: " << myR << endl;
+	theta = acos(myR(2,2));
+	cout << "quaternion2euler::theta: " << theta << endl;
+	if (theta == 0 || theta == datum::pi) {
+		cout << "quaternion2euler::here" << endl;
+		phi = 0;
+		psi = atan2(-myR(1,0),myR(0,0));
+	} else {
+		phi = atan2(myR(2,1),myR(2,0));
+		psi = atan2(myR(1,2),-myR(0,2));
+	}
+	
+	//psi=atan2( ( q(1)*q(2) - q(0)*q(3) ) , ( q(0)*q(2) + q(1)*q(3) ) );
+	//theta=acos( pow(q(3),2) - pow(q(0),2) - pow(q(1),2) + pow(q(2),2) );
+	//phi=atan2( ( q(0)*q(3) + q(1)*q(2) ) , ( q(1)*q(3) - q(0)*q(2) ) );
+	
 	euler(0) = psi;
 	euler(1) = theta;
 	euler(2) = phi;
@@ -132,38 +148,43 @@ fvec CToolbox::quaternion2euler(fvec q) {
 
 // zyz, euler in radians
 fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
+	
 	fvec quaternion(4);
+	
 	if (abs(psi) < datum::eps && abs(theta) < datum::eps && abs(phi) < datum::eps ) {
 		quaternion << 1 << 0 << 0 << 0;
 	} else { 
-	fmat R(3,3);
-	//cout << "theta:" << theta << endl;
-	//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
-	//cout << "quaternion: " << quaternion << endl;
+		fmat R(3,3);
+		//cout << "theta:" << theta << endl;
+		//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
+		//cout << "quaternion: " << quaternion << endl;
 	
-	R = euler2rot3D(psi, theta, phi);
+		R = euler2rot3D(psi, theta, phi);
 	
-	fvec VV(3);
-	VV << R(1,2)-R(2,1) << R(2,0)-R(0,2) << R(0,1)-R(1,0);
-    if (VV(0) == 0) {
-        VV = VV/norm(VV,2); // Added by Chuck
-    } else if (VV(0) > 0) {
-        VV = VV/norm(VV,2);
-    } else if(VV(0) < 0) {
-    	VV = VV/norm(VV,2)*-1;
-    }    
-    theta = acos(0.5*(trace(R)-1.0));
+		fvec VV(3);
+		VV << R(1,2)-R(2,1) << R(2,0)-R(0,2) << R(0,1)-R(1,0);
+		if (VV(0) == 0) {
+		    VV = VV/norm(VV,2); // Added by Chuck
+		} else if (VV(0) > 0) {
+		    VV = VV/norm(VV,2);
+		} else if(VV(0) < 0) {
+			VV = VV/norm(VV,2)*-1;
+		}    
+		theta = acos(0.5*(trace(R)-1.0));
 
-    float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
-    float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
-    
-    cout << "CCisTheta: " << CCisTheta << endl;
-    
-    if (CCisNegTheta > CCisTheta) {
-        theta = -theta;
-    }
-    quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+		float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
+		float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
+		
+		//cout << "CCisTheta: " << CCisTheta << endl;
+		
+		if (CCisNegTheta > CCisTheta) {
+		    theta = -theta;
+		}
+		quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+	}
 	
+	if (quaternion(0) < 0) {
+		quaternion *= -1;
 	}
 	
 	return quaternion;
@@ -200,9 +221,10 @@ fmat CToolbox::euler2rot3D(float psi, float theta, float phi) {
          << -sin(psi) << cos(psi) << 0 << endr
          << 0 << 0 << 1 << endr;
     fmat rot3D(3,3);
-    return rot3D = Rphi * Rtheta * Rpsi;
+    return rot3D = Rpsi * Rtheta * Rphi;
 }
 
+/* NOT USED */
 // Let's use zyz convention after Heymann (2005)
 fvec CToolbox::rot3D2euler(fmat rot3D) {
     fvec euler(3);
@@ -288,7 +310,7 @@ void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, 
 	// rhoMin: starting radial value in pixels
 	// rhoMax: last radial value in pixels
 	int numRotSamples = samplePoints->n_rows;
-	cout << "numRotSamples: " << numRotSamples << endl;
+	//cout << "numRotSamples: " << numRotSamples << endl;
 	float deltaTheta = (2 * datum::pi) / numRotSamples; // radians
 	fvec rotPositions(numRotSamples);
 	for (int i = 0; i < numRotSamples; i++) {
@@ -296,7 +318,7 @@ void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, 
 	}
 
 	int numRadSamples = samplePoints->n_cols;
-	cout << "numRadSamples: " << numRadSamples << endl;
+	//cout << "numRadSamples: " << numRadSamples << endl;
 	fvec radPositions(numRadSamples);
 	float deltaRad = floor(rhoMax - rhoMin + 1) / numRadSamples;
 	
