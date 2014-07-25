@@ -144,7 +144,7 @@ int main( int argc, char* argv[] ){
 
 #ifdef COMPILE_WITH_CUDA
 	if (USE_CUDA && !USE_CHUNK) {
-		//cout<< "USE_CUDA" << endl;
+		cout<< "USE_CUDA AND NO CHUNK" << endl;
 
 		CDiffraction::get_atomicFormFactorList(&particle,&det);		
 
@@ -155,7 +155,7 @@ int main( int argc, char* argv[] ){
 		float* p_mem = particle.atomPos.memptr();
 		cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, det.numPix, particle.numAtoms);
 		
-		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulse();
 
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 		
@@ -170,7 +170,7 @@ int main( int argc, char* argv[] ){
 			quaternion.save(outputName,raw_ascii);		
 		}		
 	} else if (USE_CUDA && USE_CHUNK) {
-		//cout<< "USE_CHUNK" << endl;
+		cout<< "USE CUDA AND CHUNK" << endl;
 		int max_chunkSize = 100;
 		int chunkSize = 0;
 
@@ -219,7 +219,7 @@ int main( int argc, char* argv[] ){
 		sumDi.reshape(py,px);
 		F_hkl_sq = sumDr % sumDr + sumDi % sumDi;
 
-		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.phi_in;
+		fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulse();
 		detector_counts += CToolbox::convert_to_poisson(detector_intensity);
 		
 		if (timeSlice == numPatterns) {
@@ -235,9 +235,8 @@ int main( int argc, char* argv[] ){
 	} 
 #endif
 	if(!USE_CUDA) {
-		timer.tic();
 		CDiffraction::get_atomicFormFactorList(&particle,&det);
-		//cout<< "CPU" << endl;
+		cout<< "CPU" << endl;
 
 		fmat F_hkl_sq;
 		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
