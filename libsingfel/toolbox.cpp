@@ -264,6 +264,40 @@ fmat CToolbox::get_wahba(fmat currentRot,fmat originRot) {
 	return myR;
 }
 
+// Given number of points, distribute evenly on hyper surface of a 3-sphere
+fmat CToolbox::pointsOn3Sphere(int numPts) {
+	fmat points;
+	points.zeros(2*numPts,3);
+	const int N = 3;	
+	float surfaceArea = N * pow(2,N) * pow(datum::pi,(N-1)/2) / (3*2); // for odd N
+	float delta = exp(log(surfaceArea/numPts)/2);
+	int iter = 0;
+	int ind = 0;
+	int maxIter = 1000;
+	float deltaW1,deltaW2;
+	float q0, q1, q2;
+	float w1, w2;
+	frowvec q(3); 
+	while (ind != numPts && iter < maxIter) {
+		ind = 0;
+		deltaW1 = delta;
+		for (w1 = 0.5*deltaW1; w1 < datum::pi; w1+=deltaW1) {
+			q0 = cos(w1);
+			deltaW2 = deltaW1/sin(w1);
+			for (w2 = 0.5*deltaW2; w2 < 2*datum::pi; w2+=deltaW2) {
+				q1 = sin(w1) * cos(w2);
+				q2 = sin(w1) * sin(w2);
+				q << q0 << q1 << q2 << endr;
+				points.row(ind)= q;
+				ind += 1;
+			}
+		}
+		delta *= exp(log((float)ind/numPts)/2);
+		iter += 1;
+	}
+	return points.rows(0, numPts-1);
+}
+
 // Given number of points, distribute evenly on hyper surface of a 4-sphere
 fmat CToolbox::pointsOn4Sphere(int numPts) {
 	fmat quaternion;

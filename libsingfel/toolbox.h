@@ -33,6 +33,7 @@ public:
 	static float corrCoeff(arma::fmat, arma::fmat);
 	
 	static arma::fmat get_wahba(arma::fmat,arma::fmat);
+	static arma::fmat pointsOn3Sphere(int);
 	static arma::fmat pointsOn4Sphere(int);
 	
 	
