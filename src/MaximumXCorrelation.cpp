@@ -217,7 +217,7 @@ int main( int argc, char* argv[] ){
   			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
 			filename = sstm.str();
 			myDP = load_asciiImage(filename);
-			cout << "myDP: " << myDP(35,24) << endl;
+			//cout << "myDP: " << myDP(35,24) << endl;
 			
 	        // Get rotation matrix
   			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
@@ -261,9 +261,14 @@ int main( int argc, char* argv[] ){
   		cout << "Done 4Sphere" << endl;
   		//myQuaternions.print("Q: ");
   		
+  		wall_clock timerMaster;
+  		
   		for (int iter = 0; iter < 50; iter++) {
   		
 	  		// Expansion
+			cout << "Start expansion" << endl;
+			timerMaster.tic();
+			
 			for (int s = 0; s < numSlices; s++) {
 				//cout << s << endl;
 			    // Get rotation matrix
@@ -282,14 +287,18 @@ int main( int argc, char* argv[] ){
 				
 				mySlices.row(s) = reshape(myDP,1,numPixels);
 	  		}
-
+			
+			cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
+			
 	  		// Maximization
-	  		cout << "Calculating similarity metric" << endl;
+			cout << "Start maximization" << endl;
+			timerMaster.tic();
+			
 	  		fmat lse(numImages,numSlices); // least squared error
 	  		fmat imgRep;
 			imgRep.zeros(numSlices,numPixels);
 	  		for (int i = 0; i < numImages; i++) {
-	  			cout << i << endl;
+	  			//cout << iter << ": " << i << endl;
 	  			
 	  			imgRep = repmat(myImages.row(i), numSlices, 1);
 	  			
@@ -315,8 +324,12 @@ int main( int argc, char* argv[] ){
 	  			}
 	  		}
 	  		//bestFit.print("bestFit: ");
+	  		cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 	  		
 	  		// Compression
+			cout << "Start compression" << endl;
+			timerMaster.tic();
+			 		
 	  		myWeight.zeros(mySize,mySize,mySize);
 			myIntensity.zeros(mySize,mySize,mySize);
 	  		for (int r = 0; r < numImages; r++) {
@@ -326,20 +339,21 @@ int main( int argc, char* argv[] ){
 				filename = sstm.str();
 				myDP = load_asciiImage(filename);
 			    // Get rotation matrix
-			    cout << myQuaternions.row(bestFit(r)) << endl;
+			    //cout << myQuaternions.row(bestFit(r)) << endl;
 				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(bestFit(r))));
 				active = 1;
 				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
 	  		}
 	  		// Normalize here
 	  		CToolbox::normalize(&myIntensity,&myWeight);
-		
+	  		
+			cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 		
 			// Save output
 	  		fmat mySlice;
 	  		for (int i = 0; i < mySize; i++) {
 	  			std::stringstream sstm;
-	  			sstm << output << setfill('0') << setw(6) << i << ".dat";
+	  			sstm << output << iter << "_" << setfill('0') << setw(6) << i << ".dat";
 				string outputName = sstm.str();
 				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
 			}
