@@ -223,7 +223,7 @@ int main( int argc, char* argv[] ){
 		float circumference = 0; // pixels
 		int numRotSamples = 0;
 		int numRadSamples = 0;
-  		
+  		float deltaRot = 0;
   		
 		// Setup initial diffraction volume by merging randomly
 		for (int r = 0; r < numImages; r++) {
@@ -239,10 +239,13 @@ int main( int argc, char* argv[] ){
 				circumference = rhoMax * (2 * datum::pi); // pixels
 				numRotSamples = ceil(circumference);
 				numRadSamples = floor(rhoMax - rhoMin)+1;
+				cout << "numRotSamples: " << numRotSamples << endl;
+				cout << "numRadSamples: " << numRadSamples << endl;
+				deltaRot = 2*datum::pi/numRotSamples;
 				myPolarDP = zeros<fmat>(numRotSamples,numRadSamples);
 				myPolarStack = zeros<fcube>(numRotSamples,numRadSamples,numSlices);
 				samplePoints = zeros<fcube>(numRotSamples,numRadSamples,2);
-				myPolarImages = zeros<fcube>(numRotSamples,numRadSamples,numSlices);
+				myPolarImages = zeros<fcube>(numRotSamples,numRadSamples,numImages);
 			}
 
 	        // Get rotation matrix
@@ -268,22 +271,25 @@ int main( int argc, char* argv[] ){
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
   		
-  		// Distribution of quaternions
-  		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
-  		for (int i = 0; i < myQuaternions.n_rows; i++) {
-  			frowvec quat = myQuaternions.row(i);
-  			if (quat(0) < 0) {
-				quat *= -1;
+  		// Distribution of quaternions 		
+  		fmat myPoints3 = CToolbox::pointsOn3Sphere(numSlices);
+		fmat myEulers(myPoints3.n_rows,3);
+		fmat myQuaternions(myPoints3.n_rows,4);
+		float theta = datum::pi;
+		for (int i = 0; i < myPoints3.n_rows; i++) {
+			myR = CToolbox::angleAxis2rot3D(trans(myPoints3.row(i)), theta);
+			myR.print("myR: "); 
+			fvec myEuler = CToolbox::rot3D2euler(myR);
+			fvec myQ = CToolbox::euler2quaternion(myEuler(0), myEuler(1), myEuler(2));
+			if (myQ(0) < 0) {
+				myQ *= -1;
 			}
-  			fvec euler = CToolbox::quaternion2euler(trans(quat));
-  			fvec newQuat = CToolbox::euler2quaternion(euler(0),euler(1),euler(2));
-  			cout << "quat: " << quat << endl;
-  			cout << "euler: " << euler << endl;
-  			cout << "newQuat: " << newQuat << endl;
-  		}
-  		
-  		cout << "Done 4Sphere" << endl;
-/* 
+			myEulers.row(i) = trans(myEuler);
+			myQuaternions.row(i) = trans(myQ);
+		}
+
+  		cout << "Done 3Sphere" << endl;
+
   		wall_clock timerMaster;
   		  		
   		for (int iter = 0; iter < numIterations; iter++) {
@@ -312,38 +318,51 @@ int main( int argc, char* argv[] ){
 			cout << "Start maximization" << endl;
 			timerMaster.tic();
 			
-	  		fmat cc(numImages,numSlices); // least squared error
-	  		fmat imgRep;
-			imgRep.zeros(numSlices,numPixels);
+	  		fmat cc(numImages,numSlices); // cross correlation
+	  		umat bestAzimuth(numImages,numSlices); // record best azimuthal rotation
+	  		
+	  		//cout << "calculate cc" << endl;
+	  		
+	  		cx_fmat A, B;
+	  		fmat xcorr;
 	  		for (int i = 0; i < numImages; i++) {
-	  			cx_fmat A = conj(fft2(myPolarImages.slice(i)));
-	  			int bestRot = 0;
-				int maxVal = 0;
+	  			cout << "i: " << i << endl;
+	  			A = conj(fft2(myPolarImages.slice(i)));
+	  			int numShifts = 0;
+				float maxVal = 0;
 	  			for (int j = 0; j < numSlices; j++) {
-					cx_fmat B = fft2(myPolarStack.slice(j));
-					fmat CC = real(fft2(A % B));					
+					B = fft2(myPolarStack.slice(j));
+					xcorr = real(fft2(A % B));			
 					for (int k = 0; k < numRotSamples; k++) {
-						if (CC(k,0) > maxVal) {
-							bestRot = k;
-							maxVal = CC(k,0);
+						if (xcorr(k,0) > maxVal) {
+							numShifts = k;
+							maxVal = xcorr(k,0);
 						}
 					}
+					cc(i,j) = maxVal;
+	  				bestAzimuth(i,j) = numShifts;
 				}	  			
-	  			cc(i,j) = trans(sum(pow(imgRep-mySlices,2),1));
 	  		}
-	  		uvec bestFit(numImages);
+	  		
+	  		//cout << "best cc" << endl;
+	  		
+	  		uvec bestPsi(numImages);
+	  		uvec bestPhiTheta(numImages);
 	  		float highest;
 	  		for (int i = 0; i < numImages; i++) {
 	  			highest = cc(i,0);
-	  			bestFit(i) = 0;
+	  			bestPsi(i) = 0;
+	  			bestPhiTheta(i) = 0;
 				for (int j = 0; j < numSlices; j++) {
 					if (highest > cc(i,j)) {
 						highest = cc(i,j);
-						bestFit(i) = j; // maximum cc index
+						bestPsi(i) = bestAzimuth(i,j); // maximum cc index
+						bestPhiTheta(i) = j;
 					}
 	  			}
 	  		}
-	  		//bestFit.print("bestFit: ");
+	  		//bestPsi.print("bestPsi: ");
+	  		//bestPhiTheta.print("bestPhiTheta: ");
 	  		cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 	  		
 	  		// Compression
@@ -352,15 +371,23 @@ int main( int argc, char* argv[] ){
 			 		
 	  		myWeight.zeros(mySize,mySize,mySize);
 			myIntensity.zeros(mySize,mySize,mySize);
+			//myEulers.print("myEulers: ");
 	  		for (int r = 0; r < numImages; r++) {
+	  		//cout << "r: " << r << endl;
 		  		// Get image
 		  		std::stringstream sstm;
 	  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
 				filename = sstm.str();
 				myDP = load_asciiImage(filename);
-			    // Get rotation matrix
-			    //cout << myQuaternions.row(bestFit(r)) << endl;
-				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(bestFit(r))));
+			    // Get best fit from phi and theta grid
+			    frowvec euler = myEulers.row(bestPhiTheta(r));
+			    //cout << "euler: " << euler << endl;
+			    // Apply azimuthal rotation
+			    euler(0) += bestPsi(r) * deltaRot; // this could be minus depending on rotation direction
+			    //cout << "euler: " << euler << endl;
+			    fvec newQuat = CToolbox::euler2quaternion(euler(0),euler(1),euler(2)); // psi,theta,phi
+			    //cout << "newQuat: " << newQuat << endl;
+				myR = CToolbox::quaternion2rot3D(newQuat);
 				active = 1;
 				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
 	  		}
@@ -379,7 +406,7 @@ int main( int argc, char* argv[] ){
 			}
 			
 		}
-*/		
+	
     }
 
 	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
