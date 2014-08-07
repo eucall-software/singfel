@@ -40,6 +40,7 @@ int main( int argc, char* argv[] ){
     string quaternionList;
     string beamFile;
     string geomFile;
+    int numIterations = 0;
     int numImages = 0;
     int mySize = 0;
     int numSlices = 0;
@@ -56,6 +57,8 @@ int main( int argc, char* argv[] ){
             beamFile = argv[ n+1 ];
         } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
             geomFile = argv[ n+1 ];   
+        } else if (boost::algorithm::iequals(argv[ n ], "--num_iterations")) {
+            numIterations = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--num_images")) {
             numImages = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--num_slices")) {
@@ -214,7 +217,7 @@ int main( int argc, char* argv[] ){
 		for (int r = 0; r < numImages; r++) {
 	  		// Get image
 	  		std::stringstream sstm;
-  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
+  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 			filename = sstm.str();
 			myDP = load_asciiImage(filename);
 			//cout << "myDP: " << myDP(35,24) << endl;
@@ -263,7 +266,7 @@ int main( int argc, char* argv[] ){
   		
   		wall_clock timerMaster;
   		
-  		for (int iter = 0; iter < 50; iter++) {
+  		for (int iter = 0; iter < numIterations; iter++) {
   		
 	  		// Expansion
 			cout << "Start expansion" << endl;
@@ -335,7 +338,7 @@ int main( int argc, char* argv[] ){
 	  		for (int r = 0; r < numImages; r++) {
 		  		// Get image
 		  		std::stringstream sstm;
-	  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
+	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 				filename = sstm.str();
 				myDP = load_asciiImage(filename);
 			    // Get rotation matrix
