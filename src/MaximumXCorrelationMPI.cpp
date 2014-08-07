@@ -241,7 +241,7 @@ int main( int argc, char* argv[] ){
 	for (int r = 0; r < numImages; r++) {
 	  	// Get image
 	  	std::stringstream sstm;
-  		sstm << imageList << setfill('0') << setw(6) << r << ".dat";
+  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 		filename = sstm.str();
 		myDP = load_asciiImage(filename);
 		//cout << "myDP: " << myDP.n_rows << "x" << myDP.n_cols << endl;
@@ -467,7 +467,7 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	// ########### Save diffraction volume ##############
 	for (int i = 0; i < mySize; i++) {
 		std::stringstream sstm;
-		sstm << output << "vol" << iter << "_" << setfill('0') << setw(6) << i << ".dat";
+		sstm << output << "vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
 		myIntensity->slice(i).save(outputName,raw_ascii);
 	}
