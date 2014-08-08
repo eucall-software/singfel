@@ -356,7 +356,7 @@ int main( int argc, char* argv[] ){
 	  		fmat mySlice;
 	  		for (int i = 0; i < mySize; i++) {
 	  			std::stringstream sstm;
-	  			sstm << output << iter << "_" << setfill('0') << setw(6) << i << ".dat";
+	  			sstm << output << "vol" << iter << "_" << setfill('0') << setw(6) << i << ".dat";
 				string outputName = sstm.str();
 				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
 			}
