@@ -38,6 +38,8 @@ int main( int argc, char* argv[] ){
 
     string imageList;
     string eulerList;
+    string quaternionList;
+    string rotationList;
     string beamFile;
     string geomFile;
     int numImages = 0;
@@ -50,7 +52,11 @@ int main( int argc, char* argv[] ){
             imageList = argv[ n+1 ];
         } else if (boost::algorithm::iequals(argv[ n ], "-e")) {
             eulerList = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-b")) {
+        } else if (boost::algorithm::iequals(argv[ n ], "-q")) {
+		    quaternionList = argv[ n+1 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "-r")) {
+		    rotationList = argv[ n+1 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "-b")) {
             beamFile = argv[ n+1 ];
         } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
             geomFile = argv[ n+1 ];   
@@ -256,11 +262,12 @@ int main( int argc, char* argv[] ){
 		int active = 1;
 		string interpolate = "linear";// "nearest";
 		
-  		for (int r = 0; r < numImages; r++) {//(int r = 0; r < numImages; r++) {
+  		for (int r = 0; r < 1; r++) {//(int r = 0; r < numImages; r++) {
 	  		// Get image
 	  		std::stringstream sstm;
-  			sstm << "/home/beams/EPIX34ID/yoon/singfel/dataShrine/img" << r+1 << ".dat";
+  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 			filename = sstm.str();
+			cout << filename << endl;
 			myDP = load_asciiImage(filename);
 			//myDet.apply_badPixels();
 			//cout << "myDP(0): " << myDP(0) << endl; // 0
@@ -268,119 +275,34 @@ int main( int argc, char* argv[] ){
 			//cout << "myDP(130): " << myDP(130) << endl; // 5.08 <-- mask out
 	        // Get rotation matrix
   			std::stringstream sstm1;
-			sstm1 << "/home/beams/EPIX34ID/yoon/singfel/dataShrine/euler" << r+1 << ".dat";
-			string eulerName = sstm1.str();
-			fvec euler;
-			euler = load_asciiEuler(eulerName);
-			psi = euler(0);
-			theta = euler(1);
-			phi = euler(2);
-			euler.print("euler:");
-			cout << "phi: " << phi << endl;
-			
-			myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
+			sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
+			string rotationName = sstm1.str();
+			cout << rotationName << endl;
+			myR = load_asciiRotation(rotationName);
+			//fvec euler;
+			//psi = euler(0);
+			//theta = euler(1);
+			//phi = euler(2);
+			//euler.print("euler:");
+			myR = eye<fmat>(3,3);
+			//myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
 			myR.print("myR: ");
-			//cout << psi << endl;
-			//cout << theta << endl;
-			//cout << phi << endl;
-			//fvec a = CToolbox::rot3D2euler(myR);
-			
-			// Vectorize diffraction pattern 
-        	//fvec myPhotons = vectorise(myDP); // column-wise <------ NO NEED TO VECTORIZE!!!!
-        	//cout << "myPhotons: " << myPhotons(0) << "," << myPhotons(1) << "," << myPhotons(130) << endl;
-            // Rotate the pixel
-        	//pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is a passive rotation
-        	//pixRot = conv_to<fmat>::from(trans(myR))*trans(pix) + pix_max;
-        	
-        	//cout << "pix: " << pix.n_rows << "x" << pix.n_cols << endl;
-        	/*
-        	fvec a(3);
-        	a << 1 << 0 << 0 << endr;
-        	a.print("a:");
-        	frowvec b(3);
-        	b = trans(a)*conv_to<fmat>::from(myR);
-        	b.print("b:");
-        	fvec c(3);
-        	c = conv_to<fmat>::from(myR)*a;
-        	c.print("c:");
-        	*/        	
+			//myR = trans(myR);
+      	
         	CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-        	/*
-            pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is an active rotation
-            pixRot = trans(pixRot);
-            //cout << "pixRot: " << pixRot.n_rows << "x" << pixRot.n_cols << endl;
-            
-            myGrid = conv_to<imat>::from(floor(pixRot));
-            
-            CToolbox::interp_linear3D(&myDP,&pixRot,&myGrid,&myIntensity,&myWeight);
-            */
-            
-            /*
-            float x,y,z,fx,fy,fz,cx,cy,cz;
-            float weight;
-	        float photons;
-	        fmat fxyz = pixRot - xyz;
-            fmat cxyz = 1. - fxyz;
-            for (int p = 0; p < myPhotons.n_elem; p++) {
-                cout << p << endl;
-                photons = myPhotons(p);
-
-		        x = xyz(0,p);
-		        y = xyz(1,p);
-		        z = xyz(2,p);
-
-		        if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
-		            continue;
-					
-		        if (x < 0 || y < 0 || z < 0)
-			        continue;	
-				
-		        fx = fxyz(0,p);
-		        fy = fxyz(1,p);
-		        fz = fxyz(2,p);
-		        cx = cxyz(0,p);
-		        cy = cxyz(1,p);
-		        cz = cxyz(2,p);
-				
-		        weight = cx*cy*cz;
-		        myWeight(y,x,z) += weight;
-		        myIntensity(y,x,z) += weight * photons;
-
-		        weight = cx*cy*fz;
-		        myWeight(y,x,z+1) += weight;
-		        myIntensity(y,x,z+1) += weight * photons; 
-
-		        weight = cx*fy*cz;
-		        myWeight(y+1,x,z) += weight;
-		        myIntensity(y+1,x,z) += weight * photons; 
-
-		        weight = cx*fy*fz;
-		        myWeight(y+1,x,z+1) += weight;
-		        myIntensity(y+1,x,z+1) += weight * photons;         		        
-				
-		        weight = fx*cy*cz;
-		        myWeight(y,x+1,z) += weight;
-		        myIntensity(y,x+1,z) += weight * photons; 		       		 
-
-		        weight = fx*cy*fz;
-		        myWeight(y,x+1,z+1) += weight;
-		        myIntensity(y,x+1,z+1) += weight * photons; 
-
-		        weight = fx*fy*cz;
-		        myWeight(y+1,x+1,z) += weight;
-		        myIntensity(y+1,x+1,z) += weight * photons;
-
-		        weight = fx*fy*fz;
-		        myWeight(y+1,x+1,z+1) += weight;
-		        myIntensity(y+1,x+1,z+1) += weight * photons;
-
-                cout << "done" << endl;
-	        }    
-	        */
+        	
   		}
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
-  		myIntensity.save(output,raw_ascii);
+  		
+  		// ########### Save diffraction volume ##############
+		for (int i = 0; i < mySize; i++) {
+			std::stringstream sstm;
+			sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
+			string outputName = sstm.str();
+			myIntensity.slice(i).save(outputName,raw_ascii);
+		}
+		
     }
 
 	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
