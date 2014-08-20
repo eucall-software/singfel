@@ -68,7 +68,9 @@ int main( int argc, char* argv[] ){
 		int numImages = 0;
 		int mySize = 0;
 		int numSlices = 0;
+		int startIter = 0;
 		string output;
+		string intialVolume = "randomMerge";
 		// Let's parse input
 		// image.lst and euler.lst are not neccessarily in the same order! So can not use like this. 		
 		// Perhaps use hdf5 to combine the two.
@@ -92,6 +94,10 @@ int main( int argc, char* argv[] ){
 		        mySize = atof(argv[ n+2 ]);
 		    } else if (boost::algorithm::iequals(argv[ n ], "--output_name")) {
 		        output = argv[ n+2 ];
+		    } else if (boost::algorithm::iequals(argv[ n ], "--start_iter_from")) {
+		        startIter = atoi(argv[ n+2 ]);
+		    } else if (boost::algorithm::iequals(argv[ n ], "--initial_volume")) {
+		        intialVolume = argv[ n+2 ];
 		    }
 		}
 		
@@ -237,46 +243,70 @@ int main( int argc, char* argv[] ){
 	fmat rot3D(3,3);
 	fvec u(3);
 	fvec quaternion(4);
-	// Setup initial diffraction volume by merging randomly
-	for (int r = 0; r < numImages; r++) {
-	  	// Get image
-	  	std::stringstream sstm;
-  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
-		filename = sstm.str();
-		myDP = load_asciiImage(filename);
-		//cout << "myDP: " << myDP.n_rows << "x" << myDP.n_cols << endl;
-		//cout << "myDP: " << myDP(35,24) << endl;
+	
+	//string randMerge = ;
+	if ( strcmp(intialVolume.c_str(),"randomMerge")==0 ) {
+		// Setup initial diffraction volume by merging randomly
+		for (int r = 0; r < numImages; r++) {
+		  	// Get image
+		  	std::stringstream sstm;
+	  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+			filename = sstm.str();
+			myDP = load_asciiImage(filename);
+			//cout << "myDP: " << myDP.n_rows << "x" << myDP.n_cols << endl;
+			//cout << "myDP: " << myDP(35,24) << endl;
 			
-		if (world.rank() == master) {
-		    // Get rotation matrix
-	  		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
-			// generate uniform random quaternion on SO(3)
-			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+			if (world.rank() == master) {
+				// Get rotation matrix
+		  		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
+				// generate uniform random quaternion on SO(3)
+				quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
+						   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
 			
-			myR = CToolbox::quaternion2rot3D(quaternion);
-			active = 1;
-			CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-		}
-		myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
-		//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
-  	}
-  	if (world.rank() == master) {
-		cout << "Done random merge" << endl;
+				myR = CToolbox::quaternion2rot3D(quaternion);
+				active = 1;
+				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+			}
+			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+			//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
+	  	}
 		// Normalize here
 		CToolbox::normalize(&myIntensity,&myWeight);
-		cout << "Done normalize" << endl;
+		cout << "Done normalize" << endl;	  	
+  	} else {
+  		// Setup initial diffraction volume by reading from file
+  		for (int r = 0; r < numImages; r++) {
+		  	// Get image
+		  	std::stringstream sstm;
+	  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+			filename = sstm.str();
+			myDP = load_asciiImage(filename);
+			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+	  	}
+	  	if (world.rank() == master) {
+			for (int i = 0; i < mySize; i++) {
+				// Get a layer of volume
+				std::stringstream sstm;
+				sstm << output << "vol" << startIter << "_" << setfill('0') << setw(7) << i << ".dat";
+				string outputName = sstm.str();
+				myIntensity.slice(i).load(outputName,raw_ascii);
+			}
+		}
+  	}
+  	
+  	if (world.rank() == master) {
+		cout << "Done initialization" << endl;
   	}
 	world.barrier();	
 	if (world.rank() == master) {
-		cout << "Random merge time: " << timerMaster.toc() <<" seconds."<<endl;
+		cout << "Initialization time: " << timerMaster.toc() <<" seconds."<<endl;
 	}
 	
 	// Main iteration
 	fmat myQuaternions;
-	for (int iter = 0; iter < numIterations; iter++) { // number of iterations
+	for (int iter = startIter; iter < numIterations; iter++) { // number of iterations
 		if (world.rank() == master) {
-			if (iter == 0) {
+			if (iter == startIter) {
 				// Equal distribution of quaternions
   				myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
   			}
@@ -341,8 +371,8 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	fmat myR;
 	myR.zeros(3,3);
 	fmat myDP(mySize,mySize);
-	cout << "numSlices: " << numSlices << endl;
-	cout << "numImages: " << numImages << endl;
+	//cout << "numSlices: " << numSlices << endl;
+	//cout << "numImages: " << numImages << endl;
 	for (int s = 0; s < numSlices; s++) {
 		// Get rotation matrix
 		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(s)));
@@ -350,7 +380,7 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		mySlices.row(s) = reshape(myDP,1,numPixels);
 	}
 	
-	//cout << "Done mySlices" << endl;
+	cout << "Done mySlices" << endl;
 	
 	// Send
 	// 1) Start and end indices of model slices
@@ -358,8 +388,10 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	// 3) Compute signal
 	int slicesPerSlave = floor( (float) numSlices / (float) (numProcesses-1) );
 	int leftOver = numSlices - slicesPerSlave * numSlaves;
+	
 	//cout << "slicesPerSlave: " << slicesPerSlave << endl;
 	//cout << "leftOver: " << leftOver << endl;
+	
 	uvec s(numSlaves);
 	s.fill(slicesPerSlave);
 	for (int i = 0; i < numSlaves; i++) {
@@ -368,6 +400,8 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 			leftOver--;
 		}
 	}
+	//cout << "s: " << s << endl;
+	 
 	int startInd = 0;
 	int endInd = 0;
 	std::vector<float> msg;
@@ -378,20 +412,46 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		
 		// Vectorize my model slices
 		int numElem = numPixels * s(rank-1);
+		
+		//cout << "numElem: " << numElem << endl;
+		
 		fvec modelVector( numElem );
 		fmat myChunkSlices = mySlices.rows(startInd,endInd);
+		
+		//cout << "here" << endl;
+		
 		for(int i = 0; i < numElem; i++) {
 			modelVector(i) =  myChunkSlices.at(i); // column-wise
 		}
+		
+		//cout << "modelVector: " << modelVector.n_elem << endl;
+		
 		std::vector<float> model = conv_to< std::vector<float> >::from(modelVector);
+		
+		//cout << "got here" << endl;
 		
 		std::vector<float> id(2);
 		id.at(0) = (float) startInd;
 		id.at(1) = (float) endInd;
-			
+		
+		//cout << "id" << endl;
+		
 		comm->send(rank, INDTAG, id);
+		
+		//cout << "model" << endl;
+		//for (std::vector<float>::iterator it = model.begin() ; it != model.end(); ++it)
+        //    std::cout << ' ' << *it;
+        //std::cout << '\n';
+
+		//cout << "rank MODELTAG model: " << rank << "," << MODELTAG << "," << model.size() << endl;
 		comm->send(rank, MODELTAG, model);
+		
+		comm->send(rank, SAVESLICESTAG, msg);
+		//cout << "msg" << endl;
+		
 		comm->send(rank, DPTAG, msg);
+		
+		//cout << "sent out" << endl;
 		
 		startInd += s(rank-1);
   	}
@@ -487,13 +547,11 @@ static void slave_expansion(mpi::communicator* comm, fmat* pix, float pix_max, u
 	int numImages = myImages->n_rows;
 	int numChunkSlices = 0;
 	int numPixels = myDP->n_elem;
-	//float work;
-	//float results;
-	boost::mpi::status status;//MPI_Status status;
+	boost::mpi::status status;
 	const int master = 0;
 	// Expansion related variables
 	fvec quaternion(4);
-	std::vector<float> msg; //std::string msg;
+	std::vector<float> msg;
 	// Maximization related variables
 	fmat diffraction = zeros<fmat>(myDP->n_rows,myDP->n_cols);
 	fmat lse;
@@ -506,20 +564,26 @@ static void slave_expansion(mpi::communicator* comm, fmat* pix, float pix_max, u
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg);
 
+		//cout << "slave rank: Got something " << comm->rank() << endl;
+
 		// Receive how many slices assigned to this slave
     	if (status.tag() == INDTAG) {
     		fvec id = conv_to< fvec >::from(msg);
     		int startInd = (int) id(0);
     		int endInd = (int) id(1);
     		numChunkSlices = endInd - startInd + 1;
+    		//cout << "slave rank: startInd endInd numChunkSlices " << comm->rank() << "," << startInd << "," << endInd << "," << numChunkSlices << endl;
     	}
   	
 		// Receive a subset of model slices
     	if (status.tag() == MODELTAG) {
+    		//cout << "slave rank: MODELTAG numChunkSlices numPixels msg.size " << comm->rank() << "," << numChunkSlices << "," << numPixels << "," << msg.size() << endl;
     		myChunkSlices.zeros(numChunkSlices,numPixels);
+    		//cout << "slave rank: numChunkSlices numPixels msg.size " << comm->rank() << "," << numChunkSlices << "," << numPixels << "," << msg.size() << endl;
     		for(unsigned int i = 0; i < msg.size(); i++) {
     			myChunkSlices.at(i) =  msg.at(i); // column-wise
 			}
+			//cout << "slave rank: Done " << comm->rank() << endl;
     	}
  	
     	// Calculate least squared error
