@@ -146,8 +146,7 @@ int main( int argc, char* argv[] ){
 //	beam.set_photonsPerPulse(myPhotonEnergy[0]);
 					
 	beam.set_photon_energy(photon_energy);
-	string focuse_shape = "square";
-	beam.set_focus(focus_radius*2,"square"); // radius to diameter
+	beam.set_focus(focus_radius*2,"circle"); // radius to diameter
 	cout << "beam focus: " << beam.get_focus() << endl;
 	//beam.set_photonsPerPulse(fluence);
 	//beam.set_photonsPerPulsePerArea();
@@ -442,12 +441,16 @@ myNph.print("myNph: ");
 		
 				fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulse();
 				detector_counts += CToolbox::convert_to_poisson(detector_intensity);
-			
+
+				stringstream sstm3;
+				sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(7) 
+				<< patternID << ".h5";
+				outputName = sstm3.str();
+				if ( timeSlice == sliceInterval && boost::filesystem::exists( outputName ) ) {
+					boost::filesystem::remove( outputName );
+				}
+		
 				if (timeSlice == numSlices) {
-					stringstream sstm3;
-					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(7) 
-					<< patternID << ".h5";
-					outputName = sstm3.str();
 					
 					int createSubgroup = 0;
 					int success = hdf5writeVector(outputName,"data","","/data/data", detector_intensity,createSubgroup);
