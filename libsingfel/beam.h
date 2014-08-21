@@ -15,6 +15,7 @@ private:
 	static double photon_energy;
 	static double k;								// (m^-1)
 	static double focus;							// (m)
+	static string focus_shape;                      // focus shape: {square,default:circle}
 	static double focus_area; 						// (m^2)
 	static double n_phot;							// number of photons per pulse
 	static double phi_in;  							// number of photon per pulse per area (m^-2)
@@ -30,6 +31,7 @@ public:
 	static double get_wavelength();
 	static double get_wavenumber();
 	static void set_focus(double);
+	static void set_focus(double,string);	
 	static double get_focus();
 	static void set_focusArea();
 	static double get_focus_area();

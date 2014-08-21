@@ -136,7 +136,8 @@ int main( int argc, char* argv[] ){
 	stringstream sstm;
 	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) << pmiStartID << ".h5";
 	filename = sstm.str();
-//cout << filename << endl;
+
+    cout << "pmi filename: " << filename << endl;
 //cout << "get vector" << endl;
 //	fmat myTemp = hdf5readT<fmat>(filename,"/data/snp_001/r");
 //cout << "get photon energy" << endl;
@@ -145,7 +146,9 @@ int main( int argc, char* argv[] ){
 //	beam.set_photonsPerPulse(myPhotonEnergy[0]);
 					
 	beam.set_photon_energy(photon_energy);
-	beam.set_focus(focus_radius*2); // radius to diameter
+	string focuse_shape = "square";
+	beam.set_focus(focus_radius*2,"square"); // radius to diameter
+	cout << "beam focus: " << beam.get_focus() << endl;
 	//beam.set_photonsPerPulse(fluence);
 	//beam.set_photonsPerPulsePerArea();
 cout << "DONE!!!!!" << endl;
@@ -227,7 +230,7 @@ cout << "DONE!!!!!" << endl;
 				filename = sstm.str();
 	
 				stringstream sstm0;
-				sstm0 << "/data/snp_" << setfill('0') << setw(3) << timeSlice;
+				sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice;
 				datasetname = sstm0.str();
 		
 				// Particle //
@@ -242,7 +245,7 @@ cout << "Load particle" << endl;
 				particle.load_qSample(filename,datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
 
 cout << "Done particle" << endl; 
-cout << "Atom pos: " << particle.get_atomPos() << endl;
+//cout << "Atom pos: " << particle.get_atomPos() << endl;
 
 				// Rotate atom positions
 				fmat myPos = particle.get_atomPos();
@@ -254,11 +257,13 @@ cout << "Atom pos: " << particle.get_atomPos() << endl;
 				for (int i = 0; i < sliceInterval; i++) {
 					string datasetname;
 					stringstream sstm0;
-					sstm0 << "/data/snp_" << setfill('0') << setw(3) << timeSlice-i;
+					sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
 					datasetname = sstm0.str();
 cout << "Read Nph" << endl; 					
 					vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
-cout << "Done Nph" << endl; 
+cout << "Done Nph" << endl;
+cout << "Nph: " << myNph << endl;
+myNph.print("myNph: ");
 					beam.set_photonsPerPulse(myNph[0]);
 					n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
 				}
@@ -447,7 +452,6 @@ cout << "Done Nph" << endl;
 					int createSubgroup = 0;
 					int success = hdf5writeVector(outputName,"data","","/data/data", detector_intensity,createSubgroup);
 					//success = hdf5writeT("filename1.h5","data","/data/data", detector_counts);
-					
 					
 					createSubgroup = 0;
 					//appendDataset = 1;
