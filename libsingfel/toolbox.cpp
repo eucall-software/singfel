@@ -117,13 +117,27 @@ fmat CToolbox::angleAxis2rot3D(fvec axis, float theta){
 	return rot3D;
 }
 
+/* NOT USED */
 // Let's use zyz convention after Heymann (2005)
 fvec CToolbox::quaternion2euler(fvec q) {
+	// input: quaternion
+	// output: euler(psi,theta,phi)
 	fvec euler(3);
+	// first rotation about phi, then theta, then psi
 	float psi, theta, phi;
-	psi=atan2( ( q(1)*q(2) - q(0)*q(3) ) , ( q(0)*q(2) + q(1)*q(3) ) );
-	theta=acos( pow(q(3),2) - pow(q(0),2) - pow(q(1),2) + pow(q(2),2) );
-	phi=atan2( ( q(0)*q(3) + q(1)*q(2) ) , ( q(1)*q(3) - q(0)*q(2) ) );
+	fmat myR = quaternion2rot3D(q);
+	cout << "quaternion2euler::myR: " << myR << endl;
+	theta = acos(myR(2,2));
+	cout << "quaternion2euler::theta: " << theta << endl;
+	if (theta == 0 || theta == datum::pi) {
+		cout << "quaternion2euler::here" << endl;
+		phi = 0;
+		psi = atan2(-myR(1,0),myR(0,0));
+	} else {
+		phi = atan2(myR(2,1),myR(2,0));
+		psi = atan2(myR(1,2),-myR(0,2));
+	}
+
 	euler(0) = psi;
 	euler(1) = theta;
 	euler(2) = phi;
@@ -132,38 +146,43 @@ fvec CToolbox::quaternion2euler(fvec q) {
 
 // zyz, euler in radians
 fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
+	
 	fvec quaternion(4);
+	
 	if (abs(psi) < datum::eps && abs(theta) < datum::eps && abs(phi) < datum::eps ) {
 		quaternion << 1 << 0 << 0 << 0;
 	} else { 
-	fmat R(3,3);
-	//cout << "theta:" << theta << endl;
-	//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
-	//cout << "quaternion: " << quaternion << endl;
+		fmat R(3,3);
+		//cout << "theta:" << theta << endl;
+		//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
+		//cout << "quaternion: " << quaternion << endl;
 	
-	R = euler2rot3D(psi, theta, phi);
+		R = euler2rot3D(psi, theta, phi);
 	
-	fvec VV(3);
-	VV << R(1,2)-R(2,1) << R(2,0)-R(0,2) << R(0,1)-R(1,0);
-    if (VV(0) == 0) {
-        VV = VV/norm(VV,2); // Added by Chuck
-    } else if (VV(0) > 0) {
-        VV = VV/norm(VV,2);
-    } else if(VV(0) < 0) {
-    	VV = VV/norm(VV,2)*-1;
-    }    
-    theta = acos(0.5*(trace(R)-1.0));
+		fvec VV(3);
+		VV << R(1,2)-R(2,1) << R(2,0)-R(0,2) << R(0,1)-R(1,0);
+		if (VV(0) == 0) {
+		    VV = VV/norm(VV,2); // Added by Chuck
+		} else if (VV(0) > 0) {
+		    VV = VV/norm(VV,2);
+		} else if(VV(0) < 0) {
+			VV = VV/norm(VV,2)*-1;
+		}    
+		theta = acos(0.5*(trace(R)-1.0));
 
-    float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
-    float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
-    
-    cout << "CCisTheta: " << CCisTheta << endl;
-    
-    if (CCisNegTheta > CCisTheta) {
-        theta = -theta;
-    }
-    quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+		float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
+		float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
+		
+		//cout << "CCisTheta: " << CCisTheta << endl;
+		
+		if (CCisNegTheta > CCisTheta) {
+		    theta = -theta;
+		}
+		quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+	}
 	
+	if (quaternion(0) < 0) {
+		quaternion *= -1;
 	}
 	
 	return quaternion;
@@ -200,9 +219,10 @@ fmat CToolbox::euler2rot3D(float psi, float theta, float phi) {
          << -sin(psi) << cos(psi) << 0 << endr
          << 0 << 0 << 1 << endr;
     fmat rot3D(3,3);
-    return rot3D = Rphi * Rtheta * Rpsi;
+    return rot3D = Rpsi * Rtheta * Rphi;
 }
 
+/* NOT USED */
 // Let's use zyz convention after Heymann (2005)
 fvec CToolbox::rot3D2euler(fmat rot3D) {
     fvec euler(3);
@@ -244,6 +264,40 @@ fmat CToolbox::get_wahba(fmat currentRot,fmat originRot) {
 	return myR;
 }
 
+// Given number of points, distribute evenly on hyper surface of a 3-sphere
+fmat CToolbox::pointsOn3Sphere(int numPts) {
+	fmat points;
+	points.zeros(2*numPts,3);
+	const int N = 3;	
+	float surfaceArea = N * pow(2,N) * pow(datum::pi,(N-1)/2) / (3*2); // for odd N
+	float delta = exp(log(surfaceArea/numPts)/2);
+	int iter = 0;
+	int ind = 0;
+	int maxIter = 1000;
+	float deltaW1,deltaW2;
+	float q0, q1, q2;
+	float w1, w2;
+	frowvec q(3); 
+	while (ind != numPts && iter < maxIter) {
+		ind = 0;
+		deltaW1 = delta;
+		for (w1 = 0.5*deltaW1; w1 < datum::pi; w1+=deltaW1) {
+			q0 = cos(w1);
+			deltaW2 = deltaW1/sin(w1);
+			for (w2 = 0.5*deltaW2; w2 < 2*datum::pi; w2+=deltaW2) {
+				q1 = sin(w1) * cos(w2);
+				q2 = sin(w1) * sin(w2);
+				q << q0 << q1 << q2 << endr;
+				points.row(ind)= q;
+				ind += 1;
+			}
+		}
+		delta *= exp(log((float)ind/numPts)/2);
+		iter += 1;
+	}
+	return points.rows(0, numPts-1);
+}
+
 // Given number of points, distribute evenly on hyper surface of a 4-sphere
 fmat CToolbox::pointsOn4Sphere(int numPts) {
 	fmat quaternion;
@@ -282,7 +336,98 @@ fmat CToolbox::pointsOn4Sphere(int numPts) {
 	return quaternion.rows(0, numPts-1);
 }
 
+// Calculate a set of sampling points on a polar grid given a cartesian grid
+void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, float rhoMax){
+	// samplePoints: polar grid positions (number of rotational samples x number of radial samples x 2)
+	// rhoMin: starting radial value in pixels
+	// rhoMax: last radial value in pixels
+	int numRotSamples = samplePoints->n_rows;
+	//cout << "numRotSamples: " << numRotSamples << endl;
+	float deltaTheta = (2 * datum::pi) / numRotSamples; // radians
+	fvec rotPositions(numRotSamples);
+	for (int i = 0; i < numRotSamples; i++) {
+		rotPositions(i) = i*deltaTheta;
+	}
+
+	int numRadSamples = samplePoints->n_cols;
+	//cout << "numRadSamples: " << numRadSamples << endl;
+	fvec radPositions(numRadSamples);
+	float deltaRad = floor(rhoMax - rhoMin + 1) / numRadSamples;
+	
+	for (int j = 0; j < numRadSamples; j++) {
+		radPositions(j) = j*deltaRad + rhoMin; 
+	}
+	
+	// Origin at centre of matrix
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+			samplePoints->at(i,j,0) = radPositions(j) * cos(rotPositions(i)); // x position
+			samplePoints->at(i,j,1) = radPositions(j) * sin(rotPositions(i)); // y position
+		}
+	}
+	// Shift origin to top left corner of matrix
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+			samplePoints->at(i,j,0) += (detectorWidth-1)/2.; // x position
+			samplePoints->at(i,j,1) += (detectorWidth-1)/2.; // y position
+		}
+	}
+	
+}
+
+// Interpolate detector intensities onto a set of sampling points
+void CToolbox::interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP){
+	// newDP: new interpolated diffraction pattern
+	// samplePoints: new sampling positions
+	// cartDP: diffraction pattern on a cartesian grid
+	int numRotSamples = samplePoints->n_rows;
+	int numRadSamples = samplePoints->n_cols;
+	
+	int xl, xu, yl, yu;
+	float fx, fy, cx, cy;
+
+	for (int i = 0; i < numRotSamples; i++) {
+		for (int j = 0; j < numRadSamples; j++) {
+		//	cout << "i,j: " << i << "," << j << endl;
+			xl = floor(samplePoints->at(i,j,0));
+			xu = xl + 1;
+			yl = floor(samplePoints->at(i,j,1));
+			yu = yl + 1;
+			fx = samplePoints->at(i,j,0) - xl;
+			fy = samplePoints->at(i,j,1) - yl;
+			cx = xu - samplePoints->at(i,j,0);
+			cy = yu - samplePoints->at(i,j,1);
+		/*
+		//if (i == 4 && j == 3) {
+				cout << samplePoints->at(i,j,0) << "," << samplePoints->at(i,j,1) << endl;
+		
+				cout << xl << endl;
+				cout << xu << endl;
+				cout << yl << endl;
+				cout << yu << endl;
+				
+				cout << fx << endl;
+				cout << fy << endl;
+				cout << cx << endl;
+				cout << cy << endl;
+				
+				cout << cartDP->at(yl,xl) << endl;
+				cout << cartDP->at(yl,xu) << endl;
+				cout << cartDP->at(yu,xl) << endl;
+				cout << cartDP->at(yu,xu) << endl;
+		//}
+		*/
+			newDP->at(i,j) = cartDP->at(yl,xl)*cx*cy + cartDP->at(yl,xu)*fx*cy + cartDP->at(yu,xl)*cx*fy + cartDP->at(yu,xu)*fx*fy;
+	
+		}
+	}
+	
+	
+	
+}
+
 // Take an Ewald's slice from a diffraction volume
+// Rename: extract_slice
 void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1) {
     int mySize = myIntensity1->n_rows;
     
@@ -329,6 +474,7 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 
 // Insert a Ewald's slice into a diffraction volume
 //void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, imat *myGridPoints, fcube *myIntensity1, fcube *myWeight1) {
+// Rename: insert_slice
 void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     

@@ -56,9 +56,9 @@ int main( int argc, char* argv[] ){
         } else if (boost::algorithm::iequals(argv[ n ], "-b")) {
             beamFile = argv[ n+1 ];
         } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
-            geomFile = argv[ n+1 ];   
-        } else if (boost::algorithm::iequals(argv[ n ], "--num_iterations")) {
-            numIterations = atoi(argv[ n+2 ]);
+            geomFile = argv[ n+1 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "--num_iterations")) {
+			numIterations = atoi(argv[ n+2 ]);    
         } else if (boost::algorithm::iequals(argv[ n ], "--num_images")) {
             numImages = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--num_slices")) {
@@ -203,7 +203,11 @@ int main( int argc, char* argv[] ){
 		myImages.zeros(numImages,numPixels);
 		fmat mySlices;
 		mySlices.zeros(numSlices,numPixels);
-				
+		fcube myPolarImages;
+		fcube myPolarStack;
+		fmat myPolarDP;
+		fcube samplePoints;
+		
 		cout << "Start" << endl;
 		cout << mySize << endl;
 		
@@ -213,59 +217,81 @@ int main( int argc, char* argv[] ){
 		fmat rot3D(3,3);
 		fvec u(3);
 		fvec quaternion(4);
+		
+		float rhoMin = 0;
+		float rhoMax = 0;
+		float circumference = 0; // pixels
+		int numRotSamples = 0;
+		int numRadSamples = 0;
+  		float deltaRot = 0;
+  		
 		// Setup initial diffraction volume by merging randomly
 		for (int r = 0; r < numImages; r++) {
 	  		// Get image
 	  		std::stringstream sstm;
-  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
 			filename = sstm.str();
 			myDP = load_asciiImage(filename);
-			//cout << "myDP: " << myDP(35,24) << endl;
-			
+
+			// Initialize
+			if (r == 0) {
+				rhoMax = (myDP.n_rows - 1)/2.;
+				circumference = rhoMax * (2 * datum::pi); // pixels
+				numRotSamples = ceil(circumference);
+				numRadSamples = floor(rhoMax - rhoMin)+1;
+				cout << "numRotSamples: " << numRotSamples << endl;
+				cout << "numRadSamples: " << numRadSamples << endl;
+				deltaRot = 2*datum::pi/numRotSamples;
+				myPolarDP = zeros<fmat>(numRotSamples,numRadSamples);
+				myPolarStack = zeros<fcube>(numRotSamples,numRadSamples,numSlices);
+				samplePoints = zeros<fcube>(numRotSamples,numRadSamples,2);
+				myPolarImages = zeros<fcube>(numRotSamples,numRadSamples,numImages);
+			}
+
 	        // Get rotation matrix
   			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
 			// generate uniform random quaternion on SO(3)
 			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
 					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
-			
-			/*
-			if (r == 0) {
-				quaternion << 1 << 0 << 0 << 0;
-			} else if (r == 1) {
-				quaternion << 0 << 1 << 0 << 0;
-			} else if (r == 2) {
-				quaternion << 0 << 0 << 1 << 0;
-			} */
+			if (quaternion(0) < 0) {
+				quaternion *= -1;
+			}
 			myR = CToolbox::quaternion2rot3D(quaternion);
 			active = 1;
 			CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
-			//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
+			
+			// myPolarImages
+			CToolbox::cart2polar(&samplePoints, myDP.n_cols, rhoMin, rhoMax);
+			CToolbox::interp_linear2D(&myPolarDP, &samplePoints, &myDP);
+			
+			// Save polar data to stack
+			myPolarImages.slice(r) = myPolarDP;
   		}
   		cout << "Done random merge" << endl;
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
-  		cout << "Done normalize" << endl;
   		
-  		/*
-  			// Save output
-	  		fmat mySlice;
-	  		for (int i = 0; i < mySize; i++) {
-	  			std::stringstream sstm;
-	  			sstm << output << setfill('0') << setw(6) << i << ".dat";
-				string outputName = sstm.str();
-				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
+  		// Distribution of quaternions 		
+  		fmat myPoints3 = CToolbox::pointsOn3Sphere(numSlices);
+		fmat myEulers(myPoints3.n_rows,3);
+		fmat myQuaternions(myPoints3.n_rows,4);
+		float theta = datum::pi;
+		for (int i = 0; i < myPoints3.n_rows; i++) {
+			myR = CToolbox::angleAxis2rot3D(trans(myPoints3.row(i)), theta);
+			myR.print("myR: "); 
+			fvec myEuler = CToolbox::rot3D2euler(myR);
+			fvec myQ = CToolbox::euler2quaternion(myEuler(0), myEuler(1), myEuler(2));
+			if (myQ(0) < 0) {
+				myQ *= -1;
 			}
-  		*/
-  		
-  		// Distribution of quaternions
-  		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
-  		//myQuaternions.print("4Sphere: ");
-  		cout << "Done 4Sphere" << endl;
-  		//myQuaternions.print("Q: ");
-  		
+			myEulers.row(i) = trans(myEuler);
+			myQuaternions.row(i) = trans(myQ);
+		}
+
+  		cout << "Done 3Sphere" << endl;
+
   		wall_clock timerMaster;
-  		
+  		  		
   		for (int iter = 0; iter < numIterations; iter++) {
   		
 	  		// Expansion
@@ -273,22 +299,17 @@ int main( int argc, char* argv[] ){
 			timerMaster.tic();
 			
 			for (int s = 0; s < numSlices; s++) {
-				//cout << s << endl;
 			    // Get rotation matrix
 				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(s)));
-				//cout << "Got myR" << endl;
 				active = 1;
 				CToolbox::slice3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, active, interpolate);
 				
-				/*
-				fmat mySlice;
-				std::stringstream sstm;
-	  			sstm << output << setfill('0') << setw(6) << s << ".dat";
-				string outputName = sstm.str();
-				mySlice = myDP.save(outputName,raw_ascii);
-				*/
-				
-				mySlices.row(s) = reshape(myDP,1,numPixels);
+				// myDP to myPolarDP
+				CToolbox::cart2polar(&samplePoints, myDP.n_cols, rhoMin, rhoMax);
+				CToolbox::interp_linear2D(&myPolarDP, &samplePoints, &myDP);
+
+				// Save polar slices to stack
+				myPolarStack.slice(s) = myPolarDP;
 	  		}
 			
 			cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
@@ -297,36 +318,51 @@ int main( int argc, char* argv[] ){
 			cout << "Start maximization" << endl;
 			timerMaster.tic();
 			
-	  		fmat lse(numImages,numSlices); // least squared error
-	  		fmat imgRep;
-			imgRep.zeros(numSlices,numPixels);
+	  		fmat cc(numImages,numSlices); // cross correlation
+	  		umat bestAzimuth(numImages,numSlices); // record best azimuthal rotation
+	  		
+	  		//cout << "calculate cc" << endl;
+	  		
+	  		cx_fmat A, B;
+	  		fmat xcorr;
 	  		for (int i = 0; i < numImages; i++) {
-	  			//cout << iter << ": " << i << endl;
-	  			
-	  			imgRep = repmat(myImages.row(i), numSlices, 1);
-	  			
-	  			//cout << "imgRep: " << imgRep(i,0) << " " << imgRep(i,1) << endl;
-	  			//cout << "imgRep: " << imgRep(i,40) << " " << imgRep(i,41) << endl;
-	  			//cout << "mySlices: " << mySlices(i,40) << " " << mySlices(i,41) << endl;
-	  			
-	  			//cout << imgRep(i,40) - mySlices(i,40) << endl;
-	  			
-	  			lse.row(i) = trans(sum(pow(imgRep-mySlices,2),1));
+	  			cout << "i: " << i << endl;
+	  			A = conj(fft2(myPolarImages.slice(i)));
+	  			int numShifts = 0;
+				float maxVal = 0;
+	  			for (int j = 0; j < numSlices; j++) {
+					B = fft2(myPolarStack.slice(j));
+					xcorr = real(fft2(A % B));			
+					for (int k = 0; k < numRotSamples; k++) {
+						if (xcorr(k,0) > maxVal) {
+							numShifts = k;
+							maxVal = xcorr(k,0);
+						}
+					}
+					cc(i,j) = maxVal;
+	  				bestAzimuth(i,j) = numShifts;
+				}	  			
 	  		}
-	  		uvec bestFit(numImages);
-	  		//lse.print("lse:");
-	  		float lowest;
+	  		
+	  		//cout << "best cc" << endl;
+	  		
+	  		uvec bestPsi(numImages);
+	  		uvec bestPhiTheta(numImages);
+	  		float highest;
 	  		for (int i = 0; i < numImages; i++) {
-	  			lowest = lse(i,0);
-	  			bestFit(i) = 0;
+	  			highest = cc(i,0);
+	  			bestPsi(i) = 0;
+	  			bestPhiTheta(i) = 0;
 				for (int j = 0; j < numSlices; j++) {
-					if (lowest > lse(i,j)) {
-						lowest = lse(i,j);
-						bestFit(i) = j; // minimum lse index
+					if (highest > cc(i,j)) {
+						highest = cc(i,j);
+						bestPsi(i) = bestAzimuth(i,j); // maximum cc index
+						bestPhiTheta(i) = j;
 					}
 	  			}
 	  		}
-	  		//bestFit.print("bestFit: ");
+	  		//bestPsi.print("bestPsi: ");
+	  		//bestPhiTheta.print("bestPhiTheta: ");
 	  		cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 	  		
 	  		// Compression
@@ -335,15 +371,23 @@ int main( int argc, char* argv[] ){
 			 		
 	  		myWeight.zeros(mySize,mySize,mySize);
 			myIntensity.zeros(mySize,mySize,mySize);
+			//myEulers.print("myEulers: ");
 	  		for (int r = 0; r < numImages; r++) {
+	  		//cout << "r: " << r << endl;
 		  		// Get image
 		  		std::stringstream sstm;
-	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+	  			sstm << imageList << setfill('0') << setw(6) << r << ".dat";
 				filename = sstm.str();
 				myDP = load_asciiImage(filename);
-			    // Get rotation matrix
-			    //cout << myQuaternions.row(bestFit(r)) << endl;
-				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(bestFit(r))));
+			    // Get best fit from phi and theta grid
+			    frowvec euler = myEulers.row(bestPhiTheta(r));
+			    //cout << "euler: " << euler << endl;
+			    // Apply azimuthal rotation
+			    euler(0) += bestPsi(r) * deltaRot; // this could be minus depending on rotation direction
+			    //cout << "euler: " << euler << endl;
+			    fvec newQuat = CToolbox::euler2quaternion(euler(0),euler(1),euler(2)); // psi,theta,phi
+			    //cout << "newQuat: " << newQuat << endl;
+				myR = CToolbox::quaternion2rot3D(newQuat);
 				active = 1;
 				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
 	  		}
@@ -356,13 +400,13 @@ int main( int argc, char* argv[] ){
 	  		fmat mySlice;
 	  		for (int i = 0; i < mySize; i++) {
 	  			std::stringstream sstm;
-	  			sstm << output << "vol" << iter << "_" << setfill('0') << setw(6) << i << ".dat";
+	  			sstm << output << iter << "_" << setfill('0') << setw(6) << i << ".dat";
 				string outputName = sstm.str();
 				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
 			}
 			
 		}
-		
+	
     }
 
 	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;

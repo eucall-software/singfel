@@ -33,6 +33,7 @@ public:
 	static float corrCoeff(arma::fmat, arma::fmat);
 	
 	static arma::fmat get_wahba(arma::fmat,arma::fmat);
+	static arma::fmat pointsOn3Sphere(int);
 	static arma::fmat pointsOn4Sphere(int);
 	
 	
@@ -44,6 +45,9 @@ public:
 	static void merge3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, arma::fcube*, int active = 0, std::string interpolate="nearest");
 		
 	static void normalize(arma::fcube*, arma::fcube*);
+	
+	static void cart2polar(fcube *samplePoints, int detectorWidth, float rhoMin, float rhoMax);
+	static void interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP);
 };
 
 }

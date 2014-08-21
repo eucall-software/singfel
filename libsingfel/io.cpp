@@ -374,6 +374,16 @@ fvec load_asciiQuaternion(string x){
 	return quaternion;
 }
 
+fmat load_asciiRotation(string x){
+	fmat rotation;
+	bool status = rotation.load(x,raw_ascii);
+	if(status == false){
+		cout << "Error: problem with loading file, " << x << endl;
+		exit(EXIT_FAILURE);
+	}
+	return rotation;
+}
+
 void load_constant(int ang){
 	cout << ang << endl;
 }
