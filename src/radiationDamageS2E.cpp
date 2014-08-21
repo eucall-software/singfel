@@ -134,7 +134,7 @@ int main( int argc, char* argv[] ){
 	CBeam beam = CBeam();
 	string filename;
 	stringstream sstm;
-	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(6) << pmiStartID << ".h5";
+	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) << pmiStartID << ".h5";
 	filename = sstm.str();
 //cout << filename << endl;
 //cout << "get vector" << endl;
@@ -223,7 +223,7 @@ cout << "DONE!!!!!" << endl;
 				string datasetname;
 
 				stringstream sstm;
-				sstm << inputDir << "/pmi_out_" << setfill('0') << setw(6) << pmiID << ".h5";
+				sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) << pmiID << ".h5";
 				filename = sstm.str();
 	
 				stringstream sstm0;
@@ -290,7 +290,7 @@ cout << "Done Nph" << endl;
 			
 				if (timeSlice == numSlices) {
 					stringstream sstm3;
-					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(7) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
 					
@@ -387,7 +387,7 @@ cout << "Done Nph" << endl;
 		
 				if (timeSlice == numSlices) {
 					stringstream sstm3;
-					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(7) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
 /*					
@@ -440,7 +440,7 @@ cout << "Done Nph" << endl;
 			
 				if (timeSlice == numSlices) {
 					stringstream sstm3;
-					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(6) 
+					sstm3 << outputDir << "/diffr_out_" << setfill('0') << setw(7) 
 					<< patternID << ".h5";
 					outputName = sstm3.str();
 					
