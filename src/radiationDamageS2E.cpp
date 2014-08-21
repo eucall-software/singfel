@@ -283,7 +283,7 @@ cout << "Done Nph" << endl;
 				float* p_mem = particle.atomPos.memptr();
 				cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, det.numPix, particle.numAtoms);
 		
-				fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();;
+				fmat detector_intensity = F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 
 				// Add to incoherent sum of diffraction patterns
 				detector_counts += CToolbox::convert_to_poisson(detector_intensity);
