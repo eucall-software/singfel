@@ -55,6 +55,7 @@ int main( int argc, char* argv[] ){
 	int numSlices;
 	int pmiStartID;
 	int pmiEndID;
+	int dpID;
 	int numDP;
 
     // Let's parse input
@@ -80,6 +81,8 @@ int main( int argc, char* argv[] ){
             pmiStartID = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--pmiEndID")) {
             pmiEndID = atoi(argv[ n+2 ]);
+        } else if (boost::algorithm::iequals(argv[ n ], "--dpID")) {
+            dpID = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--numDP")) {
             numDP = atoi(argv[ n+2 ]);
         }
@@ -123,18 +126,14 @@ int main( int argc, char* argv[] ){
 		}
 	}
 	CBeam beam = CBeam();
-	//string filename;
-	//stringstream sstm;
-	//sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) << pmiStartID << ".h5";
-	//filename = sstm.str();
 
-    //cout << "pmi filename: " << filename << endl;
-//cout << "get vector" << endl;
-//	fmat myTemp = hdf5readT<fmat>(filename,"/data/snp_001/r");
-//cout << "get photon energy" << endl;
-//	fvec myPhotonEnergy = hdf5readT<fvec>(filename,"/history/parent/detail/params/photonEnergy");
-//cout << myPhotonEnergy << endl;
-//	beam.set_photonsPerPulse(myPhotonEnergy[0]);
+	string filename;
+	stringstream sstm;
+	sstm << inputDir << "/prop/prop_out_" << setfill('0') << setw(7) << 1 << ".h5";
+	filename = sstm.str();
+	cout << "filename: " << filename << endl;
+	vec myPhotonEnergy = hdf5readT<vec>(filename,"/params/photonEnergy"); // FIXME: Can not read photon energy from prop_out
+	myPhotonEnergy.print("myPhotonEnergy: ");
 					
 	beam.set_photon_energy(photon_energy);
 	beam.set_focus(focus_radius*2,"square"); // radius to diameter
@@ -216,10 +215,11 @@ cout << "DONE!!!!!" << endl;
 		// input file
 		string filename;
 		stringstream sstm;
-		sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) << pmiID << ".h5";
+		sstm << inputDir << "/pmi/pmi_out_" << setfill('0') << setw(7) << pmiID << ".h5";
 		filename = sstm.str();
 
-		for (int dp = 0; dp < numDP; dp++) {
+		int dp = dpID;
+		//for (int dp = 0; dp < numDP; dp++) {
 			patternID = (pmiID-1)*numDP+dp+1;
 			cout << "patternID: " << patternID << endl;
 
@@ -405,7 +405,7 @@ cout << "DONE!!!!!" << endl;
 			createSubgroup = 0;
 			double focusArea = beam.get_focus_area();
 			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
-		} // end dp
+		//} // end dp
 	} // end pmiID
 	cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
   	return 0;
