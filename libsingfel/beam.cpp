@@ -102,12 +102,9 @@ double CBeam::get_focus(){
 }
 
 void CBeam::set_focusArea() {
-    cout << "focus_shape: " << focus_shape << endl;
 	if (focus_shape == "square") {
-	cout << "enter square" << endl;
 		focus_area = pow(focus,2);	// d^2
 	} else {
-	cout << "enter circle" << endl;
 		focus_area = datum::pi * pow(focus/2,2);	// pi*r^2
 	}
 }

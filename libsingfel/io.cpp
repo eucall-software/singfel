@@ -187,7 +187,7 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
 	//const int    NX = 1456;		// output buffer dimensions
 	//const int    NY = 1456;
 	int NX, NY;
-	const int    RANK_OUT = 2;
+	const int RANK_OUT = 2;
    
     fmat myDP;
    /*
@@ -254,9 +254,9 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
        */
       hsize_t dims_out[2];
       int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-      cout << "rank " << rank << ", dimensions " <<
-	      (unsigned long)(dims_out[0]) << " x " <<
-	      (unsigned long)(dims_out[1]) << endl;
+      //cout << "rank " << rank << ", dimensions " <<
+	  //    (unsigned long)(dims_out[0]) << " x " <<
+	  //    (unsigned long)(dims_out[1]) << endl;
 	  
 	  NX = (unsigned long)(dims_out[0]);
 	  NY = (unsigned long)(dims_out[1]);

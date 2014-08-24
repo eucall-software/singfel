@@ -400,13 +400,12 @@ template<typename T> int hdf5writeScalar(std::string filename, std::string group
 	
 		H5File file;
 		// Check if file exists, if not create a new file
-		if ( !boost::filesystem::exists( filename ) ) {
-			//std::cout << "file does not exist" << std::endl;
-			// Create a file.
-			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
-		} else {
+		if ( boost::filesystem::exists( filename ) ) {
 			//std::cout << "file does exist" << std::endl;
 			file = H5File(FILE_NAME, H5F_ACC_RDWR);
+		} else {
+			//std::cout << "file does not exist" << std::endl;
+			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
 		}
 
 		// Check if group exists
@@ -426,11 +425,13 @@ template<typename T> int hdf5writeScalar(std::string filename, std::string group
 
 		if (createSubgroup) {
 			group = Group( file.createGroup( subgroupname ));
+			//cout << "create subgroupname: " << subgroupname  << endl;
 			//cout << " Subgroup created." << endl;
 		}
 
 		if (!subgroupname.empty()){
 			group = Group( file.openGroup( subgroupname ));
+			//cout << "open subgroupname: " << subgroupname << endl;
 			//cout << " writing to subgroup." << endl;
 		}
 
@@ -645,7 +646,7 @@ template<typename T> T hdf5readVector(std::string filename, std::string datasetn
       // Get the class of the datatype that is used by the dataset.
       	H5T_class_t type_class = dataset.getTypeClass();
 
-cout << "type: " << type_class << endl;
+//cout << "type: " << type_class << endl;
 
       // Get class of datatype and print message if it's a float.
       if( type_class == H5T_FLOAT ) {
@@ -688,10 +689,10 @@ cout << "type: " << type_class << endl;
       int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
 
 	  if (rank == 1) {
-cout << "rank: " << rank << endl;
-cout << "dimensions " << (unsigned long)(dims_out[0]) << endl;
+//cout << "rank: " << rank << endl;
+//cout << "dimensions " << (unsigned long)(dims_out[0]) << endl;
 			if( type_class == H5T_NATIVE_DOUBLE ) {
-cout << "Read doubles" << endl;			
+//cout << "Read doubles" << endl;			
 				double data_out[dims_out[0]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 					data_out[i] = 0;
@@ -702,7 +703,7 @@ cout << "Read doubles" << endl;
 					myData.at(i) = data_out[i];
 				}
 			} else if( type_class == H5T_NATIVE_FLOAT ) {
-cout << "Read floats" << endl;			
+//cout << "Read floats" << endl;			
 				float data_out[dims_out[0]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 					data_out[i] = 0;
@@ -713,7 +714,7 @@ cout << "Read floats" << endl;
 					myData.at(i) = data_out[i];
 				}
 			} else if( type_class == H5T_NATIVE_INT ) {
-cout << "Read ints" << endl;
+//cout << "Read ints" << endl;
 				int data_out[dims_out[0]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 					data_out[i] = 0;
@@ -724,7 +725,7 @@ cout << "Read ints" << endl;
 					myData.at(i) = data_out[i];
 				}
 			} else if( type_class == H5T_NATIVE_UINT ) {
-cout << "Read uints" << endl;			
+//cout << "Read uints" << endl;			
 				unsigned int data_out[dims_out[0]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 					data_out[i] = 0;
@@ -735,9 +736,9 @@ cout << "Read uints" << endl;
 					myData.at(i) = data_out[i];
 				}
 			} else if( type_class == H5T_STD_I32LE ) {
-cout << "Read 32bit ints" << endl;			
+//cout << "Read 32bit ints" << endl;			
 			} else {
-cout << "Read no type" << endl;
+//cout << "Read no type" << endl;
 				int data_out[dims_out[0]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 					data_out[i] = 0;
@@ -752,8 +753,8 @@ cout << "Read no type" << endl;
 	
 			}
 		} else if (rank == 2) {
-cout << "rank: " << rank << endl;		
-cout << "dimensions " << (unsigned long)(dims_out[0]) << "x" << (unsigned long)(dims_out[1]) << endl;
+//cout << "rank: " << rank << endl;		
+//cout << "dimensions " << (unsigned long)(dims_out[0]) << "x" << (unsigned long)(dims_out[1]) << endl;
 			if( type_class == H5T_NATIVE_DOUBLE ) {
 				double data_out[dims_out[0]][dims_out[1]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
@@ -769,7 +770,7 @@ cout << "dimensions " << (unsigned long)(dims_out[0]) << "x" << (unsigned long)(
 				}
 				}
 			} else if( type_class == H5T_NATIVE_FLOAT ) {
-cout << "Enter fmat" << endl;			
+//cout << "Enter fmat" << endl;			
 				float data_out[dims_out[0]][dims_out[1]];
 				for (unsigned int i = 0; i < dims_out[0]; i++) {
 				for (unsigned int j = 0; j < dims_out[1]; j++) {
@@ -1020,7 +1021,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 	int NX, NY, NZ;
    
     T myData;
-	
+
    /*
     * Try block to detect exceptions raised by any of the calls inside it
     */
@@ -1046,8 +1047,8 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
       /*
        * Get class of datatype and print message if it's a float.
        */
-      if( type_class == H5T_FLOAT ) {
-	 	cout << "Data set has FLOAT type" << endl;
+      if( type_class == H5T_FLOAT ) {// H5T_NATIVE_DOUBLE ) {//H5T_FLOAT ) {
+	 	//cout << "Data set has FLOAT type" << endl;
 
          /*
 	  	  * Get the integer datatype
@@ -1065,9 +1066,9 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
           * Get size of the data element stored in file and print it.
           */
          size_t size = intype.getSize();
-         cout << "Data size is " << size << endl;
+         //cout << "Data size is " << size << endl;
       } else if( type_class == H5T_INTEGER ) {
-	 	//cout << "Data set has INTEGER type" << endl;
+	 	// cout << "Data set has INTEGER type" << endl;
 	 	 /*
 	  	  * Get the integer datatype
           */
@@ -1095,14 +1096,14 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
        * Get the number of dimensions in the dataspace.
        */
       int rank = dataspace.getSimpleExtentNdims();
-
+      //cout << "rank " << rank << endl;
       /*
        * Get the dimension size of each dimension in the dataspace and
        * display them.
        */
       hsize_t dims_out[rank];
       int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-      
+/*      
 		if (rank == 1) {
 			cout << "rank " << rank << ", dimensions " <<
 				(unsigned long)(dims_out[0]) << endl;
@@ -1116,7 +1117,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 				(unsigned long)(dims_out[1]) << " x " <<
 				(unsigned long)(dims_out[2]) << endl;
 		}
-		
+*/		
 		if (rank == 1) {
 			NX = (unsigned long)(dims_out[0]);
 		} else if (rank == 2) {
@@ -1198,7 +1199,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
        * memory and display the data.
        */
 		if (typeid(myData) == typeid(mat)) {
-			cout << "typeid = mat" << endl;
+			//cout << "typeid = mat" << endl;
 			double data_out[NX][NY]; /* output buffer */	
 			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
 			myData.zeros(NX,NY); 
@@ -1208,7 +1209,7 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}
 			}      
 		} else if (typeid(myData) == typeid(fmat)) {
-		cout << "typeid = fmat" << endl;
+		//cout << "typeid = fmat" << endl;
 			float data_out[NX][NY]; /* output buffer */	
 			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
 			myData.zeros(NX,NY); 
@@ -1237,18 +1238,17 @@ template<typename T> T hdf5readT(std::string filename, std::string datasetname){
 			}      
 		} else if (typeid(myData) == typeid(vec) || 
                    typeid(myData) == typeid(rowvec)) {
-                   cout << "typeid = vec | rowvec" << endl;
+                   //cout << "typeid = vec | rowvec" << endl;
             if (rank == 2 && NY > NX) NX = NY;
 			double data_out[NX]; /* output buffer */
 			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
 			myData.zeros(NX); 
 			for (int i = 0; i < NX; i++) {
-			cout << i << ":" << data_out[i] << endl;
 				myData(i) = data_out[i];
 			}
 		} else if (typeid(myData) == typeid(fvec) || 
                    typeid(myData) == typeid(frowvec)) {
-                   cout << "typeid = fvec | frowvec" << endl;
+                   //cout << "typeid = fvec | frowvec" << endl;
             if (rank == 2 && NY > NX) NX = NY;
 			float data_out[NX]; /* output buffer */	
 			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
