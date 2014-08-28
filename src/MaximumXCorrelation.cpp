@@ -197,6 +197,7 @@ int main( int argc, char* argv[] ){
 		
   		string filename;
   		fmat myDP;
+  		myDP.zeros(mySize,mySize);
   		fmat myR;
   		myR.zeros(3,3);
   		//float psi,theta,phi;
@@ -261,20 +262,12 @@ int main( int argc, char* argv[] ){
 				myIntensity.slice(i).load(outputName,raw_ascii);
 			}
   		}
-  		/*
-  			// Save output
-	  		fmat mySlice;
-	  		for (int i = 0; i < mySize; i++) {
-	  			std::stringstream sstm;
-	  			sstm << output << setfill('0') << setw(6) << i << ".dat";
-				string outputName = sstm.str();
-				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
-			}
-  		*/
   		
   		// Distribution of quaternions
   		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
-  		//myQuaternions.print("4Sphere: ");
+  	
+  		myQuaternions.save("4Sphere.dat",raw_ascii);
+  		
   		cout << "Done 4Sphere" << endl;
   		//myQuaternions.print("Q: ");
   		
@@ -288,25 +281,26 @@ int main( int argc, char* argv[] ){
 			
 			for (int s = 0; s < numSlices; s++) {
 				//cout << s << endl;
+				myDP.zeros(mySize,mySize);
 			    // Get rotation matrix
 				myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(s)));
-				//cout << "Got myR" << endl;
+				myR.print("myR:");
 				active = 1;
 				CToolbox::slice3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, active, interpolate);
 				
-				/*
+				// Save slices
 				fmat mySlice;
 				std::stringstream sstm;
-	  			sstm << output << setfill('0') << setw(6) << s << ".dat";
+	  			sstm << output << "slices" << iter << "_"<< setfill('0') << setw(7) << s << ".dat";
 				string outputName = sstm.str();
+				cout << "Saving " << outputName << endl;
 				mySlice = myDP.save(outputName,raw_ascii);
-				*/
 				
 				mySlices.row(s) = reshape(myDP,1,numPixels);
 	  		}
 			
 			cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
-			
+/*			
 	  		// Maximization
 			cout << "Start maximization" << endl;
 			timerMaster.tic();
@@ -315,16 +309,7 @@ int main( int argc, char* argv[] ){
 	  		fmat imgRep;
 			imgRep.zeros(numSlices,numPixels);
 	  		for (int i = 0; i < numImages; i++) {
-	  			//cout << iter << ": " << i << endl;
-	  			
 	  			imgRep = repmat(myImages.row(i), numSlices, 1);
-	  			
-	  			//cout << "imgRep: " << imgRep(i,0) << " " << imgRep(i,1) << endl;
-	  			//cout << "imgRep: " << imgRep(i,40) << " " << imgRep(i,41) << endl;
-	  			//cout << "mySlices: " << mySlices(i,40) << " " << mySlices(i,41) << endl;
-	  			
-	  			//cout << imgRep(i,40) - mySlices(i,40) << endl;
-	  			
 	  			lse.row(i) = trans(sum(pow(imgRep-mySlices,2),1));
 	  		}
 	  		uvec bestFit(numImages);
@@ -341,6 +326,17 @@ int main( int argc, char* argv[] ){
 	  			}
 	  		}
 	  		//bestFit.print("bestFit: ");
+	  		// Save lse and bestFit
+	  		cout << "Saving least square error... " << endl;
+	  		std::stringstream sstm;
+	  		sstm << output << "lse" << iter << ".dat";
+			string outputName = sstm.str();
+			lse.save(outputName,raw_ascii);
+			std::stringstream sstm1;
+	  		sstm1 << output << "bestFit" << iter << ".dat";
+			outputName = sstm1.str();
+			bestFit.save(outputName,raw_ascii);			
+			
 	  		cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 	  		
 	  		// Compression
@@ -374,9 +370,9 @@ int main( int argc, char* argv[] ){
 				string outputName = sstm.str();
 				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
 			}
-			
+		*/		
 		}
-		
+	
     }
 
 	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
