@@ -65,7 +65,7 @@ void CToolbox::quaternion2AngleAxis(fvec quaternion, float& theta, fvec& axis){
 		// convert to row vector
 		quaternion = quaternion.t();
 	} else {
-		cout << "Not a quaternion" << endl;
+		cout << "Not a quaternion. Exiting..." << endl;
 		exit(0);
 	}
 	float HA = acos(quaternion(0));

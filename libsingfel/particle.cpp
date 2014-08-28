@@ -26,7 +26,7 @@ CParticle::CParticle (){
 void CParticle::load_atomType(string filename, string datasetname){ // load from hdf5
 	atomType = hdf5readT<irowvec>(filename,datasetname);
 	//atomType = hdf5readVector<irowvec>(filename,datasetname);
-	atomType.print("atomType: ");
+	//atomType.print("atomType: ");
 	numAtomTypes = atomType.n_elem;
 }
 
@@ -62,7 +62,7 @@ void CParticle::load_atomPos(string filename, string datasetname){ // load from 
 	//atomPos = hdf5readVector<fmat>(filename,datasetname);
 	numAtoms = atomPos.n_rows;
 	formFactorList = zeros<urowvec>(1,numAtoms);
-	CParticle::atomPos.print("set_atomPos: ");
+	//CParticle::atomPos.print("set_atomPos: ");
 }
 
 void CParticle::load_atomPos(string x){ // load from ascii

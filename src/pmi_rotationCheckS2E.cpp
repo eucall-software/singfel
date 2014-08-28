@@ -106,15 +106,25 @@ int main( int argc, char* argv[] ){
 
 cout << "orientation: " << particle.get_particleOrientation() << endl;	
 cout << "Done particle" << endl;
-cout << "Atom pos: " << particle.get_atomPos() << endl;
+//cout << "Atom pos: " << particle.get_atomPos() << endl;
 
 	// Rotate atom positions
-	fmat myPos = particle.get_atomPos();
-	fmat rot3D = CToolbox::quaternion2rot3D(particle.get_particleOrientation());
+	fmat myPos(3,3);
+	myPos  << 1 << 0 << 0 << endr
+  << 0 << 1 << 0 << endr
+  << 0 << 0 << 1 << endr
+  << 0.3 << 0.4 << 0.5 << endr; 
+	//fmat myPos = particle.get_atomPos();
+	fvec quat(4);
+	quat << sqrt(0.5) << sqrt(0.5) << 0 << 0;
+	fmat rot3D = CToolbox::quaternion2rot3D(quat);
+	//fmat rot3D = CToolbox::quaternion2rot3D(particle.get_particleOrientation());
+cout << "myPos: " << myPos << endl;
 cout << "rot3D: " << rot3D << endl;	
 
-cout << "Atom pos Trans: " << myPos * trans(rot3D) << endl;
-cout << "Atom pos: " << myPos * rot3D << endl;
+cout << "Atom pos Trans: " << myPos * trans(rot3D) << endl; // right handed rotation
+cout << "Atom pos: " << myPos * rot3D << endl; // left handed rotation
+cout << "Atom pos: " << rot3D * trans(myPos) << endl; //
 	return 0;
 }			
 

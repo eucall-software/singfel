@@ -8,6 +8,7 @@ double CBeam::lambda; 							// (m) wavelength
 double CBeam::photon_energy; 					// (eV) photon energy
 double CBeam::k;								// (m^-1)
 double CBeam::focus;							// (m) beam focus diameter
+string CBeam::focus_shape;                      // focus shape: {square, default:circle}
 double CBeam::focus_area; 						// (m^2)
 double CBeam::n_phot;							// number of photons per pulse
 double CBeam::phi_in;  							// number of photon per pulse per area (m^-2)
@@ -18,6 +19,7 @@ CBeam::CBeam (){
 	photon_energy = 0;
 	k = 0;
 	focus = 0;
+	focus_shape = "circle";
 	focus_area = 0;
 	n_phot = 0;
 	phi_in = 0;
@@ -85,12 +87,26 @@ void CBeam::set_focus(double x){
 	update();
 }
 
+void CBeam::set_focus(double x, string shape){
+	focus = x;
+	if (shape == "square") {
+		focus_shape = shape;
+	} else if (shape == "circle") {
+		focus_shape = shape;
+	}
+	update();
+}
+
 double CBeam::get_focus(){
 	return focus;
 }
 
-void CBeam::set_focusArea(){
-	focus_area = datum::pi * pow(focus/2,2);	// pi*r^2
+void CBeam::set_focusArea() {
+	if (focus_shape == "square") {
+		focus_area = pow(focus,2);	// d^2
+	} else {
+		focus_area = datum::pi * pow(focus/2,2);	// pi*r^2
+	}
 }
 
 void CBeam::set_photonsPerPulse(double x){
