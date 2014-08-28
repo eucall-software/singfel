@@ -262,7 +262,7 @@ int main( int argc, char* argv[] ){
 		int active = 1;
 		string interpolate = "linear";// "nearest";
 		
-  		for (int r = 0; r < 1; r++) {//(int r = 0; r < numImages; r++) {
+  		for (int r = 0; r < numImages; r++) {
 	  		// Get image
 	  		std::stringstream sstm;
   			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
@@ -284,7 +284,6 @@ int main( int argc, char* argv[] ){
 			//theta = euler(1);
 			//phi = euler(2);
 			//euler.print("euler:");
-			myR = eye<fmat>(3,3);
 			//myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
 			myR.print("myR: ");
 			//myR = trans(myR);
@@ -296,6 +295,7 @@ int main( int argc, char* argv[] ){
   		CToolbox::normalize(&myIntensity,&myWeight);
   		
   		// ########### Save diffraction volume ##############
+  		cout << "Saving diffraction volume..." << endl;
 		for (int i = 0; i < mySize; i++) {
 			std::stringstream sstm;
 			sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
