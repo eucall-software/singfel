@@ -44,7 +44,9 @@ int main( int argc, char* argv[] ){
     int numImages = 0;
     int mySize = 0;
     int numSlices = 0;
+    int startIter = 0;
     string output;
+    string intialVolume = "randomMerge";
     // Let's parse input
     // image.lst and euler.lst are not neccessarily in the same order! So can not use like this. 		// Perhaps use hdf5 to combine the two.
     for (int n = 1; n < argc; n++) {
@@ -67,7 +69,11 @@ int main( int argc, char* argv[] ){
             mySize = atof(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--output_name")) {
             output = argv[ n+2 ];
-        }
+        } else if (boost::algorithm::iequals(argv[ n ], "--start_iter_from")) {
+		        startIter = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--initial_volume")) {
+		        intialVolume = argv[ n+2 ];
+		}
     }
     
 	/****** Beam ******/
@@ -184,10 +190,10 @@ int main( int argc, char* argv[] ){
 		pix = pix * 1e-10; // (nm)
 		pix_mod = sqrt(sum(pix%pix,1));		
 		pix_max = max(pix_mod);
-        float inc_res = (mySize-1)/(2*pix_max);
+        float inc_res = (mySize-1)/(2*pix_max/sqrt(2));
         pix = pix * inc_res;
         pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = max(pix_mod);
+		pix_max = cx;//max(pix_mod);
 		
   		string filename;
   		fmat myDP;
@@ -213,40 +219,48 @@ int main( int argc, char* argv[] ){
 		fmat rot3D(3,3);
 		fvec u(3);
 		fvec quaternion(4);
-		// Setup initial diffraction volume by merging randomly
-		for (int r = 0; r < numImages; r++) {
-	  		// Get image
-	  		std::stringstream sstm;
-  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
-			filename = sstm.str();
-			myDP = load_asciiImage(filename);
-			//cout << "myDP: " << myDP(35,24) << endl;
+		if ( strcmp(intialVolume.c_str(),"randomMerge")==0 ) {
+			// Setup initial diffraction volume by merging randomly
+			for (int r = 0; r < numImages; r++) {
+		  		// Get image
+		  		std::stringstream sstm;
+	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+				filename = sstm.str();
+				myDP = load_asciiImage(filename);
+			    // Get rotation matrix
+	  			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
+				// generate uniform random quaternion on SO(3)
+				quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
+						   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
 			
-	        // Get rotation matrix
-  			u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
-			// generate uniform random quaternion on SO(3)
-			quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-					   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
-			
-			/*
-			if (r == 0) {
-				quaternion << 1 << 0 << 0 << 0;
-			} else if (r == 1) {
-				quaternion << 0 << 1 << 0 << 0;
-			} else if (r == 2) {
-				quaternion << 0 << 0 << 1 << 0;
-			} */
-			myR = CToolbox::quaternion2rot3D(quaternion);
-			active = 1;
-			CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-			myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
-			//cout << "myImageRow: " << myImages(r,0) << " " << myImages(r,1) << " " << myImages(r,2) << endl;
+				myR = CToolbox::quaternion2rot3D(quaternion);
+				active = 1;
+				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+				myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+	  		}
+	  		cout << "Done random merge" << endl;
+	  		// Normalize here
+	  		CToolbox::normalize(&myIntensity,&myWeight);
+	  		cout << "Done normalize" << endl;
+  		} else {
+	  		// Setup initial diffraction volume by reading from file
+	  		for (int r = 0; r < numImages; r++) {
+			  	// Get image
+			  	std::stringstream sstm;
+		  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+				filename = sstm.str();
+				myDP = load_asciiImage(filename);
+				myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
+		  	}
+		  	for (int i = 0; i < mySize; i++) {
+				// Get a layer of volume
+				std::stringstream sstm;
+				sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
+				//sstm << output << "vol" << startIter << "_" << setfill('0') << setw(7) << i << ".dat";
+				string outputName = sstm.str();
+				myIntensity.slice(i).load(outputName,raw_ascii);
+			}
   		}
-  		cout << "Done random merge" << endl;
-  		// Normalize here
-  		CToolbox::normalize(&myIntensity,&myWeight);
-  		cout << "Done normalize" << endl;
-  		
   		/*
   			// Save output
 	  		fmat mySlice;
