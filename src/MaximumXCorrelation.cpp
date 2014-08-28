@@ -139,7 +139,6 @@ int main( int argc, char* argv[] ){
                     break;
                 } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
                     string temp = *++tok_iter;
-                    cout << temp << endl;
                     badpixmap = temp;
                     break;
                 }
@@ -237,6 +236,15 @@ int main( int argc, char* argv[] ){
 				myR = CToolbox::quaternion2rot3D(quaternion);
 				active = 1;
 				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+
+				
+				
+				
+				//************** MUST APPLY GOODPIXELMAP HERE!!!!!!!!!!! *****//
+				CDetector::apply_badPixels(&myDP);
+				
+				
+				
 				myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
 	  		}
 	  		cout << "Done random merge" << endl;
@@ -251,6 +259,15 @@ int main( int argc, char* argv[] ){
 		  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 				filename = sstm.str();
 				myDP = load_asciiImage(filename);
+				
+				
+				
+				//************** MUST APPLY GOODPIXELMAP HERE!!!!!!!!!!! *****//
+				CDetector::apply_badPixels(&myDP);
+				
+				
+				
+				
 				myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
 		  	}
 		  	for (int i = 0; i < mySize; i++) {
@@ -262,7 +279,7 @@ int main( int argc, char* argv[] ){
 				myIntensity.slice(i).load(outputName,raw_ascii);
 			}
   		}
-  		
+
   		// Distribution of quaternions
   		fmat myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
   	
@@ -289,18 +306,17 @@ int main( int argc, char* argv[] ){
 				CToolbox::slice3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, active, interpolate);
 				
 				// Save slices
-				fmat mySlice;
 				std::stringstream sstm;
 	  			sstm << output << "slices" << iter << "_"<< setfill('0') << setw(7) << s << ".dat";
 				string outputName = sstm.str();
 				cout << "Saving " << outputName << endl;
-				mySlice = myDP.save(outputName,raw_ascii);
+				//myDP.save(outputName,raw_ascii);
 				
 				mySlices.row(s) = reshape(myDP,1,numPixels);
 	  		}
 			
 			cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
-/*			
+			
 	  		// Maximization
 			cout << "Start maximization" << endl;
 			timerMaster.tic();
@@ -310,6 +326,13 @@ int main( int argc, char* argv[] ){
 			imgRep.zeros(numSlices,numPixels);
 	  		for (int i = 0; i < numImages; i++) {
 	  			imgRep = repmat(myImages.row(i), numSlices, 1);
+	  			if (i==1){
+	  				imgRep.save("imgRep.dat",raw_ascii);
+	  				mySlices.save("mySlices.dat",raw_ascii);
+	  			}
+	  			cout << "imgRep: " << trans(sum(pow(imgRep,2),1)) << endl;
+	  			cout << "mySlices: " << trans(sum(pow(mySlices,2),1)) << endl;
+	  			cout << "lse: " << trans(sum(pow(imgRep-mySlices,2),1)) << endl;
 	  			lse.row(i) = trans(sum(pow(imgRep-mySlices,2),1));
 	  		}
 	  		uvec bestFit(numImages);
@@ -364,13 +387,13 @@ int main( int argc, char* argv[] ){
 		
 			// Save output
 	  		fmat mySlice;
-	  		for (int i = 0; i < mySize; i++) {
-	  			std::stringstream sstm;
-	  			sstm << output << "vol" << iter << "_" << setfill('0') << setw(6) << i << ".dat";
-				string outputName = sstm.str();
-				mySlice = myIntensity.slice(i).save(outputName,raw_ascii);
-			}
-		*/		
+	  		int i = 210;//for (int i = 0; i < mySize; i++) {
+	  			std::stringstream sstm2;
+	  			sstm2 << output << "vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+				string outputName2 = sstm2.str();
+				mySlice = myIntensity.slice(i).save(outputName2,raw_ascii);
+			//}
+	
 		}
 	
     }
