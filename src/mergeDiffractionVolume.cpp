@@ -177,10 +177,10 @@ int main( int argc, char* argv[] ){
 		pix_mod = sqrt(sum(pix%pix,1));		
 		pix_max = max(pix_mod);
         //cout << "pix_max: " << pix_max << endl;
-        float inc_res = (mySize-1)/(2*pix_max);
+        float inc_res = (mySize-1)/(2*pix_max/sqrt(2));
         pix = pix * inc_res;
         pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = max(pix_mod);
+		pix_max = cx;//max(pix_mod);
 		//cout << "pix_max: " << pix_max << endl;
         //pix = pix * 1e-10 * inc_res; // (A^-1)	
 		//int mySize = vol_dim;//2*ceil(pix_max)+1;
