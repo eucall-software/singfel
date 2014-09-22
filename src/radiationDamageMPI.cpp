@@ -37,10 +37,10 @@ using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
 
-#define QTAG 0	// quaternion
-#define DPTAG 1	// diffraction pattern
-#define DIETAG 2 // die signal
-#define DONETAG 3 // done signal
+#define QTAG 1	// quaternion
+#define DPTAG 2	// diffraction pattern
+#define DIETAG 3 // die signal
+#define DONETAG 4 // done signal
 
 static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval);
 static void slave_expansion(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices);
@@ -105,7 +105,7 @@ int main( int argc, char* argv[] ){
 	timerMaster.tic();
 
 	world.barrier();
-	
+
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
@@ -131,9 +131,9 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	ntasks = (pmiEndID-pmiStartID+1)*numDP;
 	numProcesses = comm->size();
 	numSlaves = comm->size()-1;
-	
+
 	if (numSlaves > ntasks) {
-		cout << "Reduce number of slaves" << endl;
+		cout << "Reduce number of slaves and restart" << endl;
 		for (rank = 1; rank < numProcesses; ++rank) {
 			comm->send(rank, DIETAG, msg);
 			cout << "Killing: " << rank << endl;
@@ -190,7 +190,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 		quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
 				   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
 		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
-		comm->send(rank, QTAG, quat);
+		comm->send(status.source(), QTAG, quat);
 		// Tell the slave to compute DP
 		std::vector<float> id(3);
 		id.at(0) = (float) pmiID;
@@ -384,7 +384,6 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					done = 1;
 				}
 				timeSlice += sliceInterval;
-				cout << "sliceInterval,timeSlice: " << sliceInterval << "," << timeSlice << endl;
 
 				string datasetname;
 				stringstream sstm0;
@@ -416,7 +415,7 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
 				}
 				total_phot += n_phot;
-				cout << "n_phot/total_phot: "<< n_phot << "/" << total_phot << endl;
+				//cout << "n_phot/total_phot: "<< n_phot << "/" << total_phot << endl;
 				beam.set_photonsPerPulse(n_phot);
 				beam.set_photonsPerPulsePerArea();
 
@@ -496,8 +495,8 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 
 					fmat F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
 		
-					cout << "beam.get_photonsPerPulse(): " << beam.get_photonsPerPulse() << endl;
-					cout << "beam.get_photonsPerPulsePerArea(): " << beam.get_photonsPerPulsePerArea() << endl;
+					//cout << "beam.get_photonsPerPulse(): " << beam.get_photonsPerPulse() << endl;
+					//cout << "beam.get_photonsPerPulsePerArea(): " << beam.get_photonsPerPulsePerArea() << endl;
 		
 					detector_intensity += F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 
@@ -533,8 +532,9 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 			createSubgroup = 0;
 			double focusArea = beam.get_focus_area();
 			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
-    		
-    		comm->send(master, DONETAG, msg);
+
+			std::vector<float> msgDone;
+    		comm->send(master, DONETAG, msgDone);
     		
     		cout << "DP took: " << timer.toc() <<" seconds."<<endl;
     	}
