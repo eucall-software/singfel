@@ -146,7 +146,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	// 2) diffrID
 	// 3) sliceInterval
 	 
-	int diffrID = 1;
+	int diffrID = (pmiStartID-1)*numDP+1;
 	int pmiID = pmiStartID;
 	int dpID = 1;
 	fvec u(3);
