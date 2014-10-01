@@ -104,7 +104,7 @@ public:
 	static int numPix;				// px * py
 	static double cx;				// center of detector in x
 	static double cy;				// center of detector in y
-	static arma::umat dp;					// diffraction pattern
+	static arma::fmat dp;					// diffraction pattern
 	static arma::fmat q_x;
 	static arma::fmat q_y;
 	static arma::fmat q_z;
@@ -136,6 +136,7 @@ public:
 	arma::uvec get_goodPixelMap();
 	arma::uvec get_badPixelMap();
 	void apply_badPixels();
+	static void apply_badPixels(arma::fmat*);	
 	static void init_dp(beam::CBeam *beam);
 	static void set_param(Packet*);
 protected:

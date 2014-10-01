@@ -16,7 +16,7 @@ int CDetector::py;					// number of pixels in y
 int CDetector::numPix;				// total number of pixels
 double CDetector::cx;				// center of detector in x
 double CDetector::cy;				// center of detector in y
-umat CDetector::dp;					// diffraction pattern
+fmat CDetector::dp;					// diffraction pattern
 fmat CDetector::q_x;
 fmat CDetector::q_y;
 fmat CDetector::q_z;
@@ -157,6 +157,15 @@ void CDetector::apply_badPixels() {
     }
 }
 
+void CDetector::apply_badPixels(fmat *x) {
+	fmat& myDP = x[0];
+    uvec::iterator a = badpixmap.begin();
+    uvec::iterator b = badpixmap.end();
+    for(uvec::iterator i=a; i!=b; ++i) {
+        myDP(*i) = 0;
+    }
+}
+
 // set beam object variables and assign q to each pixel
 void CDetector::init_dp( beam::CBeam *beam ){
     // this bit should be set already, get rid of this?
@@ -237,7 +246,7 @@ cout << "r_x r_y: " << r_x(0,0) << "," << r_y(0,0) << endl;
 
 void CDetector::set_param(Packet *x){
 	umat temp(x->dp, x->py, x->px, false, true);
-	dp = trans(temp);
+	dp = conv_to<fmat>::from(trans(temp));
 	d = x->d;
 	pix_width = x->pix_width;
 	pix_height = x->pix_height;
