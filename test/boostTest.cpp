@@ -1,3 +1,4 @@
+// http://www.alittlemadness.com/2009/03/31/c-unit-testing-with-boosttest/
 #define BOOST_TEST_DYN_LINK
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
@@ -16,9 +17,9 @@ struct myTestObject
     myTestObject() : m(2), quaternion(4)
     {
         BOOST_TEST_MESSAGE("setup mass");
-        cout << quaternion << endl;
+        
         quaternion << 1 << 0 << 0 << 0;
-        cout << quaternion << endl;
+        
     }
  
     ~myTestObject()
