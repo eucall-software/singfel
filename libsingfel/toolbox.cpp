@@ -84,16 +84,13 @@ fmat CToolbox::quaternion2rot3D(fvec q){ // it doesn't accept frowvec
     float theta = 0.0;
 	fvec axis(3);
 	quaternion2AngleAxis(q,theta,axis);
-	//cout << "theta: " << theta << endl;
-	//cout << "axis: " << axis << endl;
-	//cout << "angleAxisRot: " << angleAxis2rot3D(axis,theta) << endl;
 	rot3D = angleAxis2rot3D(axis,theta);
 	return rot3D;
 }
 
 fmat CToolbox::angleAxis2rot3D(fvec axis, float theta){
 	if (axis.n_elem != 3) {
-		cout << "Number of axis element must be 3" << endl;
+		cerr << "Number of axis element must be 3" << endl;
 		exit(EXIT_FAILURE);
 	}
 	axis = axis/norm(axis,2); // L2 norm
@@ -126,11 +123,8 @@ fvec CToolbox::quaternion2euler(fvec q) {
 	// first rotation about phi, then theta, then psi
 	float psi, theta, phi;
 	fmat myR = quaternion2rot3D(q);
-	cout << "quaternion2euler::myR: " << myR << endl;
 	theta = acos(myR(2,2));
-	cout << "quaternion2euler::theta: " << theta << endl;
 	if (theta == 0 || theta == datum::pi) {
-		cout << "quaternion2euler::here" << endl;
 		phi = 0;
 		psi = atan2(-myR(1,0),myR(0,0));
 	} else {
@@ -153,10 +147,6 @@ fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
 		quaternion << 1 << 0 << 0 << 0;
 	} else { 
 		fmat R(3,3);
-		//cout << "theta:" << theta << endl;
-		//quaternion << sin(theta/2)*sin((phi-psi)/2) << sin(theta/2)*cos((phi-psi)/2) << cos(theta/2)*sin((phi+psi)/2) << cos(theta/2)*cos((phi+psi)/2);
-		//cout << "quaternion: " << quaternion << endl;
-	
 		R = euler2rot3D(psi, theta, phi);
 	
 		fvec VV(3);
@@ -172,9 +162,7 @@ fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
 
 		float CCisTheta = corrCoeff(R,angleAxis2rot3D(VV,theta));
 		float CCisNegTheta = corrCoeff(R,angleAxis2rot3D(VV,-theta));
-		
-		//cout << "CCisTheta: " << CCisTheta << endl;
-		
+				
 		if (CCisNegTheta > CCisTheta) {
 		    theta = -theta;
 		}
@@ -238,7 +226,6 @@ fvec CToolbox::rot3D2euler(fmat rot3D) {
     euler(0) = psi;
     euler(1) = theta;
     euler(2) = phi;
-    //cout << "euler:"<< euler << endl;
     return euler;
 }
 
@@ -342,7 +329,6 @@ void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, 
 	// rhoMin: starting radial value in pixels
 	// rhoMax: last radial value in pixels
 	int numRotSamples = samplePoints->n_rows;
-	//cout << "numRotSamples: " << numRotSamples << endl;
 	float deltaTheta = (2 * datum::pi) / numRotSamples; // radians
 	fvec rotPositions(numRotSamples);
 	for (int i = 0; i < numRotSamples; i++) {
@@ -350,7 +336,6 @@ void CToolbox::cart2polar(fcube* samplePoints, int detectorWidth, float rhoMin, 
 	}
 
 	int numRadSamples = samplePoints->n_cols;
-	//cout << "numRadSamples: " << numRadSamples << endl;
 	fvec radPositions(numRadSamples);
 	float deltaRad = floor(rhoMax - rhoMin + 1) / numRadSamples;
 	
@@ -388,7 +373,6 @@ void CToolbox::interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP){
 
 	for (int i = 0; i < numRotSamples; i++) {
 		for (int j = 0; j < numRadSamples; j++) {
-		//	cout << "i,j: " << i << "," << j << endl;
 			xl = floor(samplePoints->at(i,j,0));
 			xu = xl + 1;
 			yl = floor(samplePoints->at(i,j,1));
@@ -397,26 +381,7 @@ void CToolbox::interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP){
 			fy = samplePoints->at(i,j,1) - yl;
 			cx = xu - samplePoints->at(i,j,0);
 			cy = yu - samplePoints->at(i,j,1);
-		/*
-		//if (i == 4 && j == 3) {
-				cout << samplePoints->at(i,j,0) << "," << samplePoints->at(i,j,1) << endl;
-		
-				cout << xl << endl;
-				cout << xu << endl;
-				cout << yl << endl;
-				cout << yu << endl;
-				
-				cout << fx << endl;
-				cout << fy << endl;
-				cout << cx << endl;
-				cout << cy << endl;
-				
-				cout << cartDP->at(yl,xl) << endl;
-				cout << cartDP->at(yl,xu) << endl;
-				cout << cartDP->at(yu,xl) << endl;
-				cout << cartDP->at(yu,xu) << endl;
-		//}
-		*/
+
 			newDP->at(i,j) = cartDP->at(yl,xl)*cx*cy + cartDP->at(yl,xu)*fx*cy + cartDP->at(yu,xl)*cx*fy + cartDP->at(yu,xu)*fx*fy;
 	
 		}
@@ -478,8 +443,6 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     
-    //cout << "mySize: " << endl;
-    //cout << xyz[0] << endl;
     fmat& pixRot = myPoints[0];
     
     //imat& xyz = myGridPoints[0];
