@@ -29,11 +29,20 @@ struct myTestObject
 };
 
 int add(int i, int j) {
-    return i + j;
+	auto a = i;
+	//std::vector<int> b = {0,1,2,3};
+	//for (int x : b) {
+	//	cout << x << endl;
+	//}
+    return i + j + a;
 }
 
 int rotationConversion(fvec quaternion) {
 	float tol = 1e-6;
+
+	//static_assert(__cplusplus > 199711L, "Program requires C++11 capable compiler");
+	auto b = add(5,6);
+	cout << b << endl;
 
 	//fvec quaternion(4);
 	fmat myR;
@@ -57,7 +66,7 @@ BOOST_FIXTURE_TEST_SUITE(Maths, myTestObject)
 
 BOOST_AUTO_TEST_CASE(universeInOrder)
 {
-    BOOST_CHECK(add(m, 2) == 4);
+    BOOST_CHECK(add(m, 2) == 6);
     BOOST_CHECK(rotationConversion(quaternion) == 0);
 }
 
