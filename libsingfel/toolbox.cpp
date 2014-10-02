@@ -166,7 +166,7 @@ fvec CToolbox::euler2quaternion(float psi, float theta, float phi) {
 		if (CCisNegTheta > CCisTheta) {
 		    theta = -theta;
 		}
-		quaternion << cos(theta/2) << sin(theta/2)*VV(0)/norm(VV) << sin(theta/2)*VV(1)/norm(VV) << sin(theta/2)*VV(2)/norm(VV);
+		quaternion << cos(theta/2) << sin(theta/2)*VV(0)/arma::norm(VV) << sin(theta/2)*VV(1)/arma::norm(VV) << sin(theta/2)*VV(2)/arma::norm(VV);
 	}
 	
 	if (quaternion(0) < 0) {
@@ -526,7 +526,7 @@ void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixma
     
     //imat& xyz = myGridPoints[0];
     imat xyz;
-	xyz = conv_to<imat>::from(round(pixRot));
+	xyz = conv_to<imat>::from(arma::round(pixRot));
     
     //fmat fxyz = pixRot - xyz;
     //fmat cxyz = 1. - fxyz;
