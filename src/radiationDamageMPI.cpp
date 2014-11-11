@@ -4,7 +4,6 @@
 #include <iostream>
 #include <iomanip>
 #include <sys/time.h>
-#include <armadillo>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -20,6 +19,11 @@
 #include "io.h"
 #include <fstream>
 #include <string>
+
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
+#include <armadillo>
 
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
@@ -106,10 +110,11 @@ int main( int argc, char* argv[] ){
 
 	world.barrier();
 
+    srand( pmiStartID + world.rank() + (unsigned)time(NULL) );
+
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
-		srand (pmiStartID);
 		master_expansion(comm, pmiStartID, pmiEndID, numDP, sliceInterval);
 	} else {
 		slave_expansion(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices);
@@ -204,6 +209,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 			pmiID++;
 		}
 		if (diffrID > ntasks) done = 1;
+		cout << "diffrID: " << diffrID << endl;
 	}
 	
   	// Wait for status update of slaves.
