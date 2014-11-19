@@ -4,7 +4,6 @@
 #include <iostream>
 #include <iomanip>
 #include <sys/time.h>
-#include <armadillo>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -20,6 +19,11 @@
 #include "io.h"
 #include <fstream>
 #include <string>
+
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
+#include <armadillo>
 
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
@@ -45,6 +49,7 @@ int main( int argc, char* argv[] ){
     int numImages = 0;
     int mySize = 0;
     string output;
+    string format;
     // Let's parse input
     for (int n = 1; n < argc; n++) {
     cout << argv [ n ] << endl; 
@@ -66,6 +71,8 @@ int main( int argc, char* argv[] ){
             mySize = atof(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--output_name")) {
             output = argv[ n+2 ];
+        } else if (boost::algorithm::iequals(argv[ n ], "--format")) {
+            format = argv[ n+2 ];
         }
     }
     //cout << numImages << endl;
@@ -181,54 +188,6 @@ int main( int argc, char* argv[] ){
         pix = pix * inc_res;
         pix_mod = sqrt(sum(pix%pix,1));		
 		pix_max = cx;//max(pix_mod);
-		//cout << "pix_max: " << pix_max << endl;
-        //pix = pix * 1e-10 * inc_res; // (A^-1)	
-		//int mySize = vol_dim;//2*ceil(pix_max)+1;
-		//cout << "mySize: " << mySize << endl;
-		
-		// Determine number of image
-		//int numImages = 3;
-		
-		/*
-		cout << numImages << endl;
-		
-		// Read in stream file
-		fcube Astar;
-		Astar.zeros(3,3,numImages);
-		
-		for (int i = 0; i < numImages; i++) {
-			std::stringstream sstm1;
-			sstm1 << "/home/beams/EPIX34ID/yoon/singfel/dataShrine/euler" << i+1 << ".dat";
-			string eulerName = sstm1.str();
-			//cout << eulerName << endl;
-
-			fvec euler;
-			euler = load_asciiEuler(eulerName);
-			fmat R;
-			R = zeros<fmat>(3,3);
-			float phi = euler(0);
-			float theta = euler(1);
-			float psi = euler(2);
-			//cout << psi << endl;
-
-			R(0,0) = cos(psi)*cos(phi) - cos(theta)*sin(phi)*sin(psi);
-			R(0,1) = cos(psi)*sin(phi) + cos(theta)*cos(phi)*sin(psi);
-			R(0,2) = sin(psi)*sin(theta);
-			R(1,0) = -sin(psi)*cos(phi) - cos(theta)*sin(phi)*cos(psi);
-			R(1,1) = -sin(psi)*sin(phi) + cos(theta)*cos(phi)*cos(psi);
-			R(1,2) = cos(psi)*sin(theta);
-			R(2,0) = sin(theta)*sin(phi);
-			R(2,1) = -sin(theta)*cos(phi);
-			R(2,2) = cos(theta);
-			cout << R << endl; 
-			
-			R = CToolbox::euler2rot3D(psi,theta,phi);
-    		//R.print();
-    		
-    		Astar.slice(i) = R;
-		}
-		//cout << "R: " << Astar.slice(0) << endl;
-		*/
 		
   		string filename;
   		//string datasetname = "/data/data";
@@ -242,15 +201,6 @@ int main( int argc, char* argv[] ){
   		myR.zeros(3,3);
   		float psi,theta,phi;
 
-		/*fmat pixRot;
-		pixRot.zeros(det.numPix,3);
-		imat myGrid;
-		myGrid.zeros(det.numPix,3);
-		fmat fxyz;
-		fxyz.zeros(det.numPix,3);
-		fmat cxyz;
-		cxyz.zeros(det.numPix,3);
-		*/
 		fcube myWeight;
 		myWeight.zeros(mySize,mySize,mySize);
 		fcube myIntensity;
@@ -262,23 +212,34 @@ int main( int argc, char* argv[] ){
 		int active = 1;
 		string interpolate = "linear";// "nearest";
 		
+		cout << format << endl;
   		for (int r = 0; r < numImages; r++) {
-	  		// Get image
-	  		std::stringstream sstm;
-  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
-			filename = sstm.str();
-			cout << filename << endl;
-			myDP = load_asciiImage(filename);
-			//myDet.apply_badPixels();
-			//cout << "myDP(0): " << myDP(0) << endl; // 0
-			//cout << "myDP(1): " << myDP(1) << endl; // 2.94
-			//cout << "myDP(130): " << myDP(130) << endl; // 5.08 <-- mask out
-	        // Get rotation matrix
-  			std::stringstream sstm1;
-			sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
-			string rotationName = sstm1.str();
-			cout << rotationName << endl;
-			myR = load_asciiRotation(rotationName);
+			if (format == "S2E") {
+				// Get image from hdf
+				stringstream sstm;
+				sstm << imageList << "/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
+				string inputName;
+				inputName = sstm.str();
+				// Read in diffraction				
+				myDP = hdf5readT<fmat>(inputName,"/data/data");
+				// Read angle
+				fvec quat = hdf5readT<fvec>(inputName,"/data/angle");
+				myR = CToolbox::quaternion2rot3D(quat);
+				myR = trans(myR);
+			} else {
+				// Get image from dat file
+		  		std::stringstream sstm;
+	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+				filename = sstm.str();
+				cout << filename << endl;
+				myDP = load_asciiImage(filename);
+			    // Get rotation matrix from dat file
+	  			std::stringstream sstm1;
+				sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
+				string rotationName = sstm1.str();
+				cout << rotationName << endl;
+				myR = load_asciiRotation(rotationName);
+			}
 			//fvec euler;
 			//psi = euler(0);
 			//theta = euler(1);
@@ -301,6 +262,12 @@ int main( int argc, char* argv[] ){
 			sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
 			string outputName = sstm.str();
 			myIntensity.slice(i).save(outputName,raw_ascii);
+			// empty voxels
+			std::stringstream sstm1;
+			sstm1 << output << "volGoodVoxels_" << setfill('0') << setw(7) << i << ".dat";
+			string outputName1 = sstm1.str();
+			fmat goodVoxels = sign(myWeight.slice(i));
+			goodVoxels.save(outputName1,raw_ascii);
 		}
 		
     }
