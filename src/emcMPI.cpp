@@ -59,6 +59,8 @@ int main( int argc, char* argv[] ){
   	mpi::communicator world;
 	mpi::communicator* comm = &world;
 
+	srand( world.rank() );
+
 	// Everyone parses input
 	int master = 0;
 	string imageList;
@@ -361,13 +363,16 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 
 	int active = 1;
 	string interpolate = "linear";
-	//int numPixels = mySize*mySize;
 	fmat myR;
 	myR.zeros(3,3);
-	fmat myDP;
-	//fmat mySlice(1,numPixels);
+	fcube myDP;//fmat myDP;
+	
+	// Temporary
+	fcube myRot;
+	myRot.zeros(3,3,numSlices);
+	
 	for (int i = 0; i < numSlices; i++) {
-		myDP.zeros(mySize,mySize);
+		myDP.zeros(mySize,mySize,2);
 		// Get rotation matrix
 		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(i)));
 		CToolbox::slice3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
@@ -375,12 +380,19 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		std::stringstream sstm;
 		sstm << output << "/expansion/myExpansion_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
-		myDP.save(outputName,raw_ascii);
+		myDP.slice(0).save(outputName,raw_ascii); //myDP.save(outputName,raw_ascii);
+		std::stringstream sstm1;
+		sstm1 << output << "/expansion/myExpansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myDP.slice(1).save(outputName1,raw_ascii);
+		
+		// Temporary
+		myRot.slice(i) = myR;
 	}
 	
 	cout << "Done mySlices" << endl;
-	
-	// Send
+/*	
+	// Send to slaves
 	// 1) Start and end indices of model slices
 	// 2) Subset of model slices
 	// 3) Compute signal
@@ -475,39 +487,36 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		}
 	}
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
-	
+*/	
 	// ########### COMPRESSION ##############
 	cout << "Start compression" << endl;
 	timerMaster.tic();
 	
 	fcube myWeight;
 	myWeight.zeros(mySize,mySize,mySize);
-	fcube myIntensityOld(mySize,mySize,mySize);
-	for (int r = 0; r < mySize; r++) {
-		myIntensityOld.slice(r) = myIntensity->slice(r);
-	}
 	myIntensity->zeros(mySize,mySize,mySize);
 	active = 1;
 	interpolate = "linear";
 	string filename;
-	for (int r = 0; r < numImages; r++) {
+	string filename1;
+	for (int r = 0; r < numSlices; r++) {
+		myDP.zeros(mySize,mySize,2);
 		// Get image
 		std::stringstream sstm;
-		sstm << output << "myExpansion_" << setfill('0') << setw(7) << r << ".dat";
+		sstm << output << "/expansion/myExpansion_" << setfill('0') << setw(7) << r << ".dat";
 		filename = sstm.str();
-		myDP = load_asciiImage(filename);
+		myDP.slice(0) = load_asciiImage(filename);
+		std::stringstream sstm1;
+		sstm1 << output << "/expansion/myExpansionPixmap_" << setfill('0') << setw(7) << r << ".dat";
+		filename1 = sstm1.str();		
+		myDP.slice(1) = load_asciiImage(filename1);
 		// Get rotation matrix
-		myR = CToolbox::quaternion2rot3D(trans(quaternions->row(bestFit(r))));
+		//myR = CToolbox::quaternion2rot3D(trans(quaternions->row(bestFit(r))));
+		myR = myRot.slice(r);
 		CToolbox::merge3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, &myWeight, active, interpolate);
 	}
 	// Normalize here
 	CToolbox::normalize(myIntensity,&myWeight);
-	
-	// Introduce memory to myIntensity
-	for (int r = 0; r < mySize; r++) {
-		myIntensity->slice(r) = 0.1*myIntensityOld.slice(r) + 0.9*myIntensity->slice(r);
-	}
-	
 	
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	
@@ -518,13 +527,19 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		sstm << output << "vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
 		myIntensity->slice(i).save(outputName,raw_ascii);
+		// Temporary
+		std::stringstream sstm1;
+		sstm1 << output << "volWeight" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myWeight.slice(i).save(outputName1,raw_ascii);
 	}
 
 // KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
   	//if (iter == numIterations) {
+  	std::vector<int> msg1;
 		for (rank = 1; rank < numProcesses; ++rank) {
-			comm->send(rank, DIETAG, msg);
+			comm->send(rank, DIETAG, msg1);
 			//cout << "Finsh working: " << rank << endl;
 		}
 	//}

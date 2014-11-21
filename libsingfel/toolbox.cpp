@@ -12,8 +12,12 @@
 
 #include <string>
 #include <sstream>
-#include <armadillo>
 #include <math.h>
+
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
+#include <armadillo>
 
 //#include <boost/math/special_functions/factorials.hpp>
 
@@ -398,8 +402,6 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
     
     fmat& mySlice = myValue[0];
     
-    //mySlice.print("mySlice: ");
-    
     fmat& pixRot = myPoints[0];
     
     imat xyz;
@@ -434,6 +436,56 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 
 		mySlice(*p) = cx*(cy*(cz*myIntensity(y,x,z) + fz*myIntensity(y,x,z+1)) + fy*(cz*myIntensity(y+1,x,z) + fz*myIntensity(y+1,x,z+1))) + fx*(cy*(cz*myIntensity(y,x+1,z) + fz*myIntensity(y,x+1,z+1)) + fy*(cz*myIntensity(y+1,x+1,z) + fz*myIntensity(y+1,x+1,z+1)));
   
+	}
+}
+
+// Take an Ewald's slice from a diffraction volume
+// Rename: extract_slice
+void CToolbox::extract_interp_linear3D(fcube *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1) {
+    int mySize = myIntensity1->n_rows;
+    
+    fcube& myImage = myValue[0];
+    fmat mySlice = myImage.slice(0);
+    fmat myPixmap = myImage.slice(1);
+        
+    fmat& pixRot = myPoints[0];
+    
+    imat xyz;
+	xyz = conv_to<imat>::from(floor(pixRot));
+    
+    fmat fxyz = pixRot - xyz;
+    fmat cxyz = 1. - fxyz;
+    float x,y,z,fx,fy,fz,cx,cy,cz;
+	fcube& myIntensity = myIntensity1[0];
+	
+	uvec& goodpixmap = pixmap[0];
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+
+		x = xyz(1,*p);
+		y = xyz(0,*p);
+		z = xyz(2,*p);
+
+		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+		    continue;
+					
+		if (x < 0 || y < 0 || z < 0)
+			continue;	
+				
+		fx = fxyz(1,*p);
+		fy = fxyz(0,*p);
+		fz = fxyz(2,*p);
+		cx = cxyz(1,*p);
+		cy = cxyz(0,*p);
+		cz = cxyz(2,*p);
+
+		mySlice(*p) = cx*(cy*(cz*myIntensity(y,x,z) + fz*myIntensity(y,x,z+1)) + fy*(cz*myIntensity(y+1,x,z) + fz*myIntensity(y+1,x,z+1))) + fx*(cy*(cz*myIntensity(y,x+1,z) + fz*myIntensity(y,x+1,z+1)) + fy*(cz*myIntensity(y+1,x+1,z) + fz*myIntensity(y+1,x+1,z+1)));
+
+		// record which pixels have values
+		myPixmap(*p) = 1;
+		myImage.slice(0) = mySlice;
+		myImage.slice(1) = myPixmap;
 	}
 }
 
@@ -519,6 +571,89 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
 }
 
 // Insert a Ewald's slice into a diffraction volume
+void CToolbox::insert_slice(fcube *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
+    int mySize = myIntensity1->n_rows;
+    
+    fmat& pixRot = myPoints[0];
+    
+    //imat& xyz = myGridPoints[0];
+    imat xyz;
+	xyz = conv_to<imat>::from(floor(pixRot));
+    
+    fmat fxyz = pixRot - xyz;
+    fmat cxyz = 1. - fxyz;
+    float x,y,z,fx,fy,fz,cx,cy,cz;
+    float weight;
+	float photons;
+	fcube& myImage = myValue[0];
+	fmat myPhotons = myImage.slice(0);
+	fmat myPixmap = myImage.slice(1);
+	
+	fcube& myIntensity = myIntensity1[0];
+	fcube& myWeight = myWeight1[0];
+	
+    int dim = myPixmap.n_rows;
+    int p;
+	for(int i = 0; i < dim; i++) {
+	for(int j = 0; j < dim; j++) {
+		if (myPixmap(i,j) == 1) {
+			p = i*dim + j;
+		    photons = myPhotons(p);
+
+			x = xyz(1,p);
+			y = xyz(0,p);
+			z = xyz(2,p);
+
+			if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
+				continue;
+			
+			if (x < 0 || y < 0 || z < 0)
+				continue;	
+				
+			fx = fxyz(1,p);
+			fy = fxyz(0,p);
+			fz = fxyz(2,p);
+			cx = cxyz(1,p);
+			cy = cxyz(0,p);
+			cz = cxyz(2,p);
+				
+			weight = cx*cy*cz;
+			myWeight(y,x,z) += weight;
+			myIntensity(y,x,z) += weight * photons;
+
+			weight = cx*cy*fz;
+			myWeight(y,x,z+1) += weight;
+			myIntensity(y,x,z+1) += weight * photons; 
+
+			weight = cx*fy*cz;
+			myWeight(y+1,x,z) += weight;
+			myIntensity(y+1,x,z) += weight * photons; 
+
+			weight = cx*fy*fz;
+			myWeight(y+1,x,z+1) += weight;
+			myIntensity(y+1,x,z+1) += weight * photons;         		        
+				
+			weight = fx*cy*cz;
+			myWeight(y,x+1,z) += weight;
+			myIntensity(y,x+1,z) += weight * photons; 		       		 
+
+			weight = fx*cy*fz;
+			myWeight(y,x+1,z+1) += weight;
+			myIntensity(y,x+1,z+1) += weight * photons; 
+
+			weight = fx*fy*cz;
+			myWeight(y+1,x+1,z) += weight;
+			myIntensity(y+1,x+1,z) += weight * photons;
+
+			weight = fx*fy*fz;
+			myWeight(y+1,x+1,z+1) += weight;
+			myIntensity(y+1,x+1,z+1) += weight * photons;
+		}
+	}
+	}
+}
+
+// Insert a Ewald's slice into a diffraction volume
 void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     //cout << xyz[0] << endl;
@@ -599,6 +734,30 @@ void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
     }
 }
 
+// Insert a Ewald's slice into a diffraction volume
+// active = 1: active rotation
+// interpolate = 1: trilinear
+void CToolbox::merge3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
+    fmat& pix = myPoints[0];
+    //cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
+    fmat& myR = myRot[0];
+    //myR.print("myR: ");
+    fmat pixRot;
+	pixRot.zeros(pix.n_elem,3);
+	if (active == 1) {
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
+        pixRot = trans(pixRot);
+    } else {
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
+        pixRot = trans(pixRot);  
+    }
+    if ( boost::algorithm::iequals(interpolate,"linear") ) {
+        insert_slice(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
+    //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    //}
+}
+
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
@@ -620,6 +779,27 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
     }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
     //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
     //}
+}
+
+// Extract an Ewald's slice from a diffraction volume
+// active = 1: active rotation
+// interpolate = 1: trilinear
+void CToolbox::slice3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, int active, string interpolate ) {
+    fmat& pix = myPoints[0];
+    fmat& myR = myRot[0];
+    fmat pixRot;
+	pixRot.zeros(pix.n_elem,3);
+	if (active == 1) {
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
+        pixRot = trans(pixRot);
+    } else {
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
+        pixRot = trans(pixRot);  
+    }
+    //pixRot.print("pixRot: ");
+    if ( boost::algorithm::iequals(interpolate,"linear") ) {
+        extract_interp_linear3D(myValue,&pixRot,goodpix,myIntensity);
+    }
 }
 
 #ifdef COMPILE_WITH_BOOST
