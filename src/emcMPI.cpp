@@ -63,7 +63,7 @@ int main( int argc, char* argv[] ){
 
 	// Everyone parses input
 	int master = 0;
-	string imageList;
+	string input;
 	int useFileList = 0;
 	string quaternionList;
 	string beamFile;
@@ -80,7 +80,7 @@ int main( int argc, char* argv[] ){
 	for (int n = 1; n < argc; n++) {
 	cout << argv [ n ] << endl;
 	    if(boost::algorithm::iequals(argv[ n ], "-i")) {
-	        imageList = argv[ n+1 ];
+	        input = argv[ n+1 ];
 	    } else if (boost::algorithm::iequals(argv[ n ], "-f")) {
 	        useFileList = atoi(argv[ n+1 ]);
 	    } else if (boost::algorithm::iequals(argv[ n ], "-q")) {
@@ -106,6 +106,12 @@ int main( int argc, char* argv[] ){
 		} else if (boost::algorithm::iequals(argv[ n ], "--format")) {
             format = argv[ n+2 ];
         }
+	}
+
+	int numSlaves = comm->size()-1;
+	if (numImages < numSlaves) {
+		cerr << "Number of workers too large for this task" << endl;
+		return 0;
 	}
 	
 	fcube myIntensity;
@@ -253,8 +259,8 @@ int main( int argc, char* argv[] ){
 	
 		std::ifstream infile;
 		if (useFileList) {
-			cout << "Using image list: " << imageList << endl;
-			infile.open(imageList.c_str());
+			cout << "Using image list: " << input << endl;
+			infile.open(input.c_str());
 		}
 	
 		if ( strcmp(intialVolume.c_str(),"randomMerge")==0 ) {
@@ -267,7 +273,7 @@ int main( int argc, char* argv[] ){
 			  		myDP = load_asciiImage(line);
 			  	} else {
 				  	std::stringstream sstm;
-			  		sstm << imageList << setfill('0') << setw(7) << r << ".dat";
+			  		sstm << input << setfill('0') << setw(7) << r << ".dat";
 					filename = sstm.str();
 					myDP = load_asciiImage(filename);
 				}
@@ -311,9 +317,9 @@ int main( int argc, char* argv[] ){
 				// Equal distribution of quaternions
   				myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
   			}
-			master_expansion(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, numImages, mySize, iter, startIter, numIterations, numSlices, imageList, output, format);
+			master_expansion(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, numImages, mySize, iter, startIter, numIterations, numSlices, input, output, format);
 		} else {
-			slave_expansion(comm, numImages, mySize, output, useFileList, imageList, format);
+			slave_expansion(comm, numImages, mySize, output, useFileList, input, format);
 		}
 		world.barrier();
 		if (world.rank() == master) {
@@ -331,17 +337,13 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
 	
-  	int ntasks, rank, numProcesses, numSlaves;
+  	int rank, numProcesses, numSlaves;
   	const int numMaster = 1;
   	fvec quaternion;
   	boost::mpi::status status;
 
 	numProcesses = comm->size();
 	numSlaves = numProcesses-1;
-	ntasks = quaternions->n_rows;
-	if (ntasks < numSlaves) {
-		numProcesses = ntasks + numMaster;
-	}
 
 	// Vectorize my diffraction volume
 	fvec intensityVector(myIntensity->n_elem);
@@ -391,56 +393,115 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	timerMaster.tic();
 	////////////////////////////////////////////
 	// Send jobs to slaves
-	// 1) Start and end indices of model slices
-	// 2) Subset of model slices
+	// 1) Start and end indices of measured data
+	// 2) Index of expansion slice
 	// 3) Compute signal
 	////////////////////////////////////////////
-	int slicesPerSlave = floor( (float) numSlices / (float) (numProcesses-1) );
-	//int dataPerSlave = floor( (float) numImages / (float) numSlaves );
-	int leftOver = numSlices - slicesPerSlave * numSlaves;
-	//int leftOver = numImages - dataPerSlave * numSlaves;
+	//int slicesPerSlave = floor( (float) numSlices / (float) (numProcesses-1) );
+	int dataPerSlave = floor( (float) numImages / (float) numSlaves );
+	//int leftOver = numSlices - slicesPerSlave * numSlaves;
+	int leftOver = numImages - dataPerSlave * numSlaves;
 	
 	//cout << "slicesPerSlave: " << slicesPerSlave << endl;
 	//cout << "leftOver: " << leftOver << endl;
 	
 	// Vector containing jobs per slave
 	uvec s(numSlaves);
-	s.fill(slicesPerSlave);
+	//s.fill(slicesPerSlave);
+	s.fill(dataPerSlave);
 	for (int i = 0; i < numSlaves; i++) {
 		if (leftOver > 0) {
 			s(i) += 1;
 			leftOver--;
 		}
 	}
-	//cout << "s: " << s << endl;
-	
-	// Send good pixel map to slaves
-//	uvec& myGoodpix = goodpix[0];
-//	std::vector<unsigned int> goodpixelmap = conv_to< std::vector<unsigned int> >::from(myGoodpix);
-//	for (rank = 1; rank < numProcesses; ++rank) {
-//		comm->send(rank, GOODPIXTAG, goodpixelmap);
-//	}
-	
-	if (skipExpansion == 0) {
-		int startInd = 0;
-		int endInd = 0;
-		std::vector<float> msg;
-		for (rank = 1; rank < numProcesses; ++rank) {
-			endInd = startInd + s(rank-1) - 1;
 
-			std::vector<int> id(2);
-			id.at(0) = startInd;
-			id.at(1) = endInd;
-			
-			comm->send(rank, DPTAG, id);//comm->send(rank, DPTAG, msg);
+	// Number of data candidates to update expansion slice
+	int numCandidates = 2;
+	fvec myVal(numImages);
+	// Setup goodpixmap
+	uvec::iterator goodBegin = goodpix->begin();
+	uvec::iterator goodEnd = goodpix->end();
+	if (skipExpansion == 0) {
+		std::vector<float> msg;
+		std::vector<float> msgProb;
+		for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
+			// For each slice, each worker get a subset of measured data
+			int startInd = 0;
+			int endInd = 0;
+			for (rank = 1; rank < numProcesses; ++rank) {
+				endInd = startInd + s(rank-1) - 1;
+
+				std::vector<int> id(3);
+				id.at(0) = startInd;
+				id.at(1) = endInd;
+				id.at(2) = expansionInd;
+				comm->send(rank, DPTAG, id);
+				
+				//comm->send(rank, SAVESLICESTAG, msg);
 		
-			//comm->send(rank, SAVESLICESTAG, msg);
+				//comm->send(rank, SAVELSETAG, msg);
 		
-			comm->send(rank, SAVELSETAG, msg);
-		
-			startInd += s(rank-1);
-	  	}
-		cout << "Job sending time: " << timerMaster.toc() <<" seconds."<<endl;
+				startInd += s(rank-1);
+		  	}
+			cout << "Job sending time: " << timerMaster.toc() <<" seconds."<<endl;
+			// Accumulate lse for each expansion slice
+			int currentRow = 0;
+			fvec lse;
+			for (rank = 1; rank < numProcesses; ++rank) {
+				status = comm->recv(rank, boost::mpi::any_tag, msgProb);
+				lse = conv_to< fvec >::from(msgProb);
+				for (int i = 0; i < lse.n_elem; i++) {
+					myVal(currentRow+i) = lse(i);
+				}
+				currentRow += s(rank-1);
+			}
+			// Save lse
+			cout << "Saving LSE to file" << endl;
+			string outputName;
+			stringstream sstm3;
+			sstm3 << output << "similarity/lse_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			outputName = sstm3.str();
+			myVal.save(outputName,raw_ascii);
+			// Pick top candidates
+			uvec indices = sort_index(myVal);
+			uvec candidatesInd;
+			candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
+			// Calculate norm cond prob
+			fvec candidatesVal;
+			candidatesVal.zeros(numCandidates+1);
+			for (int i = 0; i <= numCandidates; i++) {
+				candidatesVal(i) = myVal(candidatesInd(i));
+			}
+			fvec normVal = -candidatesVal / sum(candidatesVal);
+			normVal -= min(normVal);
+			normVal /= sum(normVal);
+			// Update expansion slices
+			fmat myDP1;
+			myDP1.zeros(mySize,mySize);
+			fmat myDP2;
+			string filename;
+			for (int r = 0; r < numCandidates; r++) {
+				// Get measured diffraction pattern
+				//cout << normVal(r) << endl;
+				if (format == "S2E") {
+					myDP2.zeros(mySize,mySize);
+					std::stringstream sstm;
+			  		sstm << input << "/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
+					filename = sstm.str();
+					// Read in diffraction				
+					myDP2 = hdf5readT<fmat>(filename,"/data/data");
+				}
+				for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+					myDP1(*p) += normVal(r) * myDP2(*p);
+				}
+			}
+			// Get image
+			std::stringstream sstm2;
+			sstm2 << output << "expansion1/myExpansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			filename = sstm2.str();
+			myDP1.save(filename,raw_ascii);	
+		}
 	}
 	
 	// SAVE SLICES FOR VIEWING
@@ -454,11 +515,11 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	
 	timerMaster.tic();
 	
-	std::vector<float> msgProb;
+	
 	fmat myTable(numImages,numSlices);
-	cout << "myTable: " << numImages << "," << numSlices << endl;
 	int numWorkerSlices;
 	int currentCol = 0;
+/*
   	// Receive chunks of LSE from the slaves.
 	if (skipExpansion == 0) {
 		for (rank = 1; rank < numProcesses; ++rank) {
@@ -492,7 +553,6 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	uvec::iterator goodEnd = goodpix->end();
 	
 	// Sort and normalize
-	int numCandidates = 2;
 	for (int k = 0; k < numSlices; k++) {
 		cout << "Updating slice: " << k << endl;
 		fvec val = vectorise(myTable.col(k));
@@ -549,7 +609,7 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	//for (rank = 1; rank < numProcesses; ++rank) {
 	//	comm->send(rank, SAVELSETAG, msg);
 	//}
-
+*/
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
 	// ########### COMPRESSION ##############
@@ -613,8 +673,9 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 
 static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format) {
 
-	int numChunkSlices = 0;
-	int numPixels = mySize*mySize;
+	//int numChunkSlices = 0;
+	int numChunkData = 0;
+	//int numPixels = mySize*mySize;
 	boost::mpi::status status;
 	const int master = 0;
 	// Expansion related variables
@@ -622,14 +683,12 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 	std::vector<int> msg;
 	// Maximization related variables
 	fmat diffraction = zeros<fmat>(mySize,mySize);
-	fmat condProb; // conditional probability
+	fvec condProb; // conditional probability
 	fmat imgRep;
-	fmat myExpansionChunk;
+	//fmat myExpansionChunk;
 	uvec goodpixmap;
-	int useRep = 0;
+	//int useRep = 0;
 	fmat myDP;
-	uvec::iterator goodBegin;
-	uvec::iterator goodEnd;
 	while (1) {
 
 		// Receive a message from the master
@@ -638,29 +697,39 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
     	// Calculate least squared error
     	if (status.tag() == DPTAG) {
     		fvec id = conv_to< fvec >::from(msg);
-    		int startInd = (int) id(0);
-    		int endInd = (int) id(1);
-    		numChunkSlices = endInd - startInd + 1;
+    		int startInd = (int) id(0); // start index of measured data
+    		int endInd = (int) id(1); // end index of measured data
+    		numChunkData = endInd - startInd + 1; // number of measured data to process
+    		int expansionInd = (int) id(2);
     		
-    		myExpansionChunk.zeros(numChunkSlices,numPixels);
-    		condProb.zeros(numImages,numChunkSlices);
-    					
-    		std::ifstream infile;
-			if (useFileList) {
-				infile.open(input.c_str());
-			}
-		
+    		// Initialize
+    		condProb.zeros(numChunkData);
+    		
+    		//////////////////////////
+    		// Read in expansion slice
+    		//////////////////////////
+			// Get expansion image
+			std::stringstream sstm;
+			sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			string filename = sstm.str();
+			fmat myExpansionSlice = load_asciiImage(filename);
+			// Get expansion image
+			std::stringstream sstm1;
+			sstm1 << output << "expansion/myExpansionPixmap_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			string filename1 = sstm1.str();
+			fmat myPixmap = load_asciiImage(filename1);
+					    		
+    		///////////////
+    		// Read in data
+    		///////////////
 			string line;
-			string filename;
-    		for (int i = 0; i < numImages; i++) {
+			int counter = 0;
+    		for (int i = startInd; i <= endInd; i++) {
 				if (comm->rank() == 1) {
-					cout << i << "/" << numImages << endl;
+					cout << i << "/" << numChunkData << endl;
 				}
 				//Read in measured diffraction data
-				if (useFileList) {
-			  		std::getline(infile, line);
-			  		myDP = load_asciiImage(line);
-			  	} else if (format == "S2E") {
+				if (format == "S2E") {
 			  		std::stringstream sstm;
 			  		sstm << input << "/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
 					filename = sstm.str();
@@ -673,55 +742,27 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 					myDP = load_asciiImage(filename);
 				}
 				
+				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
-				int counter = 0;
-				float sim;
-				for(int j = startInd; j <= endInd; j++) {
-					sim = 0.;
-					// Get expansion image
-					std::stringstream sstm;
-					sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << j << ".dat";
-					string filename = sstm.str();
-					fmat myExpansionSlice = load_asciiImage(filename);
-					// Get expansion image
-					std::stringstream sstm1;
-					sstm1 << output << "expansion/myExpansionPixmap_" << setfill('0') << setw(7) << j << ".dat";
-					string filename1 = sstm1.str();
-					fmat myPixmap = load_asciiImage(filename1);
-					
-					int dim = myPixmap.n_rows;
-					int p;
-					float lambda;
-					float k;
-					for(int a = 0; a < dim; a++) {
-					for(int b = 0; b < dim; b++) {
-						if (myPixmap(a,b) == 1) {
-							p = a*dim + b;
-							//lambda = myExpansionSlice(p);
-							//k = myDP(p);
-							//sim *= pow(lambda,k) * exp(-lambda);
-							sim = sim + sqrt(pow(myExpansionSlice(p)-myDP(p),2));
-						}
+				/////////////////////////////////////////////////////
+				int dim = myPixmap.n_rows;
+				int p;
+				//float lambda;
+				//float k;
+				float sim = 0.;
+				for(int a = 0; a < dim; a++) {
+				for(int b = 0; b < dim; b++) {
+					if (myPixmap(a,b) == 1) {
+						p = a*dim + b;
+						//lambda = myExpansionSlice(p);
+						//k = myDP(p);
+						//sim *= pow(lambda,k) * exp(-lambda);
+						sim = sim + sqrt(pow(myExpansionSlice(p)-myDP(p),2));
 					}
-					}
-					condProb(i,counter) = sim/accu(myPixmap);
-					counter++;
-/*					
-					// Temporary
-					cout << i+1 << "," << j << ": " << sim << endl;
-					if (comm->rank() == 1) {
-						std::stringstream sstm;
-						sstm << output << "test/myDP_" << setfill('0') << setw(7) << i+1 << ".dat";
-						string filename = sstm.str();
-						myDP.save(filename,raw_ascii);
-						
-						std::stringstream sstm1;
-						sstm1 << output << "test/myExpansion_" << setfill('0') << setw(7) << j << ".dat";
-						string filename1 = sstm1.str();
-						myExpansionSlice.save(filename1,raw_ascii);
-					}
-*/					
 				}
+				}
+				condProb(counter) = sim/accu(myPixmap);
+				counter++;		
 			}
 			// Send back conditional probability to master
 			std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
@@ -742,6 +783,7 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 			}
 		}
 */
+/*
 		if (status.tag() == SAVELSETAG) {
 			cout << "Saving LSE to file" << endl;
 			string outputName;
@@ -750,7 +792,7 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 			outputName = sstm3.str();
 			condProb.save(outputName,raw_ascii);
 		}
-
+*/
 		if (status.tag() == DIETAG) {
 			//cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
 		  	return;
