@@ -18,6 +18,9 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
 #include <armadillo>
 
 using namespace std;
@@ -382,6 +385,20 @@ fmat load_asciiRotation(string x){
 		exit(EXIT_FAILURE);
 	}
 	return rotation;
+}
+
+fmat load_readNthLine(string input, int N){
+	fmat img;
+	std::ifstream infile;
+	infile.open(input.c_str());
+	string line;
+	// skip N lines
+	for (int r = 0; r <= N; r++) {
+		std::getline(infile, line);
+	}
+	img = load_asciiImage(line);
+   
+	return img;
 }
 
 void load_constant(int ang){
