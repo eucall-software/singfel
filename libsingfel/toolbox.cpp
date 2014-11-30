@@ -571,7 +571,7 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
 }
 
 // Insert a Ewald's slice into a diffraction volume
-void CToolbox::insert_slice(fcube *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
+void CToolbox::insert_slice(fcube *myValue, fmat *myPoints, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     
     fmat& pixRot = myPoints[0];
@@ -737,7 +737,7 @@ void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
 // Insert a Ewald's slice into a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::merge3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
+void CToolbox::merge3D(fcube *myValue, fmat *myPoints, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
     fmat& pix = myPoints[0];
     //cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
     fmat& myR = myRot[0];
@@ -752,7 +752,7 @@ void CToolbox::merge3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRo
         pixRot = trans(pixRot);  
     }
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        insert_slice(myValue,&pixRot,goodpix,myIntensity,myWeight);
+        insert_slice(myValue,&pixRot,myIntensity,myWeight);
     }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
     //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
     //}
