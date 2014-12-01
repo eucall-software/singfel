@@ -20,6 +20,9 @@
 #include <fstream>
 #include <string>
 
+#include "hdf5.h"
+#include "hdf5_hl.h"
+
 #ifdef COMPILE_WITH_CXX11
 	#define ARMA_DONT_USE_CXX11
 #endif
@@ -262,9 +265,8 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 		}
 	}
 	CBeam beam = CBeam();
-	
-	beam.set_photon_energy(photon_energy); // FIXME: Must read photonEnergy from pmi_out
-	beam.set_focus(focus_radius*2,"square"); // radius to diameter
+	//beam.set_photon_energy(photon_energy); // FIXME: Must read photonEnergy from pmi_out
+	//beam.set_focus(focus_radius*2,"square"); // FIXME: Must read radius from pmi_out
 
 	/****** Detector ******/
 	double d = 0;					// (m) detector distance
@@ -318,11 +320,11 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 	//det.init_dp(&beam);
 
 	if (comm->rank() == 1) {
-		double theta = atan((px/2*pix_height)/d);
-		double qmax = 2/beam.get_wavelength()*sin(theta/2);
+		double thetaMax = atan((px/2*pix_height)/d);
+		double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
 		double dmin = 1/(2*qmax);
 		cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
-		cout << "Half period resolution: " << dmin*1e10 << " Angstroms" << endl;
+		cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
 	}
 	
 	std::vector<float> msg;
@@ -428,6 +430,19 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 				//cout << "n_phot/total_phot: "<< n_phot << "/" << total_phot << endl;
 				beam.set_photonsPerPulse(n_phot);
 				beam.set_photonsPerPulsePerArea();
+				
+				////////////////////////
+				// Read in photon energy
+				photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
+				cout << "photon energy: " << photon_energy << endl;
+				beam.set_photon_energy(photon_energy);
+				// Read in focus size
+				double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
+				double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
+				cout << "focus: " << focus_xFWHM << endl;
+				beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
+				cout << "Done setting focus" << endl;
+				////////////////////////
 
 				det.init_dp(&beam);
 				CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
@@ -506,21 +521,22 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					CDiffraction::get_atomicFormFactorList(&particle,&det);
 
 					fmat F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
-		
-					//cout << "beam.get_photonsPerPulse(): " << beam.get_photonsPerPulse() << endl;
-					//cout << "beam.get_photonsPerPulsePerArea(): " << beam.get_photonsPerPulsePerArea() << endl;
-		
+
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 
-					// Temporary
-					std::stringstream sstm;
-		  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
-					string outputName = sstm.str();
-					Compton.save(outputName,raw_ascii);
-					std::stringstream sstm1;
-		  			sstm1 << outputDir << "Fsq_" << setfill('0') << setw(7) << timeSlice << ".dat";
-					string outputName1 = sstm1.str();
-					F_hkl_sq.save(outputName1,raw_ascii);
+					cout << "beam.get_photonsPerPulsePerArea():" << beam.get_photonsPerPulsePerArea() << endl;
+
+					// Save Elastic and inelastic components
+					if (0) {
+						std::stringstream sstm;
+			  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
+						string outputName = sstm.str();
+						Compton.save(outputName,raw_ascii);
+						std::stringstream sstm1;
+			  			sstm1 << outputDir << "Fsq_" << setfill('0') << setw(7) << timeSlice << ".dat";
+						string outputName1 = sstm1.str();
+						F_hkl_sq.save(outputName1,raw_ascii);
+					}
 
 				#endif
 				}// end timeSlice

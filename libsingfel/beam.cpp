@@ -7,7 +7,8 @@ using namespace arma;
 double CBeam::lambda; 							// (m) wavelength
 double CBeam::photon_energy; 					// (eV) photon energy
 double CBeam::k;								// (m^-1)
-double CBeam::focus;							// (m) beam focus diameter
+double CBeam::focus_xFWHM;							// (m) beam focus diameter
+double CBeam::focus_yFWHM;							// (m) beam focus diameter
 string CBeam::focus_shape;                      // focus shape: {square, default:circle}
 double CBeam::focus_area; 						// (m^2)
 double CBeam::n_phot;							// number of photons per pulse
@@ -18,7 +19,8 @@ CBeam::CBeam (){
     lambda = 0;
 	photon_energy = 0;
 	k = 0;
-	focus = 0;
+	focus_xFWHM = 0;
+	focus_yFWHM = 0;
 	focus_shape = "circle";
 	focus_area = 0;
 	n_phot = 0;
@@ -36,8 +38,8 @@ void CBeam::update(){
         lambda = wavenumber2wavelength(k);
         photon_energy = wavelength2photonEnergy(lambda);
     }
-    if (focus != 0) {
-        set_focusArea();
+    if (focus_xFWHM != 0) {
+    	set_focusArea();
         if (n_phot != 0) {
             set_photonsPerPulsePerArea();
         }
@@ -83,29 +85,35 @@ double CBeam::get_wavenumber(){
 }
 
 void CBeam::set_focus(double x){
-	focus = x;
+	focus_xFWHM = x;
 	update();
 }
 
 void CBeam::set_focus(double x, string shape){
-	focus = x;
-	if (shape == "square") {
-		focus_shape = shape;
-	} else if (shape == "circle") {
-		focus_shape = shape;
-	}
+	focus_xFWHM = x;
+	focus_shape = shape;
+	update();
+}
+
+void CBeam::set_focus(double x, double y, string shape){
+	focus_xFWHM = x;
+	focus_yFWHM = y;
+	focus_shape = shape;
 	update();
 }
 
 double CBeam::get_focus(){
-	return focus;
+	return focus_xFWHM;
 }
 
 void CBeam::set_focusArea() {
+cout << "set_focusArea: " << focus_xFWHM << "," << focus_yFWHM << endl;
 	if (focus_shape == "square") {
-		focus_area = pow(focus,2);	// d^2
+		focus_area = focus_xFWHM * focus_yFWHM;	// d^2
+	} else if (focus_shape == "ellipse") {
+		focus_area = datum::pi * focus_xFWHM/2 * focus_yFWHM/2;	// pi*rx*ry
 	} else {
-		focus_area = datum::pi * pow(focus/2,2);	// pi*r^2
+		focus_area = datum::pi * pow(focus_xFWHM/2,2);	// pi*r^2
 	}
 }
 
@@ -134,7 +142,7 @@ double CBeam::get_photonsPerPulsePerArea(){
 void CBeam::set_param(Packet *pack){
 	lambda = pack->lambda;
 	//k = wavelength2wavenumber(lambda);
-	focus = pack->focus;
+	focus_xFWHM = pack->focus;
 	//set_focusArea();	// pi*r^2
 	n_phot = pack->n_phot;	
 	//set_photonsPerPulsePerArea();

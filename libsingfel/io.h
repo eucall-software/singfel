@@ -531,7 +531,7 @@ template<typename T> T hdf5readScalar(std::string filename, std::string datasetn
 
       // Get class of datatype and print message if it's a float.
       if( type_class == H5T_FLOAT ) {
-	 	//cout << "Data set has FLOAT type" << endl;
+	     //cout << "Data set has FLOAT type" << endl;
 
          // Get the integer datatype
 	 	 FloatType intype = dataset.getFloatType();
@@ -563,6 +563,7 @@ template<typename T> T hdf5readScalar(std::string filename, std::string datasetn
 
       // Get the number of dimensions in the dataspace.
       int rank = dataspace.getSimpleExtentNdims();
+	  //cout << "rank: " << rank << endl;
 
       // Get the dimension size of each dimension in the dataspace and
       // display them.
@@ -575,12 +576,12 @@ template<typename T> T hdf5readScalar(std::string filename, std::string datasetn
 				data_out[0] = 0;
 				dataset.read( data_out, PredType::NATIVE_DOUBLE );
 				myData = data_out[0];
-			} else if( type_class == H5T_NATIVE_FLOAT ) {
+			} else if( type_class == H5T_NATIVE_FLOAT || type_class == H5T_FLOAT ) {
 				float data_out[1];
 				data_out[0] = 0;
 				dataset.read( data_out, PredType::NATIVE_FLOAT );
 				myData = data_out[0];
-			} else if( type_class == H5T_NATIVE_INT ) {
+			} else if( type_class == H5T_NATIVE_INT || type_class == H5T_INTEGER ) {
 				int data_out[1];
 				data_out[0] = 0;
 				dataset.read( data_out, PredType::NATIVE_INT );
