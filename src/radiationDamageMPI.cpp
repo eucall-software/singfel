@@ -262,8 +262,8 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 		}
 	}
 	CBeam beam = CBeam();
-					
-	beam.set_photon_energy(photon_energy);
+	
+	beam.set_photon_energy(photon_energy); // FIXME: Must read photonEnergy from pmi_out
 	beam.set_focus(focus_radius*2,"square"); // radius to diameter
 
 	/****** Detector ******/
@@ -321,7 +321,7 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 		double theta = atan((px/2*pix_height)/d);
 		double qmax = 2/beam.get_wavelength()*sin(theta/2);
 		double dmin = 1/(2*qmax);
-		cout << "max q to the edge: " << qmax << " m^-1" << endl;
+		cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
 		cout << "Half period resolution: " << dmin*1e10 << " Angstroms" << endl;
 	}
 	
@@ -403,6 +403,10 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 				particle.load_ionList(filename,datasetname+"/xyz");		// rowvec ion list
 				particle.load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
 				particle.load_qSample(filename,datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
+				// Particle's inelastic properties
+				particle.load_compton_qSample(filename,datasetname+"/Sq_Q");	// rowvec q vector sin(theta)/lambda
+				particle.load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
+				particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
 
 				// Rotate atom positions
 				fmat myPos = particle.get_atomPos();
@@ -428,6 +432,8 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 				det.init_dp(&beam);
 				CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
 
+				fmat Compton = CDiffraction::calculate_compton(&particle,&det); // get S_hkl
+
 				#ifdef COMPILE_WITH_CUDA
 				if (!USE_CHUNK) {
 					//cout<< "USE_CUDA && NO_CHUNK" << endl;
@@ -441,7 +447,7 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					float* p_mem = particle.atomPos.memptr();
 					cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, det.numPix, particle.numAtoms);
 		
-					detector_intensity += F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 			
 				} else if (USE_CHUNK) {
 					//cout<< "USE_CUDA && USE_CHUNK" << endl;
@@ -493,7 +499,7 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					sumDi.reshape(py,px);
 					F_hkl_sq = sumDr % sumDr + sumDi % sumDi;
 
-					detector_intensity += F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				}
 				#else
 				//cout<< "USE_CPU" << endl;
@@ -504,7 +510,17 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 					//cout << "beam.get_photonsPerPulse(): " << beam.get_photonsPerPulse() << endl;
 					//cout << "beam.get_photonsPerPulsePerArea(): " << beam.get_photonsPerPulsePerArea() << endl;
 		
-					detector_intensity += F_hkl_sq % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+
+					// Temporary
+					std::stringstream sstm;
+		  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
+					string outputName = sstm.str();
+					Compton.save(outputName,raw_ascii);
+					std::stringstream sstm1;
+		  			sstm1 << outputDir << "Fsq_" << setfill('0') << setw(7) << timeSlice << ".dat";
+					string outputName1 = sstm1.str();
+					F_hkl_sq.save(outputName1,raw_ascii);
 
 				#endif
 				}// end timeSlice
@@ -512,7 +528,7 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 			// Poisson noise
 			detector_counts = CToolbox::convert_to_poisson(detector_intensity);
 			
-			// Save to HDF5		
+			// Save to HDF5
 			int createSubgroup = 0;
 			int success = hdf5writeVector(outputName,"data","","/data/data", detector_counts, createSubgroup); // FIXME: groupname and subgroupname are redundant
 			success = hdf5writeVector(outputName,"data","","/data/diffr", detector_intensity, createSubgroup);

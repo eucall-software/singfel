@@ -13,13 +13,17 @@ fmat CParticle::atomPos;						// atom position
 fmat CParticle::ffTable;					// form factor table (atomType x qSample)
 frowvec CParticle::qSample;				// q vector sin(theta)/lambda
 fvec CParticle::orientation;			// orientation
-
 irowvec CParticle::ionList;
 irowvec CParticle::xyzInd;				// TEMPORARY
-
 urowvec CParticle::formFactorList;
+// Compton scattering
+int CParticle::numComptonQSamples;				// no. of Compton q samples
+frowvec CParticle::comptonQSample;				// Compton: q vector sin(theta)/lambda
+frowvec CParticle::sBound;				// Compton: static strucutre factor S(q)
+frowvec CParticle::nFree;				// Compton: number of free electrons
 
 CParticle::CParticle (){
+	numComptonQSamples = 0;
 	//cout << "init particle" << endl;
 }
 
@@ -191,3 +195,22 @@ void CParticle::set_param(Packet *x){
 	set_qSample(x);
 }
 
+int CParticle::get_numComptonQSamples(){
+	return numComptonQSamples;
+}
+
+void CParticle::load_compton_qSample(string filename, string datasetname){ // load from hdf5
+	comptonQSample = hdf5readT<frowvec>(filename,datasetname);
+	numComptonQSamples = comptonQSample.n_elem;
+	//CParticle::comptonQSample.print("comptonQSample: ");
+}
+
+void CParticle::load_compton_sBound(string filename, string datasetname){ // load from hdf5
+	sBound = hdf5readT<frowvec>(filename,datasetname);
+	//CParticle::sBound.print("sBound: ");
+}
+
+void CParticle::load_compton_nFree(string filename, string datasetname){ // load from hdf5
+	nFree = hdf5readT<frowvec>(filename,datasetname);
+	//CParticle::nFree.print("nFree: ");
+}

@@ -1,4 +1,7 @@
 #include <iostream>
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
 #include <armadillo>
 #include "diffraction.h"
 using namespace std;
@@ -21,7 +24,7 @@ double CDiffraction::calculate_Thomson(double ang) {
 }
 
 void CDiffraction::calculate_atomicFactor(particle::CParticle *particle, detector::CDetector *detector) {
-	// Atomic form factor: Better if Zoltan gives 5 Gaussian coefficients than ffTable
+	// Atomic form factor
 	f_hkl.zeros(detector->py,detector->px,particle->numAtomTypes);
 	fmat q_mod_Bragg = detector->q_mod * (1e-10/2);
 	gsl_interp_accel *acc = gsl_interp_accel_alloc();
@@ -90,6 +93,8 @@ cube CDiffraction::get_FourierMap(particle::CParticle *particle, detector::CDete
 	return map;
 }
 
+// Calculate molecular form factor |F_hkl(q)|^2.
+// Rename to calculate_molecularFormFactorSq
 fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::CDetector *detector) {
 	fmat F_hkl_sq;
 	F_hkl_sq.zeros(detector->py,detector->px);
@@ -107,4 +112,43 @@ fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::
 	}
 	//cout << "q_xyz: " << detector->q_xyz(0,0,0) << detector->q_xyz(0,0,1) << detector->q_xyz(0,0,2);
 	return F_hkl_sq;
+}
+
+// Calculate static structure factor S(q) and number of free electrons N_free(q)
+fmat CDiffraction::calculate_compton(particle::CParticle *particle, detector::CDetector *detector) {
+	fmat Compton;
+	fmat S_bound;
+	float N_free;
+	Compton.zeros(detector->py,detector->px);
+	S_bound.zeros(detector->py,detector->px);
+	N_free = particle->nFree(0);
+
+	fmat half_q = detector->q_mod * (1e-10/2);
+	gsl_interp_accel *acc = gsl_interp_accel_alloc();
+
+	gsl_spline *spline = gsl_spline_alloc(gsl_interp_cspline, particle->numComptonQSamples);
+	double qs[particle->numComptonQSamples], ft[particle->numComptonQSamples];
+	// silly copying of arma::rowvec to vector
+	for(int i=0; i<particle->numComptonQSamples; ++i) {
+		qs[i] = particle->comptonQSample(i);
+	}
+
+	// silly copying of arma::rowvec to vector
+	for(int i=0; i<particle->numComptonQSamples; ++i) {
+		ft[i] = particle->sBound(i); // 0 is first row
+  	}
+	
+	gsl_spline_init(spline, qs, ft, particle->numComptonQSamples);
+		
+	for(int a=0; a<detector->py; a++) {
+	for(int b=0; b<detector->px; b++) {
+		S_bound(a,b) = gsl_spline_eval(spline, half_q(a,b), acc); // interpolate
+	}
+	}
+
+	gsl_spline_free (spline);
+	gsl_interp_accel_free (acc);
+	
+	Compton = S_bound + N_free;
+	return Compton;
 }

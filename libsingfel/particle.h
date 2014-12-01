@@ -24,9 +24,13 @@ public:
 	static arma::frowvec qSample;		// q vector sin(theta)/lambda
 	static arma::fvec orientation;	// orientation of particle in quaternion
 	static arma::irowvec ionList;			// TEMPORARY	
-	
 	static arma::irowvec xyzInd;			// TEMPORARY
 	static arma::urowvec formFactorList;
+	// Compton properties
+	static int numComptonQSamples;			// no. of Compton q samples
+	static arma::frowvec comptonQSample;	// Compton: q vector sin(theta)/lambda
+	static arma::frowvec sBound;			// Compton: static strucutre factor S(q)
+	static arma::frowvec nFree;				// Compton: number of free electrons
 public:
 	CParticle();
 	static void load_atomType(string filename, string datasetname); // load hdf5
@@ -56,6 +60,11 @@ public:
 	static arma::fvec get_particleOrientation();
 	static void set_qSample(Packet*);
 	static void set_param(Packet*);
+
+	static int get_numComptonQSamples();
+	static void load_compton_qSample(string filename, string datasetname); // load hdf5
+	static void load_compton_sBound(string filename, string datasetname); // load hdf5
+	static void load_compton_nFree(string filename, string datasetname); // load hdf5			
 protected:
 
 private:

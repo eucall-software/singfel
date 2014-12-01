@@ -1,9 +1,9 @@
 #ifndef DIFFRACTION_H
 #define DIFFRACTION_H
 #include <math.h>
-#include <armadillo>
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_errno.h>
+#include <armadillo>
 #include "particle.h"
 #include "detector.h"
 
@@ -27,7 +27,7 @@ public:
 	static void get_atomicFormFactorList(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::cube get_FourierMap(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::fmat calculate_intensity(particle::CParticle *particle, detector::CDetector *detector);
-	
+	static arma::fmat calculate_compton(particle::CParticle *particle, detector::CDetector *detector);	
 double cuda_func(double);
 
 protected:
