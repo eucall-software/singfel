@@ -13,19 +13,19 @@ double CDetector::pix_width;		// (m)
 double CDetector::pix_height;		// (m)
 int CDetector::px;					// number of pixels in x
 int CDetector::py;					// number of pixels in y
-int CDetector::numPix;				// total number of pixels
+int CDetector::numPix;				// total number of pixels (px*py)
 double CDetector::cx;				// center of detector in x
 double CDetector::cy;				// center of detector in y
 fmat CDetector::dp;					// diffraction pattern
-fmat CDetector::q_x;
-fmat CDetector::q_y;
-fmat CDetector::q_z;
+fmat CDetector::q_x;				// pixel reciprocal space in x
+fmat CDetector::q_y;				// pixel reciprocal space in y
+fmat CDetector::q_z;				// pixel reciprocal space in z
 fcube CDetector::q_xyz; // slow? perhaps waste of memory
-fmat CDetector::q_mod;
-fmat CDetector::solidAngle;
-fmat CDetector::thomson;
-uvec CDetector::badpixmap;//sp_imat CDetector::badpixmap;
-uvec CDetector::goodpixmap;
+fmat CDetector::q_mod;				// pixel reciprocal space
+fmat CDetector::solidAngle;			// solid angle
+fmat CDetector::thomson;			// Thomson scattering
+uvec CDetector::badpixmap;			// bad pixel map (bad = 1)
+uvec CDetector::goodpixmap;			// good pixel map (good = 1)
 
 CDetector::CDetector (){
     d = 0;
@@ -36,7 +36,6 @@ CDetector::CDetector (){
     numPix = 0;
     cx = 0;
     cy = 0;
-	//cout << "init detector" << endl;
 }
 
 void CDetector::set_detector_dist(double dist){
@@ -123,36 +122,13 @@ void CDetector::set_pixelMap(string x){
 		temp = load_asciiImage(x);
 	}
 	badpixmap = find(temp == 1);
-	//badpixmap.print("badpix: ");
 	goodpixmap = find(temp == 0);
-	/*
-	badpixmap.copy_size(temp);
-	for (int i = 0; i < temp.n_rows; i++) {
-		for (int j = 0; j < temp.n_cols; j++) {
-		    if (temp(i,j) == 1) { 
-	            badpixmap(i,j) = 1;
-	        }
-	    }
-	}
-	badpixmap.print("badpixmap: ");
-	// Wrong way to access sparse elements
-	cout << badpixmap(0) << endl;
-	cout << badpixmap(1) << endl;
-	// Correct way to access sparse elements
-	sp_imat::iterator a = badpixmap.begin();
-    sp_imat::iterator b = badpixmap.end();
-    for(sp_imat::iterator i=a; i!=b; ++i) {
-        cout << *i << endl;
-    }
-    */
 }
 
 void CDetector::apply_badPixels() {
-    //fmat& myDP = in[0];
     uvec::iterator a = badpixmap.begin();
     uvec::iterator b = badpixmap.end();
     for(uvec::iterator i=a; i!=b; ++i) {
-        //cout << *i << endl;
         dp(*i) = 0;
     }
 }
@@ -202,7 +178,7 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	}
 	q_mod = CToolbox::mag(q_xyz);
 
-	double re = 2.81793870e-15;			// classical electron radius (m)
+	double const re = 2.81793870e-15;			// classical electron radius (m)
 	// Polarization factor, cos^2 mu + sin^2 mu * cos^2(2theta)
 	double mu; // polarization angle
 	string electricFieldPlane = "horizontal";
