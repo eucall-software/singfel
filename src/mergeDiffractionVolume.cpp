@@ -157,7 +157,6 @@ int main( int argc, char* argv[] ){
 
     uvec goodpix;
     goodpix = det.get_goodPixelMap();
-    //cout << "Good pix:" << goodpix << endl;
 
 	double theta = atan((px/2*pix_height)/d);
 	double qmax = 2/beam.get_wavelength()*sin(theta/2);
@@ -178,12 +177,11 @@ int main( int argc, char* argv[] ){
   		float psi,theta,phi;
 
 		fcube myWeight;
-		myWeight.zeros(mySize,mySize,mySize);
+		myWeight.zeros(px,px,px);
 		fcube myIntensity;
-		myIntensity.zeros(mySize,mySize,mySize);
+		myIntensity.zeros(px,px,px);
 		
 		cout << "Start" << endl;
-		//cout << mySize << endl;
 		
 		int active = 1;
 		string interpolate = "linear";// "nearest";
@@ -223,7 +221,7 @@ int main( int argc, char* argv[] ){
   		
   		// ########### Save diffraction volume ##############
   		cout << "Saving diffraction volume..." << endl;
-		for (int i = 0; i < mySize; i++) {
+		for (int i = 0; i < px; i++) {
 			std::stringstream sstm;
 			sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
 			string outputName = sstm.str();
