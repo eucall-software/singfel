@@ -166,27 +166,9 @@ int main( int argc, char* argv[] ){
 	cout << "Half period resolution: " << dmin << " m" << endl;
 
 	if(!USE_CUDA) {
-
-		int counter = 0;
-		fmat pix;
-		pix.zeros(det.numPix,3);
-		for (int i = 0; i < px; i++) {
-			for (int j = 0; j < py; j++) { // column-wise
-				pix(counter,0) = det.q_xyz(j,i,0);
-				pix(counter,1) = det.q_xyz(j,i,1);
-				pix(counter,2) = det.q_xyz(j,i,2);
-				counter++;
-			}
-		}
-        fvec pix_mod;
-		float pix_max;
-		pix = pix * 1e-10; // (nm)
-		pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = max(pix_mod);
-        float inc_res = (mySize-1)/(2*pix_max/sqrt(2));
-        pix = pix * inc_res;
-        pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = cx;
+		det.set_pixelSpace();
+		fmat pix = det.pixSpace;
+		float pix_max = det.pixSpaceMax;
 		
   		string filename;
   		
