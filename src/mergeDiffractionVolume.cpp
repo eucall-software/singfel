@@ -154,6 +154,8 @@ int main( int argc, char* argv[] ){
 	det.set_center_y(cy);
 	det.set_pixelMap(badpixmap);
 	det.init_dp(&beam);
+	fmat pix = det.pixSpace;
+	float pix_max = det.pixSpaceMax;
 
     uvec goodpix;
     goodpix = det.get_goodPixelMap();
@@ -165,10 +167,7 @@ int main( int argc, char* argv[] ){
 	cout << "Half period resolution: " << dmin << " m" << endl;
 
 	if(!USE_CUDA) {
-		
-		fmat pix = det.pixSpace;
-		float pix_max = det.pixSpaceMax;
-		
+
   		string filename;
   		
   		fmat myDP;
