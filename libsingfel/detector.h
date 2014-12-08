@@ -110,6 +110,8 @@ public:
 	static arma::fmat q_z;
 	static arma::fcube q_xyz;
 	static arma::fmat q_mod;
+	static arma::fmat pixSpace;			// pixel reciprocal space in Angstrom
+	static float pixSpaceMax;		// max pixel reciprocal space in Angstrom
 	static arma::fmat solidAngle;
 	static arma::fmat thomson;
 	static arma::uvec badpixmap; //static arma::sp_imat badpixmap;

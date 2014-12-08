@@ -166,7 +166,7 @@ int main( int argc, char* argv[] ){
 	cout << "Half period resolution: " << dmin << " m" << endl;
 
 	if(!USE_CUDA) {
-		det.set_pixelSpace();
+		
 		fmat pix = det.pixSpace;
 		float pix_max = det.pixSpaceMax;
 		

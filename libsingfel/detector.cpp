@@ -22,6 +22,8 @@ fmat CDetector::q_y;				// pixel reciprocal space in y
 fmat CDetector::q_z;				// pixel reciprocal space in z
 fcube CDetector::q_xyz; // slow? perhaps waste of memory
 fmat CDetector::q_mod;				// pixel reciprocal space
+fmat CDetector::pixSpace;			// pixel reciprocal space in Angstrom
+float CDetector::pixSpaceMax;		// max pixel reciprocal space in Angstrom
 fmat CDetector::solidAngle;			// solid angle
 fmat CDetector::thomson;			// Thomson scattering
 uvec CDetector::badpixmap;			// bad pixel map (bad = 1)
@@ -192,6 +194,26 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	}
 	fmat polarizationFactor = ( pow(cos(mu),2) + pow(sin(mu),2)*pow(cos(twoTheta),2) );
 	thomson = pow(re,2) * polarizationFactor;
+	
+	// Setup pixel space
+	int counter = 0;
+	pixSpace.zeros(numPix,3);
+	for (int i = 0; i < px; i++) {
+		for (int j = 0; j < py; j++) { // column-wise
+			pixSpace(counter,0) = q_xyz(j,i,0);
+			pixSpace(counter,1) = q_xyz(j,i,1);
+			pixSpace(counter,2) = q_xyz(j,i,2);
+			counter++;
+		}
+	}
+    fvec pix_mod;
+	pixSpace = pixSpace * 1e-10; // (A)
+	pix_mod = sqrt(sum(pixSpace%pixSpace,1));		
+	pixSpaceMax = max(pix_mod);
+    float inc_res = (px-1)/(2*pixSpaceMax/sqrt(2));
+    pixSpace = pixSpace * inc_res;
+    pix_mod = sqrt(sum(pixSpace%pixSpace,1));		
+	pixSpaceMax = cx;
 }
 
 void CDetector::set_param(Packet *x){
