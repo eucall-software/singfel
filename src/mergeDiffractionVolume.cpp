@@ -183,20 +183,14 @@ int main( int argc, char* argv[] ){
 		pix = pix * 1e-10; // (nm)
 		pix_mod = sqrt(sum(pix%pix,1));		
 		pix_max = max(pix_mod);
-        //cout << "pix_max: " << pix_max << endl;
         float inc_res = (mySize-1)/(2*pix_max/sqrt(2));
         pix = pix * inc_res;
         pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = cx;//max(pix_mod);
+		pix_max = cx;
 		
   		string filename;
-  		//string datasetname = "/data/data";
   		
   		fmat myDP;
-  		//CDetector myDet;
-  		  		
-  		//mat B;
-  		//fmat temp;
   		fmat myR;
   		myR.zeros(3,3);
   		float psi,theta,phi;
@@ -240,17 +234,7 @@ int main( int argc, char* argv[] ){
 				cout << rotationName << endl;
 				myR = load_asciiRotation(rotationName);
 			}
-			//fvec euler;
-			//psi = euler(0);
-			//theta = euler(1);
-			//phi = euler(2);
-			//euler.print("euler:");
-			//myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
-			myR.print("myR: ");
-			//myR = trans(myR);
-      	
         	CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-        	
   		}
   		// Normalize here
   		CToolbox::normalize(&myIntensity,&myWeight);
@@ -271,10 +255,6 @@ int main( int argc, char* argv[] ){
 		}
 		
     }
-
-	//cout << "Total time: " <<timerMaster.toc()<<" seconds."<<endl;
-
   	return 0;
-
 }
 
