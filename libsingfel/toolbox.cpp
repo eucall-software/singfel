@@ -196,6 +196,24 @@ float CToolbox::corrCoeff(fmat X, fmat Y) {
 	return cc;
 }
 
+fvec CToolbox::getRandomRotation(string rotationAxis) {
+	fvec quaternion(4);
+	if (rotationAxis == "y") {
+		// CCW rotation about the +y-axis
+		fvec u(1);
+		u = randu<fvec>(1) * 2*datum::pi; // random angle between [0,2pi]
+		quaternion = euler2quaternion(0, u[0], 0);
+	} else {
+		// random rotation in SO(3)
+		fvec u(3);
+		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
+		// generate uniform random quaternion on SO(3)
+		quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
+				   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+	}
+	return quaternion;
+}
+
 // Let's use zyz convention after Heymann (2005)
 fmat CToolbox::euler2rot3D(float psi, float theta, float phi) {
     fmat Rphi(3,3);

@@ -107,13 +107,12 @@ double CBeam::get_focus(){
 }
 
 void CBeam::set_focusArea() {
-cout << "set_focusArea: " << focus_xFWHM << "," << focus_yFWHM << endl;
 	if (focus_shape == "square") {
 		focus_area = focus_xFWHM * focus_yFWHM;	// d^2
 	} else if (focus_shape == "ellipse") {
 		focus_area = datum::pi * focus_xFWHM/2 * focus_yFWHM/2;	// pi*rx*ry
 	} else {
-		focus_area = datum::pi * pow(focus_xFWHM/2,2);	// pi*r^2
+		focus_area = datum::pi * pow(focus_xFWHM/2,2); // pi*r^2
 	}
 }
 

@@ -49,7 +49,7 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval);
+static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis);
 static void slave_expansion(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices);
 
 int main( int argc, char* argv[] ){
@@ -69,6 +69,7 @@ int main( int argc, char* argv[] ){
 	string inputDir;
 	string outputDir;
 	string configName;
+	string rotationAxis = "xyz";
 	
 	int sliceInterval;
 	int numSlices;
@@ -104,6 +105,8 @@ int main( int argc, char* argv[] ){
             dpID = atoi(argv[ n+2 ]);
         } else if (boost::algorithm::iequals(argv[ n ], "--numDP")) {
             numDP = atoi(argv[ n+2 ]);
+        } else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
+            rotationAxis = argv[ n+2 ];
         }
     }
   	
@@ -118,7 +121,7 @@ int main( int argc, char* argv[] ){
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
-		master_expansion(comm, pmiStartID, pmiEndID, numDP, sliceInterval);
+		master_expansion(comm, pmiStartID, pmiEndID, numDP, sliceInterval, rotationAxis);
 	} else {
 		slave_expansion(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices);
 	}
@@ -130,7 +133,7 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval) {
+static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis) {
 
   	int ntasks, rank, numProcesses, numSlaves;
   	boost::mpi::status status;
@@ -157,7 +160,6 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	int diffrID = (pmiStartID-1)*numDP+1;
 	int pmiID = pmiStartID;
 	int dpID = 1;
-	fvec u(3);
 	fvec quaternion(4);
 	
 	for (rank = 1; rank < numProcesses; ++rank) {
@@ -166,10 +168,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 			return;	
 		}
 		// Tell the slave how to rotate the particle
-		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
-		// generate uniform random quaternion on SO(3)
-		quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-				   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+		quaternion = CToolbox::getRandomRotation(rotationAxis);
 		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
 		comm->send(rank, QTAG, quat);
 		// Tell the slave to compute DP
@@ -193,10 +192,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
 		// Tell the slave how to rotate the particle
-		u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
-		// generate uniform random quaternion on SO(3)
-		quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-				   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+		quaternion = CToolbox::getRandomRotation(rotationAxis);
 		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
 		comm->send(status.source(), QTAG, quat);
 		// Tell the slave to compute DP
@@ -265,8 +261,6 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 		}
 	}
 	CBeam beam = CBeam();
-	//beam.set_photon_energy(photon_energy); // FIXME: Must read photonEnergy from pmi_out
-	//beam.set_focus(focus_radius*2,"square"); // FIXME: Must read radius from pmi_out
 
 	/****** Detector ******/
 	double d = 0;					// (m) detector distance
@@ -296,7 +290,6 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
                     break;
                 } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
                     string temp = *++tok_iter;
-                    cout << temp << endl;
                     badpixmap = temp;
                     break;
                 }
@@ -316,23 +309,23 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 	det.set_numPix(py,px);
 	det.set_center_x(cx);
 	det.set_center_y(cy);
-	//det.set_pixelMap(badpixmap);
-	//det.init_dp(&beam);
 
-	if (comm->rank() == 1) {
-		double thetaMax = atan((px/2*pix_height)/d);
-		double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
-		double dmin = 1/(2*qmax);
-		cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
-		cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
-	}
+	//if (comm->rank() == 1) {
+	//	double thetaMax = atan((px/2*pix_height)/d);
+	//	double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
+	//	double dmin = 1/(2*qmax);
+	//	cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
+	//	cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
+	//}
 	
 	std::vector<float> msg;
 	fmat detector_intensity;
 	umat detector_counts;
 	fmat rot3D(3,3);
 	fvec quaternion(4);
-		
+	/////////////////////////
+	int calculateCompton = 0;
+	/////////////////////////
 	while (1) {
 
 		// Receive a message from the master
@@ -406,48 +399,59 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 				particle.load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
 				particle.load_qSample(filename,datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
 				// Particle's inelastic properties
-				particle.load_compton_qSample(filename,datasetname+"/Sq_Q");	// rowvec q vector sin(theta)/lambda
-				particle.load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
-				particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
-
+				if (calculateCompton) {
+					particle.load_compton_qSample(filename,datasetname+"/Sq_Q");	// rowvec q vector sin(theta)/lambda
+					particle.load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
+					particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
+				}
 				// Rotate atom positions
 				fmat myPos = particle.get_atomPos();
 				myPos = myPos * trans(rot3D);
 				particle.set_atomPos(&myPos);
 		
 				// Beam //
-				double n_phot = 0;
-				for (int i = 0; i < sliceInterval; i++) {
-					string datasetname;
-					stringstream sstm0;
-					sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
-					datasetname = sstm0.str(); 					
-					vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
-					beam.set_photonsPerPulse(myNph[0]);
-					n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
+				if (fluence == 0) {
+					double n_phot = 0;
+					for (int i = 0; i < sliceInterval; i++) {
+						string datasetname;
+						stringstream sstm0;
+						sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
+						datasetname = sstm0.str(); 					
+						vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
+						beam.set_photonsPerPulse(myNph[0]);
+						n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
+					}
+					total_phot += n_phot;
+					beam.set_photonsPerPulse(n_phot);
+				} else {
+					total_phot = fluence;
+					beam.set_photonsPerPulse(fluence);
 				}
-				total_phot += n_phot;
-				//cout << "n_phot/total_phot: "<< n_phot << "/" << total_phot << endl;
-				beam.set_photonsPerPulse(n_phot);
-				beam.set_photonsPerPulsePerArea();
 				
-				////////////////////////
-				// Read in photon energy
-				photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
-				cout << "photon energy: " << photon_energy << endl;
+				if (photon_energy == 0) {
+					////////////////////////
+					// Read in photon energy
+					photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
+				}
 				beam.set_photon_energy(photon_energy);
-				// Read in focus size
-				double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
-				double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
-				cout << "focus: " << focus_xFWHM << endl;
-				beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
-				cout << "Done setting focus" << endl;
+
+				if (focus_radius == 0) {
+					// Read in focus size
+					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
+					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
+					beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
+				} else {
+					beam.set_focus(focus_radius*2);
+				}
 				////////////////////////
 
 				det.init_dp(&beam);
 				CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
-
-				fmat Compton = CDiffraction::calculate_compton(&particle,&det); // get S_hkl
+				fmat Compton;
+				Compton.zeros(py,px);
+				if (calculateCompton) {
+					Compton = CDiffraction::calculate_compton(&particle,&det); // get S_hkl
+				}
 
 				#ifdef COMPILE_WITH_CUDA
 				if (!USE_CHUNK) {
@@ -524,8 +528,6 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 
-					cout << "beam.get_photonsPerPulsePerArea():" << beam.get_photonsPerPulsePerArea() << endl;
-
 					// Save Elastic and inelastic components
 					if (0) {
 						std::stringstream sstm;
@@ -536,6 +538,10 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 			  			sstm1 << outputDir << "Fsq_" << setfill('0') << setw(7) << timeSlice << ".dat";
 						string outputName1 = sstm1.str();
 						F_hkl_sq.save(outputName1,raw_ascii);
+						std::stringstream sstm2;
+			  			sstm2 << outputDir << "SolidAngle_" << setfill('0') << setw(7) << timeSlice << ".dat";
+						string outputName2 = sstm2.str();
+						det.solidAngle.save(outputName2,raw_ascii);
 					}
 
 				#endif
