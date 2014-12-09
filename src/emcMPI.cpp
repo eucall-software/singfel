@@ -1,5 +1,5 @@
 /*
- * Program for merging diffraction patterns based on maximum cross correlations
+ * Program for merging diffraction patterns based on maximum likelihood
  */
 #include <iostream>
 #include <iomanip>
@@ -47,8 +47,8 @@ using namespace toolbox;
 #define SAVELSETAG 5 // save LSE signal
 #define GOODPIXTAG 6 // goodpixelmap
 #define DONETAG 7 // done signal
-static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string intput, string output, string format);
-static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format);
+static void master_recon(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string intput, string output, string format);
+static void slave_recon(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format);
 
 int main( int argc, char* argv[] ){
 
@@ -61,7 +61,7 @@ int main( int argc, char* argv[] ){
 
 	srand( world.rank() );
 
-	// Everyone parses input
+	// Every worker parses input
 	int master = 0;
 	string input;
 	int useFileList = 0;
@@ -76,6 +76,7 @@ int main( int argc, char* argv[] ){
 	string output;
 	string intialVolume = "randomMerge";
 	string format;
+	string rotationAxis = "xyz";
 	// Let's parse input
 	for (int n = 1; n < argc; n++) {
 	cout << argv [ n ] << endl;
@@ -105,6 +106,8 @@ int main( int argc, char* argv[] ){
 		    intialVolume = argv[ n+2 ];
 		} else if (boost::algorithm::iequals(argv[ n ], "--format")) {
             format = argv[ n+2 ];
+        } else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
+            rotationAxis = argv[ n+2 ];
         }
 	}
 
@@ -163,8 +166,7 @@ int main( int argc, char* argv[] ){
 		ifstream myGeomFile(geomFile.c_str());
 		while (getline(myGeomFile, line)) {
 			if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-				// line now contains a valid input 
-		        //cout << line << endl; 
+				// line now contains a valid input  
 		        typedef boost::tokenizer<boost::char_separator<char> > Tok;
 		        boost::char_separator<char> sep(" ="); // default constructed
 		        Tok tok(line, sep);
@@ -183,7 +185,6 @@ int main( int argc, char* argv[] ){
 		                break;
 		            } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
 		                string temp = *++tok_iter;
-		                //cout << temp << endl;
 		                badpixmap = temp;
 		                break;
 		            }
@@ -205,9 +206,9 @@ int main( int argc, char* argv[] ){
 		det.set_center_y(cy);
 		det.set_pixelMap(badpixmap);
 		det.init_dp(&beam);
-
+		pix = det.pixSpace;
+		pix_max = det.pixSpaceMax;
 		goodpix = det.get_goodPixelMap();
-		//cout << "Good pix:" << goodpix << endl;
 
 		double theta = atan((px/2*pix_height)/d);
 		double qmax = 2/beam.get_wavelength()*sin(theta/2);
@@ -225,28 +226,6 @@ int main( int argc, char* argv[] ){
 		fcube myWeight;
 		myWeight.zeros(mySize,mySize,mySize);
 		myIntensity.zeros(mySize,mySize,mySize);
-		//int numPixels = mySize * mySize;
-		//fmat myImages;
-		//myImages.zeros(numImages,numPixels);
-	
-		int counter = 0;
-		pix.zeros(det.numPix,3);
-		for (int i = 0; i < px; i++) {
-			for (int j = 0; j < py; j++) { // column-wise
-				pix(counter,0) = det.q_xyz(j,i,0);
-				pix(counter,1) = det.q_xyz(j,i,1);
-				pix(counter,2) = det.q_xyz(j,i,2);
-				counter++;
-			}
-		}
-		fvec pix_mod;
-		pix = pix * 1e-10; // (nm)
-		pix_mod = sqrt(sum(pix%pix,1));
-		pix_max = max(pix_mod);
-		float inc_res = (mySize-1)/(2*pix_max/sqrt(2));
-		pix = pix * inc_res;
-		pix_mod = sqrt(sum(pix%pix,1));		
-		pix_max = cx;//max(pix_mod);
 
 		timerMaster.tic();
 		
@@ -258,17 +237,24 @@ int main( int argc, char* argv[] ){
 		fvec quaternion(4);
 	
 		std::ifstream infile;
-		if (useFileList) {
+		if (format == "list") {
 			cout << "Using image list: " << input << endl;
 			infile.open(input.c_str());
 		}
 	
+		if (world.rank() == master) {
 		if ( strcmp(intialVolume.c_str(),"randomMerge")==0 ) {
 			cout << "Randomly merging diffraction volume..." << endl;
 			// Setup initial diffraction volume by merging randomly
+			// rotationAxis determines the random nature of the angles
 			for (int r = 0; r < numImages; r++) {
 			  	// Get image
-			  	if (useFileList) {
+			  	if (format == "S2E") {
+			  		std::stringstream sstm;
+			  		sstm << input << "/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
+					filename = sstm.str();
+					myDP = hdf5readT<fmat>(filename,"/data/data");
+			  	} else if (format == "list") {
 			  		std::getline(infile, line);
 			  		myDP = load_asciiImage(line);
 			  	} else {
@@ -279,21 +265,15 @@ int main( int argc, char* argv[] ){
 				}
 			
 				// Get rotation matrix
-			  	u = randu<fvec>(3); // uniform random distribution in the [0,1] interval
-				// generate uniform random quaternion on SO(3)
-				quaternion << sqrt(1-u(0)) * sin(2*datum::pi*u(1)) << sqrt(1-u(0)) * cos(2*datum::pi*u(1))
-						   << sqrt(u(0)) * sin(2*datum::pi*u(2)) << sqrt(u(0)) * cos(2*datum::pi*u(2));
+			  	quaternion = CToolbox::getRandomRotation(rotationAxis);
 			
 				myR = CToolbox::quaternion2rot3D(quaternion);
 				active = 1;
 				CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-			
-				// Save diffraction pattern
-				//myImages.row(r) = reshape(myDP,1,numPixels); // read along fs
 		  	}
 			// Normalize here
 			CToolbox::normalize(&myIntensity,&myWeight);
-	  	} else {
+	  	} else { // Load pre-existing diffraction volume
 			cout << "Loading diffraction volume..." << endl;
 			for (int i = 0; i < mySize; i++) {
 				std::stringstream sstm;
@@ -301,6 +281,7 @@ int main( int argc, char* argv[] ){
 				string outputName = sstm.str();
 				myIntensity.slice(i) = load_asciiImage(outputName);
 			}
+		}
 		}
 	}
 
@@ -315,11 +296,15 @@ int main( int argc, char* argv[] ){
 		if (world.rank() == master) {
 			if (iter == startIter) {
 				// Equal distribution of quaternions
-  				myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+				if (rotationAxis == "y") {
+					myQuaternions = CToolbox::pointsOn1Sphere(numSlices, rotationAxis);
+				} else {
+  					myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  				}
   			}
-			master_expansion(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, numImages, mySize, iter, startIter, numIterations, numSlices, input, output, format);
+			master_recon(comm, &myQuaternions, &myIntensity, &pix, pix_max, &goodpix, numImages, mySize, iter, startIter, numIterations, numSlices, input, output, format);
 		} else {
-			slave_expansion(comm, numImages, mySize, output, useFileList, input, format);
+			slave_recon(comm, numImages, mySize, output, useFileList, input, format);
 		}
 		world.barrier();
 		if (world.rank() == master) {
@@ -329,16 +314,17 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string input, string output, string format) {
+static void master_recon(mpi::communicator* comm, fmat* quaternions, fcube* myIntensity, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string input, string output, string format) {
 
-	wall_clock timerMaster;
+	wall_clock timerMaster;//, timer;
 
 	// ########### EXPANSION ##############
 	cout << "Start expansion" << endl;
+	//timer.tic();
 	timerMaster.tic();
 	
   	int rank, numProcesses, numSlaves;
-  	const int numMaster = 1;
+  	//const int numMaster = 1;
   	fvec quaternion;
   	boost::mpi::status status;
 
@@ -352,13 +338,16 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	}
 	std::vector<float> data = conv_to< std::vector<float> >::from(intensityVector);
 
+	//cout << "Done vectorizing volume: " << timerMaster.toc() <<" seconds."<<endl;
+	//timerMaster.tic();
+
 	int active = 1;
 	string interpolate = "linear";
 	fmat myR;
 	myR.zeros(3,3);
-	fcube myDP;//fmat myDP;
+	fcube myDP;
 	
-	// Temporary
+	// Expansion rotations
 	fcube myRot;
 	myRot.zeros(3,3,numSlices);
 	for (int i = 0; i < numSlices; i++) {
@@ -366,26 +355,31 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		myRot.slice(i) = myR;
 	}
 	
-	//////////////////////
-	int skipExpansion = 0;
-	//////////////////////
+	//cout << "Done getting rotations: " << timerMaster.toc() <<" seconds."<<endl;
 	
-	if (skipExpansion == 0) {
-		for (int i = 0; i < numSlices; i++) {
-			myDP.zeros(mySize,mySize,2);
-			// Get rotation matrix
-			myR = myRot.slice(i);
-			CToolbox::slice3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
-			// Save expansion slice to disk
-			std::stringstream sstm;
-			sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << i << ".dat";
-			string outputName = sstm.str();
-			myDP.slice(0).save(outputName,raw_ascii); //myDP.save(outputName,raw_ascii);
-			std::stringstream sstm1;
-			sstm1 << output << "expansion/myExpansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
-			string outputName1 = sstm1.str();
-			myDP.slice(1).save(outputName1,raw_ascii);
-		}
+	
+	for (int i = 0; i < numSlices; i++) {
+		//timerMaster.tic();
+		
+		myDP.zeros(mySize,mySize,2);
+		// Get rotation matrix
+		myR = myRot.slice(i);
+		CToolbox::slice3D(&myDP, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
+		
+		//cout << "Done getting a slice: " << timerMaster.toc() <<" seconds."<<endl;
+		//timerMaster.tic();
+		
+		// Save expansion slice to disk
+		std::stringstream sstm;
+		sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName = sstm.str();
+		myDP.slice(0).save(outputName,raw_ascii);
+		std::stringstream sstm1;
+		sstm1 << output << "expansion/myExpansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myDP.slice(1).save(outputName1,raw_ascii);
+		
+		//cout << "Done saving: " << timerMaster.toc() <<" seconds."<<endl;
 	}
 	
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
@@ -397,17 +391,11 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	// 2) Index of expansion slice
 	// 3) Compute signal
 	////////////////////////////////////////////
-	//int slicesPerSlave = floor( (float) numSlices / (float) (numProcesses-1) );
 	int dataPerSlave = floor( (float) numImages / (float) numSlaves );
-	//int leftOver = numSlices - slicesPerSlave * numSlaves;
 	int leftOver = numImages - dataPerSlave * numSlaves;
-	
-	//cout << "slicesPerSlave: " << slicesPerSlave << endl;
-	//cout << "leftOver: " << leftOver << endl;
-	
+
 	// Vector containing jobs per slave
 	uvec s(numSlaves);
-	//s.fill(slicesPerSlave);
 	s.fill(dataPerSlave);
 	for (int i = 0; i < numSlaves; i++) {
 		if (leftOver > 0) {
@@ -422,169 +410,66 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 	// Setup goodpixmap
 	uvec::iterator goodBegin = goodpix->begin();
 	uvec::iterator goodEnd = goodpix->end();
-	if (skipExpansion == 0) {
-		std::vector<float> msg;
-		std::vector<float> msgProb;
-		for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
-			// For each slice, each worker get a subset of measured data
-			int startInd = 0;
-			int endInd = 0;
-			for (rank = 1; rank < numProcesses; ++rank) {
-				endInd = startInd + s(rank-1) - 1;
-
-				std::vector<int> id(3);
-				id.at(0) = startInd;
-				id.at(1) = endInd;
-				id.at(2) = expansionInd;
-				comm->send(rank, DPTAG, id);
+	std::vector<float> msg;
+	std::vector<float> msgProb;
+	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
+		// For each slice, each worker get a subset of measured data
+		int startInd = 0;
+		int endInd = 0;
+		for (rank = 1; rank < numProcesses; ++rank) {
+			endInd = startInd + s(rank-1) - 1;
+			std::vector<int> id(3);
+			id.at(0) = startInd;
+			id.at(1) = endInd;
+			id.at(2) = expansionInd;
+			comm->send(rank, DPTAG, id);
 				
-				//comm->send(rank, SAVESLICESTAG, msg);
+			//comm->send(rank, SAVESLICESTAG, msg);
+	
+			//comm->send(rank, SAVELSETAG, msg);
 		
-				//comm->send(rank, SAVELSETAG, msg);
+			startInd += s(rank-1);
+	  	}
+		//cout << "Job sending time: " << timerMaster.toc() <<" seconds."<<endl;
 		
-				startInd += s(rank-1);
-		  	}
-			cout << "Job sending time: " << timerMaster.toc() <<" seconds."<<endl;
-			// Accumulate lse for each expansion slice
-			int currentRow = 0;
-			fvec lse;
-			for (rank = 1; rank < numProcesses; ++rank) {
-				status = comm->recv(rank, boost::mpi::any_tag, msgProb);
-				lse = conv_to< fvec >::from(msgProb);
-				for (int i = 0; i < lse.n_elem; i++) {
-					myVal(currentRow+i) = lse(i);
-				}
-				currentRow += s(rank-1);
-			}
-			// Save lse
-			cout << "Saving LSE to file" << endl;
-			string outputName;
-			stringstream sstm3;
-			sstm3 << output << "similarity/lse_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			outputName = sstm3.str();
-			myVal.save(outputName,raw_ascii);
-			// Pick top candidates
-			uvec indices = sort_index(myVal);
-			uvec candidatesInd;
-			candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
-			// Calculate norm cond prob
-			fvec candidatesVal;
-			candidatesVal.zeros(numCandidates+1);
-			for (int i = 0; i <= numCandidates; i++) {
-				candidatesVal(i) = myVal(candidatesInd(i));
-			}
-			fvec normVal = -candidatesVal / sum(candidatesVal);
-			normVal -= min(normVal);
-			normVal /= sum(normVal);
-			// Update expansion slices
-			fmat myDP1;
-			myDP1.zeros(mySize,mySize);
-			fmat myDP2;
-			string filename;
-			for (int r = 0; r < numCandidates; r++) {
-				// Get measured diffraction pattern
-				//cout << normVal(r) << endl;
-				if (format == "S2E") {
-					myDP2.zeros(mySize,mySize);
-					std::stringstream sstm;
-			  		sstm << input << "/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
-					filename = sstm.str();
-					// Read in diffraction				
-					myDP2 = hdf5readT<fmat>(filename,"/data/data");
-				}
-				for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-					myDP1(*p) += normVal(r) * myDP2(*p);
-				}
-			}
-			// Get image
-			std::stringstream sstm2;
-			sstm2 << output << "expansion1/myExpansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			filename = sstm2.str();
-			myDP1.save(filename,raw_ascii);	
-		}
-	}
-	
-	// SAVE SLICES FOR VIEWING
-	// Tell all the slaves to save slices by sending an empty message with the SAVESLICESTAG.
-//	for (rank = 1; rank < numProcesses; ++rank) {
-//		comm->send(rank, SAVESLICESTAG, msg);
-//	}
-
-	// ########### MAXIMIZATION ##############
-	cout << "Start maximization" << endl;
-	
-	timerMaster.tic();
-	
-	
-	fmat myTable(numImages,numSlices);
-	int numWorkerSlices;
-	int currentCol = 0;
-/*
-  	// Receive chunks of LSE from the slaves.
-	if (skipExpansion == 0) {
+		// Accumulate lse for each expansion slice
+		int currentRow = 0;
+		fvec lse;
 		for (rank = 1; rank < numProcesses; ++rank) {
 			status = comm->recv(rank, boost::mpi::any_tag, msgProb);
-			fvec lse = conv_to< fvec >::from(msgProb);
-			numWorkerSlices = s(rank-1);
-			myTable.cols(currentCol,currentCol+s(rank-1)-1) = reshape(lse,numImages,numWorkerSlices);
-			currentCol += s(rank-1);
+			lse = conv_to< fvec >::from(msgProb);
+			for (int i = 0; i < lse.n_elem; i++) {
+				myVal(currentRow+i) = lse(i);
+			}
+			currentRow += s(rank-1);
 		}
-	} else { // read LSE from file
-		for (rank = 1; rank < numProcesses; ++rank) {
-			//status = comm->recv(rank, boost::mpi::any_tag, msgProb);
-			// Get image
-			std::stringstream sstm;
-			sstm << output << "similarity/lse_" << setfill('0') << setw(7) << rank << ".dat";
-			string filename = sstm.str();
-			fmat lse;
-			lse = load_asciiImage(filename);
-			cout << "lse:" << lse << endl;
-			numWorkerSlices = s(rank-1);
-			myTable.cols(currentCol,currentCol+s(rank-1)-1) = lse;
-			currentCol += s(rank-1);
-		}
-	}
-	
-	cout << "Conditional probability table complete" << endl;
-	myTable.print("myTable:");
-	
-	// Setup goodpixmap
-	uvec::iterator goodBegin = goodpix->begin();
-	uvec::iterator goodEnd = goodpix->end();
-	
-	// Sort and normalize
-	for (int k = 0; k < numSlices; k++) {
-		cout << "Updating slice: " << k << endl;
-		fvec val = vectorise(myTable.col(k));
-		uvec indices = sort_index(val);
-	
+		// Save lse
+		//cout << "Saving LSE to file" << endl;
+		string outputName;
+		stringstream sstm3;
+		sstm3 << output << "similarity/lse_" << setfill('0') << setw(7) << expansionInd << ".dat";
+		outputName = sstm3.str();
+		myVal.save(outputName,raw_ascii);
+		// Pick top candidates
+		uvec indices = sort_index(myVal);
 		uvec candidatesInd;
 		candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
-	
-		//cout << "ind:" << candidatesInd << endl;
-
+		// Calculate norm cond prob
 		fvec candidatesVal;
 		candidatesVal.zeros(numCandidates+1);
 		for (int i = 0; i <= numCandidates; i++) {
-			candidatesVal(i) = val(candidatesInd(i));
+			candidatesVal(i) = myVal(candidatesInd(i));
 		}
-	
-		//cout << "val:" << candidatesVal << endl;
-	
 		fvec normVal = -candidatesVal / sum(candidatesVal);
 		normVal -= min(normVal);
 		normVal /= sum(normVal);
-	
-		//cout << "normVal: " << normVal << endl;
-	
+		// Update expansion slices
 		fmat myDP1;
 		myDP1.zeros(mySize,mySize);
 		fmat myDP2;
 		string filename;
-		// Update expansion slices
 		for (int r = 0; r < numCandidates; r++) {
 			// Get measured diffraction pattern
-			//cout << normVal(r) << endl;
 			if (format == "S2E") {
 				myDP2.zeros(mySize,mySize);
 				std::stringstream sstm;
@@ -592,24 +477,21 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 				filename = sstm.str();
 				// Read in diffraction				
 				myDP2 = hdf5readT<fmat>(filename,"/data/data");
+			} else if (format == "list") {
+				myDP2.zeros(mySize,mySize);
+				myDP2 = load_readNthLine(input, r);
 			}
+			// Weighted mean
 			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
 				myDP1(*p) += normVal(r) * myDP2(*p);
 			}
 		}
-		// Get image
+		// Save image
 		std::stringstream sstm2;
-		sstm2 << output << "expansion1/myExpansion_" << setfill('0') << setw(7) << k << ".dat";
+		sstm2 << output << "expansion/myExpansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		filename = sstm2.str();
 		myDP1.save(filename,raw_ascii);	
 	}
-	
-	// SAVE LSE FOR VIEWING
-	// Tell all the slaves to save LSE by sending an empty message with the SAVELSETAG.
-	//for (rank = 1; rank < numProcesses; ++rank) {
-	//	comm->send(rank, SAVELSETAG, msg);
-	//}
-*/
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
 	// ########### COMPRESSION ##############
@@ -627,17 +509,20 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		myDP.zeros(mySize,mySize,2);
 		// Get image
 		std::stringstream sstm;
-		sstm << output << "expansion1/myExpansion_" << setfill('0') << setw(7) << r << ".dat";
+		sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << r << ".dat";
 		filename = sstm.str();
 		myDP.slice(0) = load_asciiImage(filename);
 		std::stringstream sstm1;
 		//sstm1 << output << "/expansion/myExpansionPixmap_" << setfill('0') << setw(7) << r << ".dat";
-		sstm1 << output << "badpixelmap.dat";
+		if (format == "S2E") {
+			sstm1 << output << "badpixelmap.dat";
+		} else if (format == "list") {
+			sstm1 << "/slicetest/yoon/singfel/dataDimple/expansion/badpixelmap181x181_data.dat";
+		}
 		filename1 = sstm1.str();		
 		myDP.slice(1) = load_asciiImage(filename1);
 		myDP.slice(1) = -1*myDP.slice(1) + 1; // goodpixmap
 		// Get rotation matrix
-		//myR = CToolbox::quaternion2rot3D(trans(quaternions->row(bestFit(r))));
 		myR = myRot.slice(r);
 		CToolbox::merge3D(&myDP, pix, &myR, pix_max, myIntensity, &myWeight, active, interpolate);
 	}
@@ -660,18 +545,17 @@ static void master_expansion(mpi::communicator* comm, fmat* quaternions, fcube* 
 		myWeight.slice(i).save(outputName1,raw_ascii);
 	}
 
-// KILL SLAVES
+	// KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-  	if (iter-startIter+1 == numIterations) {
-  		std::vector<int> msg1;
-		for (rank = 1; rank < numProcesses; ++rank) {
-			comm->send(rank, DIETAG, msg1);
-			cout << "Signing off: " << rank << endl;
-		}
+  	std::vector<int> msg1;
+	for (rank = 1; rank < numProcesses; ++rank) {
+		comm->send(rank, DIETAG, msg1);
+		//cout << "Signing off: " << rank << endl;
 	}
+	cout << "Done iteration: " << iter << endl;
 }
 
-static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format) {
+static void slave_recon(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format) {
 
 	//int numChunkSlices = 0;
 	int numChunkData = 0;
@@ -725,9 +609,9 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 			string line;
 			int counter = 0;
     		for (int i = startInd; i <= endInd; i++) {
-				if (comm->rank() == 1) {
-					cout << i << "/" << numChunkData << endl;
-				}
+				//if (comm->rank() == 1) {
+				//	cout << i << "/" << numChunkData << endl;
+				//}
 				//Read in measured diffraction data
 				if (format == "S2E") {
 			  		std::stringstream sstm;
@@ -735,6 +619,13 @@ static void slave_expansion(mpi::communicator* comm, int numImages, int mySize, 
 					filename = sstm.str();
 					// Read in diffraction				
 					myDP = hdf5readT<fmat>(filename,"/data/data");
+			  	} else if (format == "list") {
+			  		//cout << "input, lineNum:" << input << "," << i << endl;
+				  	myDP = load_readNthLine(input, i);
+				  	
+				  	// Temporary
+				  	myDP = log(abs(myDP));
+				  	 
 			  	} else {
 				  	std::stringstream sstm;
 			  		sstm << input << setfill('0') << setw(7) << i << ".dat";
