@@ -45,7 +45,6 @@ void CDetector::set_detector_dist(double dist){
 }
 
 double CDetector::get_detector_dist(){
-	cout << "dist: " << d << endl;
 	return d;
 }
 

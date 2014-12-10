@@ -13,7 +13,7 @@ fcube CDiffraction::f_hkl;
 fcube CDiffraction::f_hkl_list;
 
 CDiffraction::CDiffraction() {
-	cout << "init diffraction" << endl;
+//cout << "init diffraction" << endl;
 }
 
 double CDiffraction::calculate_Thomson(double ang) {
