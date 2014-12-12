@@ -49,8 +49,8 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis);
-static void slave_expansion(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices);
+static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation);
+static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton);
 
 int main( int argc, char* argv[] ){
 
@@ -61,10 +61,10 @@ int main( int argc, char* argv[] ){
 	const int master = 0;
 	
 	// All processes do this
-    string beamFile;
-    string geomFile;
-    int gpu = 0; // not used
-    string output;
+	string beamFile;
+	string geomFile;
+	int gpu = 0; // not used
+	string output;
     
 	string inputDir;
 	string outputDir;
@@ -77,38 +77,44 @@ int main( int argc, char* argv[] ){
 	int pmiEndID;
 	int dpID;
 	int numDP;
-
-    // Let's parse input
-    for (int n = 1; n < argc; n++) {
-    cout << argv [ n ] << endl;
-        if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
-            sliceInterval = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--input_dir")) {
-            inputDir = argv[ n+2 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "--output_dir")) {
-            outputDir = argv[ n+2 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "--config_file")) {
-            configName = argv[ n+2 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-b")) {
-            beamFile = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
-            geomFile = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "--gpu")) {
-            gpu = 1;
-        } else if (boost::algorithm::iequals(argv[ n ], "--numSlices")) {
-            numSlices = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--pmiStartID")) {
-            pmiStartID = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--pmiEndID")) {
-            pmiEndID = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--dpID")) {
-            dpID = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--numDP")) {
-            numDP = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
-            rotationAxis = argv[ n+2 ];
-        }
-    }
+	int calculateCompton = 0;
+	int uniformRotation = 0;
+	
+	// Let's parse input
+	for (int n = 1; n < argc; n++) {
+		cout << argv [ n ] << endl;
+		if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
+		    sliceInterval = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--input_dir")) {
+		    inputDir = argv[ n+2 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "--output_dir")) {
+		    outputDir = argv[ n+2 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "--config_file")) {
+		    configName = argv[ n+2 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "-b")) {
+		    beamFile = argv[ n+1 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "-g")) {
+		    geomFile = argv[ n+1 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "--gpu")) {
+		    gpu = 1;
+		} else if (boost::algorithm::iequals(argv[ n ], "--numSlices")) {
+		    numSlices = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--pmiStartID")) {
+		    pmiStartID = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--pmiEndID")) {
+		    pmiEndID = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--dpID")) {
+		    dpID = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--numDP")) {
+		    numDP = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
+		    rotationAxis = argv[ n+2 ];
+		} else if (boost::algorithm::iequals(argv[ n ], "--uniformRotation")) {
+		    uniformRotation = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--calculateCompton")) {
+		    calculateCompton = atoi(argv[ n+2 ]);
+		}
+	}
   	
 	wall_clock timerMaster;
 
@@ -116,14 +122,14 @@ int main( int argc, char* argv[] ){
 
 	world.barrier();
 
-    srand( pmiStartID + world.rank() + (unsigned)time(NULL) );
+	srand( pmiStartID + world.rank() + (unsigned)time(NULL) );
 
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
-		master_expansion(comm, pmiStartID, pmiEndID, numDP, sliceInterval, rotationAxis);
+		master_diffract(comm, pmiStartID, pmiEndID, numDP, sliceInterval, rotationAxis, uniformRotation);
 	} else {
-		slave_expansion(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices);
+		slave_diffract(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices, calculateCompton);
 	}
 	world.barrier();
 	if (world.rank() == master) {
@@ -133,7 +139,7 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis) {
+static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation) {
 
   	int ntasks, rank, numProcesses, numSlaves;
   	boost::mpi::status status;
@@ -162,13 +168,29 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	int dpID = 1;
 	fvec quaternion(4);
 	
+	// Setup rotations
+	fmat myQuaternions;
+	if (uniformRotation) { // uniform rotations
+		if (rotationAxis == "y" || rotationAxis == "z") {
+			myQuaternions = CToolbox::pointsOn1Sphere(numDP, rotationAxis);		
+		} else if (rotationAxis == "xyz") {
+			myQuaternions = CToolbox::pointsOn4Sphere(numDP);
+		}
+	} else { // random rotations
+		for (int i = 0; i < numDP; i++) {
+			myQuaternions.row(i) = CToolbox::getRandomRotation(rotationAxis);
+		}
+	}
+
+	int counter = 0;
 	for (rank = 1; rank < numProcesses; ++rank) {
 		if (pmiID > pmiEndID) {
 			cout << "Error!!" << endl;
 			return;	
 		}
 		// Tell the slave how to rotate the particle
-		quaternion = CToolbox::getRandomRotation(rotationAxis);
+		quaternion = trans(myQuaternions.row(counter));
+		counter++;
 		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
 		comm->send(rank, QTAG, quat);
 		// Tell the slave to compute DP
@@ -177,6 +199,8 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 		id.at(1) = (float) diffrID;
 		id.at(2) = (float) sliceInterval;
 		comm->send(rank, DPTAG, id);
+		cout << "diffrID: " << diffrID << endl;
+
 		diffrID++;
 		dpID++;
 		if (dpID > numDP) {
@@ -192,8 +216,9 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
 		// Tell the slave how to rotate the particle
-		quaternion = CToolbox::getRandomRotation(rotationAxis);
+		quaternion = trans(myQuaternions.row(counter));
 		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
+		counter++;
 		comm->send(status.source(), QTAG, quat);
 		// Tell the slave to compute DP
 		std::vector<float> id(3);
@@ -201,21 +226,23 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 		id.at(1) = (float) diffrID;
 		id.at(2) = (float) sliceInterval;
 		comm->send(status.source(), DPTAG, id);
+		cout << "diffrID: " << diffrID << endl;
+
 		diffrID++;
 		dpID++;
 		if (dpID > numDP) {
 			dpID = 1;
 			pmiID++;
 		}
-		if (diffrID > ntasks) done = 1;
-		cout << "diffrID: " << diffrID << endl;
+		if (diffrID > ntasks) {
+			done = 1;
+		}
 	}
 	
   	// Wait for status update of slaves.
 	for (rank = 1; rank < numProcesses; ++rank) {
-    	status = comm->recv(rank, boost::mpi::any_tag, msgDone);
-
-    }
+		status = comm->recv(rank, boost::mpi::any_tag, msgDone);
+	}
     
 	// KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
@@ -224,7 +251,7 @@ static void master_expansion(mpi::communicator* comm, int pmiStartID, int pmiEnd
 	}
 }
 
-static void slave_expansion(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices) {
+static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton) {
 	
 	wall_clock timer;
 	boost::mpi::status status;
@@ -239,25 +266,25 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 	ifstream myFile(beamFile.c_str());
 	while (getline(myFile, line)) {
 		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-		    // line now contains a valid input
-		    typedef boost::tokenizer<boost::char_separator<char> > Tok;
-		    boost::char_separator<char> sep(" ="); // default constructed
-		    Tok tok(line, sep);
-		    for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-		        if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
-		            string temp = *++tok_iter;
-		            photon_energy = atof(temp.c_str()); // photon energy to wavelength
-		            break;
-		        } else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
-		            string temp = *++tok_iter;
-		            fluence = atof(temp.c_str()); // number of photons per pulse
-		            break;
-		        } else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
-		            string temp = *++tok_iter;
-		            focus_radius = atof(temp.c_str()); // focus radius
-		            break;
-		        }
-		    }
+			// line now contains a valid input
+			typedef boost::tokenizer<boost::char_separator<char> > Tok;
+			boost::char_separator<char> sep(" ="); // default constructed
+			Tok tok(line, sep);
+			for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+				if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
+					string temp = *++tok_iter;
+					photon_energy = atof(temp.c_str()); // photon energy to wavelength
+					break;
+				} else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
+					string temp = *++tok_iter;
+					fluence = atof(temp.c_str()); // number of photons per pulse
+					break;
+				} else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
+					string temp = *++tok_iter;
+					focus_radius = atof(temp.c_str()); // focus radius
+					break;
+				}
+			}
 		}
 	}
 	CBeam beam = CBeam();
@@ -272,30 +299,30 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 	while (getline(myGeomFile, line)) {
 		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
 			// line now contains a valid input 
-            typedef boost::tokenizer<boost::char_separator<char> > Tok;
-            boost::char_separator<char> sep(" ="); // default constructed
-            Tok tok(line, sep);
-            for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-                if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
-                    string temp = *++tok_iter;
-                    d = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
-                    string temp = *++tok_iter;
-                    pix_width = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
-                    string temp = *++tok_iter;
-                    px_in = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
-                    string temp = *++tok_iter;
-                    badpixmap = temp;
-                    break;
-                }
-            }
-        }
-    }
+			typedef boost::tokenizer<boost::char_separator<char> > Tok;
+			boost::char_separator<char> sep(" ="); // default constructed
+			Tok tok(line, sep);
+			for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+				if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
+					string temp = *++tok_iter;
+					d = atof(temp.c_str());
+					break;
+				} else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
+					string temp = *++tok_iter;
+					pix_width = atof(temp.c_str());
+					break;
+				} else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
+					string temp = *++tok_iter;
+					px_in = atof(temp.c_str());
+					break;
+				} else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
+					string temp = *++tok_iter;
+					badpixmap = temp;
+					break;
+ 				}
+			}
+		}
+	}
 	double pix_height = pix_width;		// (m)
 	const int px = px_in;				// number of pixels in x
 	const int py = px;					// number of pixels in y	
@@ -310,42 +337,40 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 	det.set_center_x(cx);
 	det.set_center_y(cy);
 
-	//if (comm->rank() == 1) {
-	//	double thetaMax = atan((px/2*pix_height)/d);
-	//	double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
-	//	double dmin = 1/(2*qmax);
-	//	cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
-	//	cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
-	//}
+	if (comm->rank() == 1) {
+		double thetaMax = atan((px/2*pix_height)/d);
+		double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
+		double dmin = 1/(2*qmax);
+		cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
+		cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
+	}
 	
 	std::vector<float> msg;
 	fmat detector_intensity;
 	umat detector_counts;
 	fmat rot3D(3,3);
 	fvec quaternion(4);
-	/////////////////////////
-	int calculateCompton = 0;
-	/////////////////////////
+
 	while (1) {
 
 		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg);
+    		status = comm->recv(master, boost::mpi::any_tag, msg);
 
-    	if (status.tag() == QTAG) {
-    		quaternion = conv_to< fvec >::from(msg);
-    	}
+    		if (status.tag() == QTAG) {
+    			quaternion = conv_to< fvec >::from(msg);
+    		}
 
 		// Receive how many slices assigned to this slave
-    	if (status.tag() == DPTAG) {
+		if (status.tag() == DPTAG) {
 
 			timer.tic();
 
-    		fvec id = conv_to< fvec >::from(msg);
-    		int pmiID = (int) id(0);
-    		int diffrID = (int) id(1);
-    		int sliceInterval = (int) id(2);
+    			fvec id = conv_to< fvec >::from(msg);
+    			int pmiID = (int) id(0);
+    			int diffrID = (int) id(1);
+    			int sliceInterval = (int) id(2);
     		
-    		//TO DO: Check pmiID exists in the workflow
+    			//TO DO: Check pmiID exists in the workflow
 		
 			// input file
 			string filename;
@@ -578,15 +603,14 @@ static void slave_expansion(mpi::communicator* comm, string inputDir, string out
 			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
 
 			std::vector<float> msgDone;
-    		comm->send(master, DONETAG, msgDone);
+    			comm->send(master, DONETAG, msgDone);
     		
-    		cout << "DP took: " << timer.toc() <<" seconds."<<endl;
-    	}
+    			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
+    		}
 			
 		if (status.tag() == DIETAG) {
 		  	return;
 		}
-
 	}
 }
 

@@ -16,10 +16,18 @@ namespace toolbox{
 class CToolbox{
 	
 public:
-    CToolbox(std::string n) : name(n) {}
+	CToolbox() {}
+    CToolbox(std::string n) : name(n), mNumber(0.0) {}
     std::string name;
+    
+    double getNumber() const { return mNumber; }
+	void setNumber(double n) {
+		if (n>3.141592654)
+			n = -1;
+		mNumber = n;
+	}
+    
 	static arma::mat mag(arma::cube);
-
 	static arma::fmat mag(arma::fcube);
 	static arma::umat convert_to_poisson(arma::fmat);
 	// Let's use zyz convention after Heymann (2005)
@@ -31,11 +39,12 @@ public:
 	static arma::fmat euler2rot3D(float, float, float);
 	static arma::fvec rot3D2euler(arma::fmat);
 	static float corrCoeff(arma::fmat, arma::fmat);
+	static arma::fvec getRandomRotation(string rotationAxis);
 	
 	static arma::fmat get_wahba(arma::fmat,arma::fmat);
-	static arma::fmat pointsOn3Sphere(int);
-	static arma::fmat pointsOn4Sphere(int);
-	
+	static arma::fmat pointsOn1Sphere(int numPts, string rotationAxis);
+	static arma::fmat pointsOn3Sphere(int numPts);
+	static arma::fmat pointsOn4Sphere(int numPts);
 	
 	static void extract_interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*);
 	static void extract_interp_linear3D(arma::fcube*, arma::fmat*, arma::uvec*, arma::fcube*);
@@ -52,6 +61,12 @@ public:
 	
 	static void cart2polar(fcube *samplePoints, int detectorWidth, float rhoMin, float rhoMax);
 	static void interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP);
+
+	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
+	
+	static int expansion(int numSlices, arma::fcube* myRot, int mySize, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, string output);
+private:
+	double mNumber;
 };
 
 }

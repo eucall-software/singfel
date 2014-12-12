@@ -273,6 +273,29 @@ fmat CToolbox::get_wahba(fmat currentRot,fmat originRot) {
 	return myR;
 }
 
+// Given number of points, distribute evenly on hyper surface of a 1-sphere (circle)
+fmat CToolbox::pointsOn1Sphere(int numPts, string rotationAxis) {
+	fmat points;
+	points.zeros(numPts,4);
+	float incAng = 360.0/numPts;
+	float myAng = 0;
+	fvec quaternion(4);
+	if (rotationAxis == "y") {
+		for (int i = 0; i < numPts; i++) {
+			quaternion = euler2quaternion(0, myAng*datum::pi/180, 0); // zyz
+			points.row(i) = trans(quaternion);
+			myAng += incAng;
+		}
+	} else if (rotationAxis == "z") {
+		for (int i = 0; i < numPts; i++) {
+			quaternion = euler2quaternion(0, 0, myAng*datum::pi/180); // zyz
+			points.row(i) = trans(quaternion);
+			myAng += incAng;
+		}
+	}
+	return points;
+}
+
 // Given number of points, distribute evenly on hyper surface of a 3-sphere
 fmat CToolbox::pointsOn3Sphere(int numPts) {
 	fmat points;
@@ -304,7 +327,7 @@ fmat CToolbox::pointsOn3Sphere(int numPts) {
 		delta *= exp(log((float)ind/numPts)/2);
 		iter += 1;
 	}
-	return points.rows(0, numPts-1);
+	return points.rows(0, numPts-1); // only send up to numPts
 }
 
 // Given number of points, distribute evenly on hyper surface of a 4-sphere
@@ -342,7 +365,7 @@ fmat CToolbox::pointsOn4Sphere(int numPts) {
 		delta *= exp(log((float)ind/numPts)/3);
 		iter += 1;
 	}
-	return quaternion.rows(0, numPts-1);
+	return quaternion.rows(0, numPts-1); // only send up to numPts
 }
 
 // Calculate a set of sampling points on a polar grid given a cartesian grid
@@ -729,21 +752,16 @@ void CToolbox::normalize(fcube *myIntensity1, fcube *myWeight1) {
 // interpolate = 1: trilinear
 void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
     fmat& pix = myPoints[0];
-    //cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
     fmat& myR = myRot[0];
-    //myR.print("myR: ");
+
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
         pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
         pixRot = trans(pixRot);
-        //cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
-        //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max;
     } else {
-        //pixRot = conv_to<fmat>::from(myR)*trans(pix) + pix_max; // this is passive rotation
         pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
         pixRot = trans(pixRot);  
-        //cout << "pixRot: " << pixRot(0,0)- pix_max << " " << pixRot(1.0)- pix_max << " " << pixRot(2,0)- pix_max << endl;
     }
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
         interp_linear3D(myValue,&pixRot,goodpix,myIntensity,myWeight);
@@ -820,6 +838,42 @@ void CToolbox::slice3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRo
     }
 }
 
+fmat CToolbox::badpixmap2goodpixmap(fmat badpixmap) {
+	fmat goodpixmap = -1*badpixmap + 1;
+	return goodpixmap;
+}
+
+// Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
+int CToolbox::expansion(int numSlices, fcube* myRot, int mySize, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, string output) {
+
+	int active = 1;
+	string interpolate = "linear";
+	fmat myR;
+	myR.zeros(3,3);
+	fcube myDPnPixmap; 	// first slice: diffraction pattern
+						// second slice: good pixel map
+	
+	// Slice diffraction volume and save to file
+	for (int i = 0; i < numSlices; i++) {
+		myDPnPixmap.zeros(mySize,mySize,2);
+		// Get rotation matrix
+		myR = myRot->slice(i);
+		slice3D(&myDPnPixmap, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
+		
+		// Save expansion slice to disk
+		std::stringstream sstm;
+		sstm << output << "expansion/myExpansion_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName = sstm.str();
+		myDPnPixmap.slice(0).save(outputName,raw_ascii);
+		std::stringstream sstm1;
+		sstm1 << output << "expansion/myExpansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myDPnPixmap.slice(1).save(outputName1,raw_ascii);
+	}
+
+	return 0;
+}
+
 #ifdef COMPILE_WITH_BOOST
 	#include <boost/python.hpp>
 	using namespace boost::python;
@@ -828,21 +882,18 @@ void CToolbox::slice3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRo
 
 	//BOOST_PYTHON_MEMBER_FUNCTION_OVERLOADS(CToolbox_overloads, mag, 1, 1)
 
-	BOOST_PYTHON_MODULE(toolbox)
+	BOOST_PYTHON_MODULE(libtoolbox)
 	{
 		//static mat (CToolbox::*mag1)(cube) = &CToolbox::mag;
 		//static fmat (CToolbox::*mag2)(fcube) = &CToolbox::mag;
 
 		class_<CToolbox>("CToolbox", init<std::string>())	// constructor with string input
-			//.def(init<>())	// Overloaded constructor
+			.def(init<>())
 			.def_readwrite("name", &CToolbox::name)
-			//.add_property("number", &SomeClass::getNumber, &SomeClass::setNumber)
-			//.def("test", &SomeClass::test)
-			//.def("mag", mag1)
-			//.def("mag", mag2)
-			.def("convert_to_poisson", &CToolbox::convert_to_poisson)
+			.add_property("number", &CToolbox::getNumber, &CToolbox::setNumber)
 		;
 	}
 #endif
+
 
 #endif /* SINGFEL_TOOLBOX_H */
