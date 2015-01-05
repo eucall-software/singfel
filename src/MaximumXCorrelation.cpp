@@ -4,7 +4,6 @@
 #include <iostream>
 #include <iomanip>
 #include <sys/time.h>
-#include <armadillo>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -20,6 +19,8 @@
 #include "io.h"
 #include <fstream>
 #include <string>
+
+#include <armadillo>
 
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>

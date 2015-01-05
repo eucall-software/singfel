@@ -15,7 +15,6 @@ double CBeam::n_phot;							// number of photons per pulse
 double CBeam::phi_in;  							// number of photon per pulse per area (m^-2)
 
 CBeam::CBeam (){
-	//cout << "init beam" << endl;
     lambda = 0;
 	photon_energy = 0;
 	k = 0;
@@ -140,11 +139,24 @@ double CBeam::get_photonsPerPulsePerArea(){
 
 void CBeam::set_param(Packet *pack){
 	lambda = pack->lambda;
-	//k = wavelength2wavenumber(lambda);
 	focus_xFWHM = pack->focus;
-	//set_focusArea();	// pi*r^2
 	n_phot = pack->n_phot;	
-	//set_photonsPerPulsePerArea();
 	update();
-//cout << "phi_in=n_phot/focus_area: " << phi_in << endl;	
 }
+
+#ifdef COMPILE_WITH_BOOST
+	#include <boost/python.hpp>
+	using namespace boost::python;
+	using namespace beam;
+	using namespace arma;
+
+	BOOST_PYTHON_MODULE(libbeam)
+	{
+		class_<CBeam>("CBeam", init<>())	// constructor
+			//.def_readwrite("name", &CToolbox::name)
+			//.add_property("photon_energy", &CBeam::set_photon_energy, &CBeam::get_photon_energy)
+			.def("set_photon_energy", &CBeam::set_photon_energy)
+			.def("get_photon_energy", &CBeam::get_photon_energy)
+		;
+	}
+#endif

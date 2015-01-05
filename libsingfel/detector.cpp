@@ -227,3 +227,17 @@ void CDetector::set_param(Packet *x){
 	cy = ((double) py-1)/2;			// this can be user defined
 }
 
+#ifdef COMPILE_WITH_BOOST
+	#include <boost/python.hpp>
+	using namespace boost::python;
+	using namespace detector;
+	using namespace arma;
+
+	BOOST_PYTHON_MODULE(libdetector)
+	{
+		class_<CDetector>("CDetector", init<>())	// constructor
+			//.def_readwrite("name", &CToolbox::name)
+			.add_property("value", &CDetector::set_numPix_x, &CDetector::get_numPix_x)
+		;
+	}
+#endif

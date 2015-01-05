@@ -3,6 +3,7 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include "toolbox.h"
+
 #include <armadillo>
 
 using namespace arma;
@@ -62,12 +63,25 @@ int rotationConversion(fvec quaternion) {
 	return 0;
 }
 
+int indexMatrix() {
+	fmat A;
+	A << 1 << 2 << endr
+	<< 3 << 4 << endr;
+	uvec ind;
+	ind << 0 << 3 << endr;
+	fvec B = A(ind);
+	cout << A << endl;
+	cout << B << endl;
+    return sum(B);
+}
+
 BOOST_FIXTURE_TEST_SUITE(Maths, myTestObject)
 
 BOOST_AUTO_TEST_CASE(universeInOrder)
 {
     BOOST_CHECK(add(m, 2) == 6);
     BOOST_CHECK(rotationConversion(quaternion) == 0);
+    BOOST_CHECK(indexMatrix() == 5);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

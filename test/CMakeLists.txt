@@ -119,6 +119,8 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 
 MESSAGE("${CMAKE_MODULE_PATH}")
 
+add_definitions(-DCOMPILE_WITH_CXX11) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
+
 #find_package(CUDA)
 IF(CUDA_FOUND)
   MESSAGE("cuda found")
@@ -128,7 +130,7 @@ IF(CUDA_FOUND)
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
 
 ELSEIF(NOT CUDA_FOUND)
-  ADD_EXECUTABLE(boostTest boostTest.cpp ${LIBSINGFEL}/toolbox.cpp)
-  TARGET_LINK_LIBRARIES(boostTest ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES})  
+  #ADD_EXECUTABLE(boostTest boostTest.cpp ${LIBSINGFEL}/toolbox.cpp)
+  #TARGET_LINK_LIBRARIES(boostTest ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} )  
 
 ENDIF()

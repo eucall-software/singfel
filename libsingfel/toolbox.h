@@ -5,7 +5,10 @@
 #include <sstream>
 #include <iostream>
 #include "detector.h"
+#include "io.h"
 #include <boost/algorithm/string.hpp>
+#include <boost/mpi.hpp>
+namespace mpi = boost::mpi;
 
 #ifdef __cplusplus
 extern "C" {
@@ -17,10 +20,10 @@ class CToolbox{
 	
 public:
 	CToolbox() {}
-    CToolbox(std::string n) : name(n), mNumber(0.0) {}
-    std::string name;
+	CToolbox(std::string n) : name(n), mNumber(0.0) {}
+	std::string name;
     
-    double getNumber() const { return mNumber; }
+	double getNumber() const { return mNumber; }
 	void setNumber(double n) {
 		if (n>3.141592654)
 			n = -1;
@@ -64,7 +67,12 @@ public:
 
 	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
 	
-	static int expansion(int numSlices, arma::fcube* myRot, int mySize, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, string output);
+	static int expansion(int numSlices, arma::fcube* myRot, int mySize, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, string output, int iter);
+	static int maximization(mpi::communicator* comm, int numImages, int numSlaves, uvec* goodpix, int numSlices, int numProcesses, int numCandidates, string output, int mySize, string format, string input, int iter);
+	static int compression(int mySize, fcube* myIntensity, fcube* myWeight, int numSlices, string output, fmat* pix, float pix_max, fcube* myRot, string format, int iter);
+	static int saveDiffractionVolume(int mySize, string output, fcube* myIntensity, fcube* myWeight, int numProcesses, int iter);
+	static double calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type);
+
 private:
 	double mNumber;
 };

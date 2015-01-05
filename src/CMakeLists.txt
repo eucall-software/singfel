@@ -75,9 +75,9 @@ IF(Boost_FOUND)
   MESSAGE("BOOST FOUND")
   MESSAGE("CHUCK SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES} ${BOOST_ROOT}")
 
-#  SET(Boost_USE_STATIC_LIBS ON)
-#  SET(Boost_USE_MULTITHREADED ON)
-#  SET(Boost_USE_STATIC_RUNTIME OFF)
+  SET(Boost_USE_STATIC_LIBS OFF)
+  SET(Boost_USE_MULTITHREADED ON)
+  SET(Boost_USE_STATIC_RUNTIME OFF)
 
   INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
   LINK_LIBRARIES(${Boost_LIBRARIES} ${PYTHON_LIBRARIES} ${GSL_LIBRARIES}) # Deprecated but so convenient!
@@ -90,7 +90,8 @@ IF(Boost_FOUND)
   #FILE(COPY member.py DESTINATION .)
   #ADD_TEST(04-HelloWorld member.py)
 
-  #PYTHON_ADD_MODULE(toolbox2 toolbox.cpp)
+  ADD_LIBRARY(toolbox SHARED ../libsingfel/toolbox.cpp)
+  TARGET_LINK_LIBRARIES(toolbox ${Boost_LIBRARIES})
   #FILE(COPY toolbox.py DESTINATION .)
   #ADD_TEST(toolbox2 toolbox.py)
 
@@ -109,7 +110,8 @@ find_package(MPI REQUIRED)
 include_directories(${MPI_INCLUDE_PATH})
 MESSAGE("CHUCK MPI SAYS: ${MPI_INCLUDE_PATH} ${MPI_LIBRARY_DIRS} ${MPI_LIBRARIES}")
 
-SET(CMAKE_CXX_FLAGS "-std=c++0x -g -Wall") # Add c++11 features
+#SET(CMAKE_CXX_FLAGS "-std=c++0x -g -Wall") # Add c++11 features
+SET(CMAKE_CXX_FLAGS "-g -Wall")
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
   ADD_DEFINITIONS("-Wall")
@@ -121,6 +123,8 @@ message("${CMAKE_SOURCE_DIR}")
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 
 MESSAGE("${CMAKE_MODULE_PATH}")
+
+#add_definitions(-DCOMPILE_WITH_CXX11) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
 
 #find_package(CUDA)
 IF(CUDA_FOUND)
@@ -162,14 +166,18 @@ IF(CUDA_FOUND)
 ELSEIF(NOT CUDA_FOUND)
   MESSAGE("damn! no cuda")
 
-  ADD_EXECUTABLE(radiationSINGFEL_old radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationSINGFEL_old ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  # Shared library: libsingfel
+  #ADD_LIBRARY(singfel SHARED ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(singfel ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  ADD_EXECUTABLE(rotationCheck pmi_rotationCheckS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(rotationCheck ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  #ADD_EXECUTABLE(radiationSINGFEL_old radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(radiationSINGFEL_old ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
-  ADD_EXECUTABLE(radiationDamageS2E radiationDamageS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationDamageS2E ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  #ADD_EXECUTABLE(rotationCheck pmi_rotationCheckS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(rotationCheck ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+
+  #ADD_EXECUTABLE(radiationDamageS2E radiationDamageS2E.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(radiationDamageS2E ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
   ADD_EXECUTABLE(radiationDamageMPI radiationDamageMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(radiationDamageMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
@@ -177,15 +185,12 @@ ELSEIF(NOT CUDA_FOUND)
   #ADD_EXECUTABLE(singlePattern spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(singlePattern ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
 
-  ADD_EXECUTABLE(spQuaternion spQuaternion.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(spQuaternion ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
+  #ADD_EXECUTABLE(spQuaternion spQuaternion.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(spQuaternion ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
 
   #ADD_EXECUTABLE(spQuaternion spQuaternion.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(spQuaternion ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
   
-  #ADD_LIBRARY(SINGFEL SHARED spOptimize.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/diffraction.cu)
-  #TARGET_LINK_LIBRARIES(SINGFEL ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES})
-
   #ADD_EXECUTABLE(makeDiffractionVolume makeDiffractionVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(makeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
   
@@ -212,13 +217,14 @@ ELSEIF(NOT CUDA_FOUND)
   ADD_EXECUTABLE(mergeDiffractionVolume mergeDiffractionVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}) 
     
-  ADD_EXECUTABLE(MaximumXCorrelation MaximumXCorrelation.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(MaximumXCorrelation ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
-  #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
+  #ADD_EXECUTABLE(MaximumXCorrelation MaximumXCorrelation.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(MaximumXCorrelation ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${Boost_LIBRARIES})  
   
-  ADD_EXECUTABLE(MaximumXCorrelationMPI MaximumXCorrelationMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(MaximumXCorrelationMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
-  MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES}")  
+  #ADD_EXECUTABLE(MaximumXCorrelationMPI MaximumXCorrelationMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(MaximumXCorrelationMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
+
+  ADD_EXECUTABLE(reconMPI reconMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(reconMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
 
 #  ADD_EXECUTABLE(slavesMPI slavesMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
 #  TARGET_LINK_LIBRARIES(slavesMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})  
@@ -232,8 +238,8 @@ ELSEIF(NOT CUDA_FOUND)
   #  LINK_FLAGS "${MPI_LINK_FLAGS}")
   #endif()
 
-  ADD_EXECUTABLE(expandVolume expandVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(expandVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
+  #ADD_EXECUTABLE(expandVolume expandVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  #TARGET_LINK_LIBRARIES(expandVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
 
   #ADD_EXECUTABLE(mergeDiffractionVolume_4HWY mergeDiffractionVolume_4HWY.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(mergeDiffractionVolume_4HWY ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  

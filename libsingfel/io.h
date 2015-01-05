@@ -266,7 +266,7 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 				dataset = file.openDataSet( DATASET_NAME );
 				double dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					cout << data.at(j) << endl;
+					//cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_DOUBLE );
@@ -279,7 +279,7 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 				dataset = file.openDataSet( DATASET_NAME );
 				float dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					cout << data.at(j) << endl;
+					//cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_FLOAT );
@@ -292,7 +292,7 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 				dataset = file.openDataSet( DATASET_NAME );
 				int dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					cout << data.at(j) << endl;
+					//cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_INT );
@@ -305,7 +305,7 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 				dataset = file.openDataSet( DATASET_NAME );
 				unsigned int dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					cout << data.at(j) << endl;
+					//cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_UINT );
@@ -323,11 +323,11 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 						dataW[j][i] = data.at(j,i);
 				dataset.write( dataW, PredType::NATIVE_DOUBLE );
 			} else if (typeid(data) == typeid(fmat)) {
-			cout << "Enter fmat" << endl;
+			//cout << "Enter fmat" << endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				dims[1] = DIM1;
-			cout << myRank << " " << DIM0 << " " << DIM1 << endl;	
+			//cout << myRank << " " << DIM0 << " " << DIM1 << endl;	
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_FLOAT );
 				DataSet dataset = file.createDataSet( DATASET_NAME, datatype, dataspace );

@@ -170,6 +170,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	
 	// Setup rotations
 	fmat myQuaternions;
+	myQuaternions.zeros(numDP,4);
 	if (uniformRotation) { // uniform rotations
 		if (rotationAxis == "y" || rotationAxis == "z") {
 			myQuaternions = CToolbox::pointsOn1Sphere(numDP, rotationAxis);		
@@ -178,7 +179,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		}
 	} else { // random rotations
 		for (int i = 0; i < numDP; i++) {
-			myQuaternions.row(i) = CToolbox::getRandomRotation(rotationAxis);
+			myQuaternions.row(i) = trans(CToolbox::getRandomRotation(rotationAxis));
 		}
 	}
 
@@ -336,14 +337,8 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	det.set_numPix(py,px);
 	det.set_center_x(cx);
 	det.set_center_y(cy);
-
-	if (comm->rank() == 1) {
-		double thetaMax = atan((px/2*pix_height)/d);
-		double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
-		double dmin = 1/(2*qmax);
-		cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
-		cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
-	}
+	det.set_pixelMap(badpixmap);
+	uvec goodpix = det.get_goodPixelMap();
 	
 	std::vector<float> msg;
 	fmat detector_intensity;
@@ -354,23 +349,23 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	while (1) {
 
 		// Receive a message from the master
-    		status = comm->recv(master, boost::mpi::any_tag, msg);
+    	status = comm->recv(master, boost::mpi::any_tag, msg);
 
-    		if (status.tag() == QTAG) {
-    			quaternion = conv_to< fvec >::from(msg);
-    		}
+    	if (status.tag() == QTAG) {
+    		quaternion = conv_to< fvec >::from(msg);
+    	}
 
 		// Receive how many slices assigned to this slave
 		if (status.tag() == DPTAG) {
 
 			timer.tic();
 
-    			fvec id = conv_to< fvec >::from(msg);
-    			int pmiID = (int) id(0);
-    			int diffrID = (int) id(1);
-    			int sliceInterval = (int) id(2);
+    		fvec id = conv_to< fvec >::from(msg);
+    		int pmiID = (int) id(0);
+    		int diffrID = (int) id(1);
+    		int sliceInterval = (int) id(2);
     		
-    			//TO DO: Check pmiID exists in the workflow
+    		//TO DO: Check pmiID exists in the workflow
 		
 			// input file
 			string filename;
@@ -572,6 +567,8 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				#endif
 				}// end timeSlice
 
+			// Apply badpixelmap
+			CDetector::apply_badPixels(&detector_intensity);
 			// Poisson noise
 			detector_counts = CToolbox::convert_to_poisson(detector_intensity);
 			
@@ -601,6 +598,14 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 			createSubgroup = 0;
 			double focusArea = beam.get_focus_area();
 			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
+
+			if (comm->rank() == 1) {
+				double thetaMax = atan((px/2*pix_height)/d);
+				double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
+				double dmin = 1/(2*qmax);
+				cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
+				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
+			}
 
 			std::vector<float> msgDone;
     			comm->send(master, DONETAG, msgDone);

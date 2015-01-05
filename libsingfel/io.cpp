@@ -232,13 +232,13 @@ arma::fmat hdf5read(std::string filename, std::string datasetname){
           */
 	 	 H5std_string order_string;
          H5T_order_t order = intype.getOrder( order_string );
-	 	 cout << "Endian:" << order << endl;
+	 	 //cout << "Endian:" << order << endl;
 
          /*
           * Get size of the data element stored in file and print it.
           */
          size_t size = intype.getSize();
-         cout << "Data size is " << size << endl;
+         //cout << "Data size is " << size << endl;
       }
 
       /*
