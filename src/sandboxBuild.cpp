@@ -1,6 +1,9 @@
 #include <iostream>
 #include "diffraction.cuh"
 #include <cuda.h>
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
 #include <armadillo>
 
 using namespace std;

@@ -1,7 +1,6 @@
 #include <iostream>
 #include <iomanip>
 #include <sys/time.h>
-#include <armadillo>
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -13,6 +12,11 @@
 #include "diffraction.h"
 #include "toolbox.h"
 #include "diffraction.cuh"
+
+#ifdef COMPILE_WITH_CXX11
+	#define ARMA_DONT_USE_CXX11
+#endif
+#include <armadillo>
 
 //#include <cuda.h>
 #include <algorithm>
