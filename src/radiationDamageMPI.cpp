@@ -417,10 +417,10 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				particle.load_atomPos(filename,datasetname+"/r");		// mat pos
 				particle.load_ionList(filename,datasetname+"/xyz");		// rowvec ion list
 				particle.load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
-				particle.load_qSample(filename,datasetname+"/Q");	// rowvec q vector sin(theta)/lambda
+				particle.load_qSample(filename,datasetname+"/halfQ");	// rowvec q vector sin(theta)/lambda
 				// Particle's inelastic properties
 				if (calculateCompton) {
-					particle.load_compton_qSample(filename,datasetname+"/Sq_Q");	// rowvec q vector sin(theta)/lambda
+					particle.load_compton_qSample(filename,datasetname+"/Sq_halfQ");	// rowvec q vector sin(theta)/lambda
 					particle.load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
 					particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
 				}
