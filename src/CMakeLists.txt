@@ -99,9 +99,9 @@ ELSEIF(NOT Boost_FOUND)
   MESSAGE("Unable to find correct Boost version. Did you set BOOST_ROOT?")
 ENDIF()
 ###### FIND BOOST WORKS, BUT LET'S USE LOCAL INSTALL ######
-#set(Boost_INCLUDE_DIRS "$ENV{BOOST_DIR}/include")
-#FILE(GLOB myBoostLibs "$ENV{BOOST_DIR}/lib/libboost*.so")
-#set(Boost_LIBRARIES ${myBoostLibs})
+set(Boost_INCLUDE_DIRS "$ENV{BOOST_DIR}/include")
+FILE(GLOB myBoostLibs "$ENV{BOOST_DIR}/lib/libboost*.so")
+set(Boost_LIBRARIES ${myBoostLibs})
 #MESSAGE("CHUCKIE BOOST SAYS: ${Boost_INCLUDE_DIRS} ${Boost_LIBRARY_DIRS} ${Boost_LIBRARIES}")
 #INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS} ${PYTHON_INCLUDE_DIRS})
 
@@ -215,7 +215,7 @@ ELSEIF(NOT CUDA_FOUND)
   #MESSAGE("CHUCK MERGE SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
 
   ADD_EXECUTABLE(mergeDiffractionVolume mergeDiffractionVolume.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}) 
+  TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES}) 
     
   #ADD_EXECUTABLE(MaximumXCorrelation MaximumXCorrelation.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(MaximumXCorrelation ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${Boost_LIBRARIES})  
