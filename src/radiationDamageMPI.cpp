@@ -224,7 +224,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		id.at(1) = (float) diffrID;
 		id.at(2) = (float) sliceInterval;
 		comm->send(status.source(), DPTAG, id);
-		cout << "diffrID/ntasks: " << diffrID << "," << ntasks << endl;
+		cout << "diffrID: " << diffrID << endl;
 		
 		diffrID++;
 		dpID++;
@@ -234,7 +234,6 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		}
 		if (diffrID > ntasks) {
 			done = 1;
-			cout << "DONE!" << endl;
 		}
 	}
 	
