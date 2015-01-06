@@ -167,12 +167,12 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	
 	// Setup rotations
 	fmat myQuaternions;
-	myQuaternions.zeros(numDP,4);
+	myQuaternions.zeros(ntasks,4);
 	if (uniformRotation) { // uniform rotations
 		if (rotationAxis == "y" || rotationAxis == "z") {
-			myQuaternions = CToolbox::pointsOn1Sphere(numDP, rotationAxis);		
+			myQuaternions = CToolbox::pointsOn1Sphere(ntasks, rotationAxis);		
 		} else if (rotationAxis == "xyz") {
-			myQuaternions = CToolbox::pointsOn4Sphere(numDP);
+			myQuaternions = CToolbox::pointsOn4Sphere(ntasks);
 		}
 	} else { // random rotations
 		for (int i = 0; i < numDP; i++) {
@@ -198,7 +198,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		id.at(2) = (float) sliceInterval;
 		comm->send(rank, DPTAG, id);
 		cout << "diffrID: " << diffrID << endl;
-
+				
 		diffrID++;
 		dpID++;
 		if (dpID > numDP) {
@@ -224,8 +224,8 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		id.at(1) = (float) diffrID;
 		id.at(2) = (float) sliceInterval;
 		comm->send(status.source(), DPTAG, id);
-		cout << "diffrID: " << diffrID << endl;
-
+		cout << "diffrID/ntasks: " << diffrID << "," << ntasks << endl;
+		
 		diffrID++;
 		dpID++;
 		if (dpID > numDP) {
@@ -234,6 +234,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		}
 		if (diffrID > ntasks) {
 			done = 1;
+			cout << "DONE!" << endl;
 		}
 	}
 	
