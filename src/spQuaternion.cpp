@@ -13,9 +13,6 @@
 #include "toolbox.h"
 #include "diffraction.cuh"
 
-#ifdef COMPILE_WITH_CXX11
-	#define ARMA_DONT_USE_CXX11
-#endif
 #include <armadillo>
 
 //#include <cuda.h>

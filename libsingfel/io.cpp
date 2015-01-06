@@ -18,9 +18,7 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
-#ifdef COMPILE_WITH_CXX11
-	#define ARMA_DONT_USE_CXX11
-#endif
+
 #include <armadillo>
 
 using namespace std;

@@ -14,9 +14,6 @@
 #include <sstream>
 #include <math.h>
 
-#ifdef COMPILE_WITH_CXX11
-	#define ARMA_DONT_USE_CXX11
-#endif
 #include <armadillo>
 
 //#include <boost/math/special_functions/factorials.hpp>
