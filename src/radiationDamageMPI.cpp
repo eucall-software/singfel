@@ -139,6 +139,7 @@ int main( int argc, char* argv[] ){
 static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation) {
 
   	int ntasks, rank, numProcesses, numSlaves;
+  	int numTasksDone = 0;
   	boost::mpi::status status;
   	std::vector<float> msg;
 
@@ -175,7 +176,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 			myQuaternions = CToolbox::pointsOn4Sphere(ntasks);
 		}
 	} else { // random rotations
-		for (int i = 0; i < numDP; i++) {
+		for (int i = 0; i < ntasks; i++) {
 			myQuaternions.row(i) = trans(CToolbox::getRandomRotation(rotationAxis));
 		}
 	}
@@ -201,6 +202,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 				
 		diffrID++;
 		dpID++;
+		numTasksDone++;
 		if (dpID > numDP) {
 			dpID = 1;
 			pmiID++;
@@ -210,7 +212,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	// Listen for slaves
 	std::vector<float> msgDone;
 	int done = 0;
-	if (diffrID > ntasks) done = 1;
+	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
 		// Tell the slave how to rotate the particle
@@ -228,11 +230,12 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		
 		diffrID++;
 		dpID++;
+		numTasksDone++;
 		if (dpID > numDP) {
 			dpID = 1;
 			pmiID++;
 		}
-		if (diffrID > ntasks) {
+		if (numTasksDone >= ntasks) {
 			done = 1;
 		}
 	}
@@ -258,8 +261,11 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	/****** Beam ******/
 	// Let's read in our beam file
 	double photon_energy = 0;
+	double n_phot = 0;
 	double focus_radius = 0;
-	double fluence = 0;
+	int givenPhotonEnergy = 0;
+	int givenFluence = 0;
+	int givenFocusRadius = 0;
 	string line;
 	ifstream myFile(beamFile.c_str());
 	while (getline(myFile, line)) {
@@ -272,14 +278,17 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
 					string temp = *++tok_iter;
 					photon_energy = atof(temp.c_str()); // photon energy to wavelength
+					givenPhotonEnergy = 1;
 					break;
 				} else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
 					string temp = *++tok_iter;
-					fluence = atof(temp.c_str()); // number of photons per pulse
+					n_phot = atof(temp.c_str()); // number of photons per pulse
+					givenFluence = 1;
 					break;
 				} else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
 					string temp = *++tok_iter;
 					focus_radius = atof(temp.c_str()); // focus radius
+					givenFocusRadius = 1;
 					break;
 				}
 			}
@@ -338,10 +347,13 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	uvec goodpix = det.get_goodPixelMap();
 	
 	std::vector<float> msg;
-	fmat detector_intensity;
-	umat detector_counts;
 	fmat rot3D(3,3);
 	fvec quaternion(4);
+	fmat detector_intensity;
+	umat detector_counts;
+	fmat myPos;
+	fmat F_hkl_sq;
+	fmat Compton;
 
 	while (1) {
 
@@ -386,18 +398,17 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 			scriptName = sstm2.str();
 			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configName;
 			int i = system(myCommand.c_str());
-
-			double total_phot = 0;
-			detector_intensity.zeros(py,px);
-			detector_counts.zeros(py,px);
 			
 			// Rotate single particle			
 			rot3D = CToolbox::quaternion2rot3D(quaternion);
-	
+
+			double total_phot = 0;
+			detector_intensity.zeros(py,px);
+			detector_counts.zeros(py,px);	
 			int done = 0;
 			int timeSlice = 0;
-			while(!done) {
-				if (timeSlice+sliceInterval > numSlices) {
+			while(!done) {	// sum up time slices
+				if (timeSlice+sliceInterval >= numSlices) {
 					sliceInterval = numSlices - timeSlice;
 					done = 1;
 				}
@@ -422,13 +433,13 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
 				}
 				// Rotate atom positions
-				fmat myPos = particle.get_atomPos();
+				myPos = particle.get_atomPos();
 				myPos = myPos * trans(rot3D);
 				particle.set_atomPos(&myPos);
-		
+
 				// Beam //
-				if (fluence == 0) {
-					double n_phot = 0;
+				if (givenFluence == 0) {
+					n_phot = 0;
 					for (int i = 0; i < sliceInterval; i++) {
 						string datasetname;
 						stringstream sstm0;
@@ -441,18 +452,19 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					total_phot += n_phot;
 					beam.set_photonsPerPulse(n_phot);
 				} else {
-					total_phot = fluence;
-					beam.set_photonsPerPulse(fluence);
+					total_phot = n_phot;
+					beam.set_photonsPerPulse(n_phot);
 				}
 				
-				if (photon_energy == 0) {
-					////////////////////////
+				if (givenPhotonEnergy == 0) {
 					// Read in photon energy
 					photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
+					beam.set_photon_energy(photon_energy);
+				} else {
+					beam.set_photon_energy(photon_energy);
 				}
-				beam.set_photon_energy(photon_energy);
-
-				if (focus_radius == 0) {
+	
+				if (givenFocusRadius == 0) {
 					// Read in focus size
 					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
 					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
@@ -463,11 +475,10 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				////////////////////////
 
 				det.init_dp(&beam);
-				CDiffraction::calculate_atomicFactor(&particle,&det); // get f_hkl
-				fmat Compton;
+				CDiffraction::calculate_atomicFactor(&particle, &det); // get f_hkl
 				Compton.zeros(py,px);
 				if (calculateCompton) {
-					Compton = CDiffraction::calculate_compton(&particle,&det); // get S_hkl
+					Compton = CDiffraction::calculate_compton(&particle, &det); // get S_hkl
 				}
 
 				#ifdef COMPILE_WITH_CUDA
@@ -539,14 +550,14 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				}
 				#else
 				//cout<< "USE_CPU" << endl;
-					CDiffraction::get_atomicFormFactorList(&particle,&det);
+				CDiffraction::get_atomicFormFactorList(&particle, &det);
 
-					fmat F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
-
-					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-
+				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
+				
+				detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+/*
 					// Save Elastic and inelastic components
-					if (0) {
+					if (1) {
 						std::stringstream sstm;
 			  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
 						string outputName = sstm.str();
@@ -560,14 +571,14 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 						string outputName2 = sstm2.str();
 						det.solidAngle.save(outputName2,raw_ascii);
 					}
-
+*/
 				#endif
-				}// end timeSlice
+			}// end timeSlice
 
 			// Apply badpixelmap
 			CDetector::apply_badPixels(&detector_intensity);
 			// Poisson noise
-			detector_counts = CToolbox::convert_to_poisson(detector_intensity);
+			detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 			
 			// Save to HDF5
 			int createSubgroup = 0;
@@ -605,14 +616,14 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 			}
 
 			std::vector<float> msgDone;
-    			comm->send(master, DONETAG, msgDone);
+    		comm->send(master, DONETAG, msgDone);
     		
-    			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
-    		}
+			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
+    	}
 			
 		if (status.tag() == DIETAG) {
 		  	return;
 		}
-	}
+	} // end of while
 }
 

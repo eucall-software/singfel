@@ -43,7 +43,34 @@ fmat CToolbox::mag(fcube x){
 	return y;
 }
 
+/*
 umat CToolbox::convert_to_poisson(fmat x){
+	unsigned long randSeed;
+	gsl_rng * gBaseRand;
+	const gsl_rng_type * T;
+	T = gsl_rng_default;
+	gBaseRand = gsl_rng_alloc (T); 
+  	randSeed = rand();                    // returns a non-negative integer
+  	gsl_rng_set (gBaseRand, randSeed);    // seed the PRNG           
+	umat y;	
+	y.copy_size(x);		
+	for (unsigned i = 0; i < y.n_elem; i++) {
+		if (x(i) <= FLT_MAX) {
+			y(i) = gsl_ran_poisson (gBaseRand, x(i));
+		} else {
+			//cerr << "detector intensity too large for poisson" << endl;
+			y(i) = 0; // This should be Gaussian for large intensity
+		}	
+	}		
+	gsl_rng_free(gBaseRand);
+	
+	return y;
+}
+*/
+
+// Use this version
+umat CToolbox::convert_to_poisson(fmat *z){
+	fmat& x = z[0];
 	unsigned long randSeed;
 	gsl_rng * gBaseRand;
 	const gsl_rng_type * T;

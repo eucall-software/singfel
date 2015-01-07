@@ -32,7 +32,8 @@ public:
     
 	static arma::mat mag(arma::cube);
 	static arma::fmat mag(arma::fcube);
-	static arma::umat convert_to_poisson(arma::fmat);
+	//static arma::umat convert_to_poisson(arma::fmat);
+	static arma::umat convert_to_poisson(arma::fmat* z);
 	// Let's use zyz convention after Heymann (2005)
 	static void quaternion2AngleAxis(arma::fvec,float&,arma::fvec&); // mutual convention
 	static arma::fmat angleAxis2rot3D(arma::fvec,float); // mutual convention

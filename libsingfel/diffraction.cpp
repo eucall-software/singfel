@@ -107,7 +107,9 @@ fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::
 			F_hkl_sq(ind_y,ind_x) = as_scalar( pow(f * cos(map),2) + pow(f * sin(map),2) ); // 1xN Nx1
 		}
 	}
-	//cout << "q_xyz: " << detector->q_xyz(0,0,0) << detector->q_xyz(0,0,1) << detector->q_xyz(0,0,2);
+	//cout << "f, q_xyz: " << f(0) << "," << detector->q_xyz(0,0,0) << detector->q_xyz(0,0,1) << detector->q_xyz(0,0,2) << endl;
+	//cout << "atomPos: " << particle->atomPos(0) << endl;
+	//cout << "q, map, Fhkl: " << q(0) << "," << map(0) << "," << F_hkl_sq(0,0) << endl;
 	return F_hkl_sq;
 }
 

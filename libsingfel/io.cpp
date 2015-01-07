@@ -635,7 +635,7 @@ cout << "pack->finish: " << pack->finish << endl;
 		detector_intensity = F_hkl_sq % det.solidAngle * as_scalar(det.thomson) * beam.get_photonsPerPulsePerArea();//beam.phi_in;//2.105e30;
 
 		string name = "../detector_counts_" + ss.str() + ".dat";
-		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);
+		umat detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 		detector_counts.save(name,raw_ascii);
 	
 		string name1 = "../dp_" + ss.str() + ".dat";
