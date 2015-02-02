@@ -1,5 +1,5 @@
 /*
- * THIS SHOULD BE RENAMED AS PROCESS_HKL.CPP
+ * Merge diffraction patterns in a diffraction volume given known angles
  */
 #include <iostream>
 #include <iomanip>
@@ -201,14 +201,22 @@ int main( int argc, char* argv[] ){
 		  		std::stringstream sstm;
 	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
 				filename = sstm.str();
-				cout << filename << endl;
 				myDP = load_asciiImage(filename);
+				// Get badpixelmap from dat file
+		  		std::stringstream sstm2;
+	  			sstm2 << imageList << "BadPixels_" << setfill('0') << setw(7) << r << ".dat";
+				badpixmap = sstm2.str();
+				det.set_pixelMap(badpixmap);
+				goodpix = det.get_goodPixelMap();
 			    // Get rotation matrix from dat file
 	  			std::stringstream sstm1;
 				sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
 				string rotationName = sstm1.str();
-				cout << rotationName << endl;
-				myR = load_asciiRotation(rotationName);
+				fvec euler = load_asciiEuler(rotationName);
+				psi = euler(0);
+				theta = euler(1);
+				phi = euler(2);
+				myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
 			}
         	CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
   		}

@@ -835,13 +835,12 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
-        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation    
         pixRot = trans(pixRot);
     } else {
         pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
         pixRot = trans(pixRot);  
     }
-    //pixRot.print("pixRot: ");
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
         extract_interp_linear3D(myValue,&pixRot,goodpix,myIntensity);
     }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
