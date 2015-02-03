@@ -5,7 +5,6 @@ ARMADILLO
 PYTHON
 BOOST
 HDF5
-Optional Dependencies:
 MPI
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -13,16 +12,26 @@ Installing dependencies without sudo:
 PYTHON
 This should already exist in standard Linux
 
+## Do this before building boost ##
+MPICH
+./configure --disable-fortran --prefix=/home/<USERNAME>/mpich-install 2>&1 | tee c.txt
+make 2>&1 | tee m.txt
+make install 2>&1 | tee mi.txt
+PATH=/home/<USERNAME>/mpich-install/bin:$PATH ; export PATH
+Check that everything is in order at this point by doing:
+      which mpicc
+      which mpiexec
+
 BOOST
 ./bootstrap.sh --prefix=/path/to/boost/directory --with-python=/which/python
 Add "using mpi ;" in /path/to/boost/directory/project-config.jam
 ./b2 install
 
-ARMADILLO
+-ARMADILLO
 cmake .
 make
 make install DESTDIR=/path/to/armadillo/directory
-Note: If you to use svd(), uncomment #define ARMA_USE_LAPACK in 
+Note: If you want to use svd(), uncomment #define ARMA_USE_LAPACK in 
 /path/to/armadillo/directory/include/armadillo_bits/config.hpp
 You don't need to recompile armadillo
 
@@ -30,6 +39,7 @@ HDF5
 ./configure --prefix=/path/to/hdf/directory --enable-cxx
 make
 make install
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Add the following lines to .bashrc which is used by CMake
