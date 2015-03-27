@@ -14,10 +14,10 @@ This should already exist in standard Linux
 
 ## Do this before building boost ##
 MPICH
-./configure --disable-fortran --prefix=/home/<USERNAME>/mpich-install 2>&1 | tee c.txt
+./configure --disable-fortran --prefix=/path/to/mpich-install 2>&1 | tee c.txt
 make 2>&1 | tee m.txt
 make install 2>&1 | tee mi.txt
-PATH=/home/<USERNAME>/mpich-install/bin:$PATH ; export PATH
+PATH=/path/to/mpich-install/bin:$PATH ; export PATH
 Check that everything is in order at this point by doing:
       which mpicc
       which mpiexec
