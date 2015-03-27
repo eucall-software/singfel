@@ -562,25 +562,6 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				
 				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				detector_intensity += photon_field;
-
-					// Save Elastic and inelastic components
-					if (0) {
-						string outputName0 = sstm0.str();
-						cout << outputName0 << endl;
-						intensitySlice.save(outputName0,raw_ascii);
-						std::stringstream sstm;
-			  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
-						string outputName = sstm.str();
-						Compton.save(outputName,raw_ascii);
-						std::stringstream sstm1;
-			  			sstm1 << outputDir << "Fsq_" << setfill('0') << setw(7) << timeSlice << ".dat";
-						string outputName1 = sstm1.str();
-						F_hkl_sq.save(outputName1,raw_ascii);
-						std::stringstream sstm2;
-			  			sstm2 << outputDir << "SolidAngle_" << setfill('0') << setw(7) << timeSlice << ".dat";
-						string outputName2 = sstm2.str();
-						det.solidAngle.save(outputName2,raw_ascii);
-					}
 				#endif
 				if (saveSlices) {
 					int createSubgroup;
