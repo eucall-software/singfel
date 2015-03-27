@@ -47,7 +47,7 @@ using namespace toolbox;
 #define DONETAG 4 // done signal
 
 static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation);
-static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton);
+static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton, int saveSlices);
 
 int main( int argc, char* argv[] ){
 
@@ -76,6 +76,7 @@ int main( int argc, char* argv[] ){
 	int numDP;
 	int calculateCompton = 0;
 	int uniformRotation = 0;
+	int saveSlices = 0;
 	
 	// Let's parse input
 	for (int n = 1; n < argc; n++) {
@@ -110,6 +111,8 @@ int main( int argc, char* argv[] ){
 		    uniformRotation = atoi(argv[ n+2 ]);
 		} else if (boost::algorithm::iequals(argv[ n ], "--calculateCompton")) {
 		    calculateCompton = atoi(argv[ n+2 ]);
+		} else if (boost::algorithm::iequals(argv[ n ], "--saveSlices")) {
+		    saveSlices = atoi(argv[ n+2 ]);
 		}
 	}
   	
@@ -126,7 +129,7 @@ int main( int argc, char* argv[] ){
 		/* initialize random seed: */
 		master_diffract(comm, pmiStartID, pmiEndID, numDP, sliceInterval, rotationAxis, uniformRotation);
 	} else {
-		slave_diffract(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices, calculateCompton);
+		slave_diffract(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices, calculateCompton, saveSlices);
 	}
 	world.barrier();
 	if (world.rank() == master) {
@@ -252,7 +255,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	}
 }
 
-static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton) {
+static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton, int saveSlices) {
 	
 	wall_clock timer;
 	boost::mpi::status status;
@@ -349,6 +352,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	std::vector<float> msg;
 	fmat rot3D(3,3);
 	fvec quaternion(4);
+	fmat photon_field;
 	fmat detector_intensity;
 	umat detector_counts;
 	fmat myPos;
@@ -403,10 +407,12 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 			rot3D = CToolbox::quaternion2rot3D(quaternion);
 
 			double total_phot = 0;
+			photon_field.zeros(py,px);
 			detector_intensity.zeros(py,px);
 			detector_counts.zeros(py,px);	
 			int done = 0;
 			int timeSlice = 0;
+			int isFirstSlice = 1;
 			while(!done) {	// sum up time slices
 				if (timeSlice+sliceInterval >= numSlices) {
 					sliceInterval = numSlices - timeSlice;
@@ -554,10 +560,27 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 
 				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
 				
-				detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-/*
+				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+				detector_intensity += photon_field;
+
+				if (saveSlices) {
+					int createSubgroup;
+					if (isFirstSlice == 1) {
+						createSubgroup = 1;
+					} else {
+						createSubgroup = 0;
+					}
+					std::stringstream sstm0;
+		  			sstm0 << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
+					string fieldName = sstm0.str();
+					cout << fieldName << endl;
+					int success = hdf5writeVector(outputName, "misc", "/misc/photonField", fieldName, photon_field, createSubgroup);
+				}
 					// Save Elastic and inelastic components
-					if (1) {
+					if (0) {
+						string outputName0 = sstm0.str();
+						cout << outputName0 << endl;
+						intensitySlice.save(outputName0,raw_ascii);
 						std::stringstream sstm;
 			  			sstm << outputDir << "Compton_" << setfill('0') << setw(7) << timeSlice << ".dat";
 						string outputName = sstm.str();
@@ -571,8 +594,9 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 						string outputName2 = sstm2.str();
 						det.solidAngle.save(outputName2,raw_ascii);
 					}
-*/
+
 				#endif
+				isFirstSlice = 0;
 			}// end timeSlice
 
 			// Apply badpixelmap
@@ -611,6 +635,8 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				double thetaMax = atan((px/2*pix_height)/d);
 				double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
 				double dmin = 1/(2*qmax);
+				cout << "px, pix_height, d, thetaMax: " << px << "," << pix_height << "," << d << "," << thetaMax << endl;
+				cout << "wavelength: " << beam.get_wavelength() << endl;
 				cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
 				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
 			}
