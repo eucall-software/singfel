@@ -563,19 +563,6 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				detector_intensity += photon_field;
 
-				if (saveSlices) {
-					int createSubgroup;
-					if (isFirstSlice == 1) {
-						createSubgroup = 1;
-					} else {
-						createSubgroup = 0;
-					}
-					std::stringstream sstm0;
-		  			sstm0 << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
-					string fieldName = sstm0.str();
-					cout << fieldName << endl;
-					int success = hdf5writeVector(outputName, "misc", "/misc/photonField", fieldName, photon_field, createSubgroup);
-				}
 					// Save Elastic and inelastic components
 					if (0) {
 						string outputName0 = sstm0.str();
@@ -594,8 +581,20 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 						string outputName2 = sstm2.str();
 						det.solidAngle.save(outputName2,raw_ascii);
 					}
-
 				#endif
+				if (saveSlices) {
+					int createSubgroup;
+					if (isFirstSlice == 1) {
+						createSubgroup = 1;
+					} else {
+						createSubgroup = 0;
+					}
+					std::stringstream sstm0;
+		  			sstm0 << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
+					string fieldName = sstm0.str();
+					cout << fieldName << endl;
+					int success = hdf5writeVector(outputName, "misc", "/misc/photonField", fieldName, photon_field, createSubgroup);
+				}
 				isFirstSlice = 0;
 			}// end timeSlice
 
