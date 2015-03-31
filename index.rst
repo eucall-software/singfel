@@ -6,6 +6,9 @@
 Welcome to singfel's documentation!
 ===================================
 
+**[ Documentation is under construction ]**
+-------------------------------------------
+
 Contents:
 
 .. toctree::
