@@ -10,12 +10,12 @@ Getting started
 .. image:: _static/pmi_rsz.png
     :scale: 100 %
 
-Setting up Sphinx for documenting source-to-experiment simulation
-=================================================================
+Setting up Sphinx for documenting SingFEL
+=========================================
 
-You need clone the start-to-end repository from GitHub::
+You need clone the SingFEL repository from Bitbucket::
 
-  git clone https://github.com/chuckie82/start-to-end.git
+  git clone https://chunhongyoon@bitbucket.org/chunhongyoon/singfel.git
 
 The index.rst is the master ReST for your project.
 
@@ -44,8 +44,8 @@ To update the document on the web, just push your changes::
 .. image:: _static/undulator_rsz.png
     :scale: 100 %
 
-Installing your start-to-end package
-====================================
+Installing the SingFEL package
+==============================
 
 More instructions to come...
 
