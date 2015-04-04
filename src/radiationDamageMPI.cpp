@@ -446,7 +446,6 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 				int numAtoms = particle.get_numAtoms();
 				myPos.zeros(numAtoms,3);
 				myPos = particle.get_atomPos();
-//cout << "myPos: " << myPos(1) << endl;
 				myPos = myPos * trans(rot3D); // rotate atoms
 				particle.set_atomPos(&myPos);
 
@@ -482,7 +481,6 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
 					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
 					beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
-cout << "focus: " << focus_xFWHM << " " << focus_yFWHM << endl;
 				} else {
 					beam.set_focus(focus_radius*2);
 				}
@@ -497,11 +495,9 @@ cout << "focus: " << focus_xFWHM << " " << focus_yFWHM << endl;
 
 				#ifdef COMPILE_WITH_CUDA
 				if (!USE_CHUNK) {
-					//cout<< "USE_CUDA && NO_CHUNK" << endl;
 
 					CDiffraction::get_atomicFormFactorList(&particle,&det);		
-
-					//fmat F_hkl_sq(py,px);		
+	
 				 	float* F_mem = F_hkl_sq.memptr();
 					float* f_mem = CDiffraction::f_hkl_list.memptr();
 					float* q_mem = det.q_xyz.memptr();
@@ -511,12 +507,10 @@ cout << "focus: " << focus_xFWHM << " " << focus_yFWHM << endl;
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 			
 				} else if (USE_CHUNK) {
-					//cout<< "USE_CUDA && USE_CHUNK" << endl;
+
 					int max_chunkSize = 100;
 					int chunkSize = 0;
 
-					//fmat F_hkl_sq(py,px); // F_hkl_sq: py x px
-			 
 					float* f_mem = CDiffraction::f_hkl.memptr(); // f_hkl: py x px x numAtomTypes
 					float* q_mem = det.q_xyz.memptr(); // q_xyz: py x px x 3
 
@@ -563,15 +557,9 @@ cout << "focus: " << focus_xFWHM << " " << focus_yFWHM << endl;
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				}
 				#else
-				cout<< "USE_CPU" << endl;
 				CDiffraction::get_atomicFormFactorList(&particle, &det);
-
 				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
-				
 				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-cout << "F_hkl_sq:" << F_hkl_sq(30,30) << endl;
-cout << "Compton:" << Compton(40,40) << endl;
-cout << "photons:" << beam.get_photonsPerPulsePerArea() << endl;
 				detector_intensity += photon_field;
 				#endif
 				if (saveSlices) {
@@ -584,7 +572,6 @@ cout << "photons:" << beam.get_photonsPerPulsePerArea() << endl;
 					std::stringstream sstm0;
 		  			sstm0 << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
 					string fieldName = sstm0.str();
-					cout << fieldName << endl;
 					int success = hdf5writeVector(outputName, "misc", "/misc/photonField", fieldName, photon_field, createSubgroup);
 				}
 				isFirstSlice = 0;
