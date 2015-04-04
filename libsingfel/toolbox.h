@@ -5,7 +5,6 @@
 #include <sstream>
 #include <iostream>
 #include "detector.h"
-#include "io.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/mpi.hpp>
 namespace mpi = boost::mpi;

@@ -3,6 +3,7 @@
 #define BOOST_TEST_MODULE Suites
 #include <boost/test/unit_test.hpp>
 #include "toolbox.h"
+#include "io.h"
 
 #include <armadillo>
 
@@ -30,7 +31,7 @@ struct myTestObject
 };
 
 int add(int i, int j) {
-	auto a = i;
+	int a = i;
 	//std::vector<int> b = {0,1,2,3};
 	//for (int x : b) {
 	//	cout << x << endl;
@@ -42,7 +43,7 @@ int rotationConversion(fvec quaternion) {
 	float tol = 1e-6;
 
 	//static_assert(__cplusplus > 199711L, "Program requires C++11 capable compiler");
-	auto b = add(5,6);
+	int b = add(5,6);
 	cout << b << endl;
 
 	//fvec quaternion(4);
