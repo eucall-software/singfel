@@ -1,5 +1,5 @@
 /*
- * Program for merging diffraction patterns based on maximum cross correlations
+ * Program for simulating diffraction patterns
  */
 #include <iostream>
 #include <iomanip>
@@ -10,6 +10,19 @@
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_errno.h>
 #include <algorithm>
+#include <fstream>
+#include <string>
+// Armadillo library
+#include <armadillo>
+// Boost library
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/mpi.hpp>
+#include <boost/serialization/string.hpp>
+// HDF5 library
+#include "hdf5.h"
+#include "hdf5_hl.h"
+// SingFEL library
 #include "detector.h"
 #include "beam.h"
 #include "particle.h"
@@ -17,19 +30,6 @@
 #include "toolbox.h"
 #include "diffraction.cuh"
 #include "io.h"
-#include <fstream>
-#include <string>
-
-#include "hdf5.h"
-#include "hdf5_hl.h"
-
-#include <armadillo>
-
-#include <boost/tokenizer.hpp>
-#include <boost/algorithm/string.hpp>
-
-#include <boost/mpi.hpp>
-#include <boost/serialization/string.hpp>
 
 namespace mpi = boost::mpi;
 
@@ -46,8 +46,13 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation);
-static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton, int saveSlices);
+static void master_diffract(mpi::communicator* comm, int pmiStartID, \
+                            int pmiEndID, int numDP, int sliceInterval, \
+                            string rotationAxis, int uniformRotation);
+static void slave_diffract(mpi::communicator* comm, string inputDir, \
+                           string outputDir, string configName, \
+                           string beamFile, string geomFile, int numSlices, \
+                           int calculateCompton, int saveSlices);
 
 int main( int argc, char* argv[] ){
 
@@ -127,9 +132,11 @@ int main( int argc, char* argv[] ){
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
-		master_diffract(comm, pmiStartID, pmiEndID, numDP, sliceInterval, rotationAxis, uniformRotation);
+		master_diffract(comm, pmiStartID, pmiEndID, numDP, sliceInterval, \
+                        rotationAxis, uniformRotation);
 	} else {
-		slave_diffract(comm, inputDir, outputDir, configName, beamFile, geomFile, numSlices, calculateCompton, saveSlices);
+		slave_diffract(comm, inputDir, outputDir, configName, beamFile, \
+                       geomFile, numSlices, calculateCompton, saveSlices);
 	}
 	world.barrier();
 	if (world.rank() == master) {
@@ -144,7 +151,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
   	int ntasks, rank, numProcesses, numSlaves;
   	int numTasksDone = 0;
   	boost::mpi::status status;
-  	std::vector<float> msg;
+  	float msg[10]; //std::vector<float> msg;
 
 	ntasks = (pmiEndID-pmiStartID+1)*numDP;
 	numProcesses = comm->size();
@@ -158,6 +165,8 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		}
 		return;
 	}
+
+cout << "master:" << ntasks << endl;
 	
 	// Send
 	// 1) pmiID
@@ -185,6 +194,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	}
 
 	int counter = 0;
+	int done = 0;
 	for (rank = 1; rank < numProcesses; ++rank) {
 		if (pmiID > pmiEndID) {
 			cout << "Error!!" << endl;
@@ -193,14 +203,23 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
 		counter++;
-		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
-		comm->send(rank, QTAG, quat);
+
+//fvec abc;
+//abc << 1.0 << 2.2 << 3.4 << 5.6 << endr;
+		float* quat = &quaternion[0];//&abc[0];//std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
+		comm->send(rank, QTAG, quat,4);
+cout << "master:" << "sent quaternion" << endl;
 		// Tell the slave to compute DP
-		std::vector<float> id(3);
-		id.at(0) = (float) pmiID;
-		id.at(1) = (float) diffrID;
-		id.at(2) = (float) sliceInterval;
-		comm->send(rank, DPTAG, id);
+//		std::vector<float> id(3);
+//		id.at(0) = (float) pmiID;
+//		id.at(1) = (float) diffrID;
+//		id.at(2) = (float) sliceInterval;
+fvec id;
+id << pmiID << diffrID << sliceInterval << endr;
+		float* id1 = &id[0];
+cout << "DPTAG send" << endl;
+		comm->send(rank, DPTAG, id1, 3);
+//comm->send(rank, DIETAG, 0);
 		cout << "diffrID: " << diffrID << endl;
 				
 		diffrID++;
@@ -213,22 +232,28 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	}
 
 	// Listen for slaves
-	std::vector<float> msgDone;
-	int done = 0;
+	int msgDone = 0;//std::vector<float> msgDone;
+	
 	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
-		std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
+//fvec abc;
+//abc << 1.0 << 2.2 << 3.4 << 5.6 << endr;
+		float* quat = &quaternion[0];//std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
 		counter++;
-		comm->send(status.source(), QTAG, quat);
+		comm->send(status.source(), QTAG, quat, 4);
 		// Tell the slave to compute DP
-		std::vector<float> id(3);
-		id.at(0) = (float) pmiID;
-		id.at(1) = (float) diffrID;
-		id.at(2) = (float) sliceInterval;
-		comm->send(status.source(), DPTAG, id);
+//		std::vector<float> id(3);
+//		id.at(0) = (float) pmiID;
+//		id.at(1) = (float) diffrID;
+//		id.at(2) = (float) sliceInterval;
+fvec id;
+id << pmiID << diffrID << sliceInterval << endr;
+		float* id1 = &id[0];
+		comm->send(status.source(), DPTAG, id1, 3);
+//comm->send(status.source(), DIETAG, 0);
 		cout << "diffrID: " << diffrID << endl;
 		
 		diffrID++;
@@ -251,7 +276,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	// KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
 	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, msg);
+		comm->send(rank, DIETAG, 1);
 	}
 }
 
@@ -349,34 +374,47 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	det.set_pixelMap(badpixmap);
 	uvec goodpix = det.get_goodPixelMap();
 	
-	std::vector<float> msg;
+	float msg[4]; //std::vector<float> msg;
 	fmat rot3D(3,3);
 	fvec quaternion(4);
-	fmat photon_field;
-	fmat detector_intensity;
-	umat detector_counts;
+	fmat photon_field(py,px);
+	fmat detector_intensity(py,px);
+	umat detector_counts(py,px);
+	fmat F_hkl_sq(py,px);
+	fmat Compton(py,px);
 	fmat myPos;
-	fmat F_hkl_sq;
-	fmat Compton;
+
+cout << "slave:" << comm->rank() << endl;
 
 	while (1) {
+cout << "slave:" << "enter while loop" << endl;
 
 		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg);
+    	status = comm->recv(master, boost::mpi::any_tag, msg, 4);
+
+cout << "slave:" << "received something" << endl;
 
     	if (status.tag() == QTAG) {
-    		quaternion = conv_to< fvec >::from(msg);
+    		//quaternion = conv_to< fvec >::from(msg);
+cout << "slave:" << "quaternion" << endl;
+for (int n=0; n<4; ++n)
+    cout << msg[n] << ' ';
+cout << '\n';
     	}
 
 		// Receive how many slices assigned to this slave
 		if (status.tag() == DPTAG) {
+cout << "slave:" << "dptag" << endl;
+for (int n=0; n<3; ++n)
+    cout << msg[n] << ' ';
+cout << '\n';
 
 			timer.tic();
 
-    		fvec id = conv_to< fvec >::from(msg);
-    		int pmiID = (int) id(0);
-    		int diffrID = (int) id(1);
-    		int sliceInterval = (int) id(2);
+    		//fvec id = conv_to< fvec >::from(msg);
+    		int pmiID = (int) msg[0];//id(0);
+    		int diffrID = (int) msg[1];//id(1);
+    		int sliceInterval = (int) msg[2];//id(2);
     		
     		//TO DO: Check pmiID exists in the workflow
 		
@@ -439,8 +477,11 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
 				}
 				// Rotate atom positions
+				int numAtoms = particle.get_numAtoms();
+				myPos.zeros(numAtoms,3);
 				myPos = particle.get_atomPos();
-				myPos = myPos * trans(rot3D);
+//cout << "myPos: " << myPos(1) << endl;
+				myPos = myPos * trans(rot3D); // rotate atoms
 				particle.set_atomPos(&myPos);
 
 				// Beam //
@@ -475,6 +516,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
 					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
 					beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
+cout << "focus: " << focus_xFWHM << " " << focus_yFWHM << endl;
 				} else {
 					beam.set_focus(focus_radius*2);
 				}
@@ -493,7 +535,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 
 					CDiffraction::get_atomicFormFactorList(&particle,&det);		
 
-					fmat F_hkl_sq(py,px);		
+					//fmat F_hkl_sq(py,px);		
 				 	float* F_mem = F_hkl_sq.memptr();
 					float* f_mem = CDiffraction::f_hkl_list.memptr();
 					float* q_mem = det.q_xyz.memptr();
@@ -507,7 +549,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					int max_chunkSize = 100;
 					int chunkSize = 0;
 
-					fmat F_hkl_sq(py,px); // F_hkl_sq: py x px
+					//fmat F_hkl_sq(py,px); // F_hkl_sq: py x px
 			 
 					float* f_mem = CDiffraction::f_hkl.memptr(); // f_hkl: py x px x numAtomTypes
 					float* q_mem = det.q_xyz.memptr(); // q_xyz: py x px x 3
@@ -555,12 +597,15 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				}
 				#else
-				//cout<< "USE_CPU" << endl;
+				cout<< "USE_CPU" << endl;
 				CDiffraction::get_atomicFormFactorList(&particle, &det);
 
 				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
 				
 				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+cout << "F_hkl_sq:" << F_hkl_sq(30,30) << endl;
+cout << "Compton:" << Compton(40,40) << endl;
+cout << "photons:" << beam.get_photonsPerPulsePerArea() << endl;
 				detector_intensity += photon_field;
 				#endif
 				if (saveSlices) {
@@ -621,14 +666,14 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
 			}
 
-			std::vector<float> msgDone;
+			float msgDone = 0; //std::vector<float> msgDone;
     		comm->send(master, DONETAG, msgDone);
     		
 			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
     	}
-			
+		
 		if (status.tag() == DIETAG) {
-		  	return;
+			return;
 		}
 	} // end of while
 }
