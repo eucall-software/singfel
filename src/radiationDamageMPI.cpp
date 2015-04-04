@@ -47,9 +47,11 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
+const int master = 0;
+
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
-int parse_input(int argc, char* argv[], mpi::communicator* comm);
+opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 
 int main( int argc, char* argv[] ){
 
@@ -57,48 +59,9 @@ int main( int argc, char* argv[] ){
   	mpi::environment env;
   	mpi::communicator world;
 	mpi::communicator* comm = &world;
-	const int master = 0;
 
 	// All processes parse the input
-
-    // Constructing an options describing variable and giving it a
-    // textual description "All options"
-    opt::options_description desc("All options");
-
-    // When we are adding options, first parameter is a name
-    // to be used in command line. Second parameter is a type
-    // of that option, wrapped in value<> class. Third parameter
-    // must be a short description of that option
-    desc.add_options()
-        ("inputDir", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
-        ("outputDir", opt::value<string>(), "Output directory for saving diffraction")
-        ("configFile", opt::value<string>(), "Absolute path to the config file")
-        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
-        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
-        ("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
-        ("numSlices", opt::value<int>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
-        ("sliceInterval", opt::value<int>()->default_value(1), "Calculates photon field at every slice interval")
-        ("pmiStartID", opt::value<int>()->default_value(1), "First Photon Matter Interaction (PMI) file ID to use")
-        ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
-        ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
-        ("calculateCompton", opt::value<int>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
-        ("uniformRotation", opt::value<int>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
-        ("saveSlices", opt::value<int>()->default_value(0), "If 1, saves time-slices of the photon field in hdf5 under /misc/photonField")
-        ("gpu", opt::value<int>()->default_value(0), "If 1, uses NVIDIA CUDA for faster calculation")
-        ("help", "produce help message")
-    ;
-
-    // Variable to store our command line arguments
-    opt::variables_map vm;
-
-    // Parsing and storing arguments
-    opt::store(opt::parse_command_line(argc, argv, desc), vm);
-
-    if (vm.count("help")) {
-        std::cout << desc << "\n";
-        return 1;
-    }
-    opt::notify(vm);
+	opt::variables_map vm = parse_input(argc, argv, comm);
 	
 	wall_clock timerMaster;
 
@@ -110,7 +73,6 @@ int main( int argc, char* argv[] ){
 
 	// Main program
 	if (world.rank() == master) {
-		/* initialize random seed: */
 		master_diffract(comm, vm);
 	} else {
 		slave_diffract(comm, vm);
@@ -256,7 +218,6 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	
 	wall_clock timer;
 	boost::mpi::status status;
-	const int master = 0;
 
 	/****** Beam ******/
 	// Let's read in our beam file
@@ -621,16 +582,80 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	} // end of while
 }// end of slave_diffract
 
-int parse_input( int argc, char* argv[], mpi::communicator* comm ) {
-	for (int n = 1; n < argc; n++) {
-		if (comm->rank() == 0) {
-			cout << argv [ n ] << endl;
-		}
-		if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
-		    int sliceInterval = atoi(argv[ n+2 ]);
-		}
-	}
+opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
-	return 0;
-}
+    // Constructing an options describing variable and giving it a
+    // textual description "All options"
+    opt::options_description desc("All options");
+
+    // When we are adding options, first parameter is a name
+    // to be used in command line. Second parameter is a type
+    // of that option, wrapped in value<> class. Third parameter
+    // must be a short description of that option
+    desc.add_options()
+        ("inputDir", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("outputDir", opt::value<string>(), "Output directory for saving diffraction")
+        ("configFile", opt::value<string>(), "Absolute path to the config file")
+        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
+        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
+        ("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
+        ("numSlices", opt::value<int>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
+        ("sliceInterval", opt::value<int>()->default_value(1), "Calculates photon field at every slice interval")
+        ("pmiStartID", opt::value<int>()->default_value(1), "First Photon Matter Interaction (PMI) file ID to use")
+        ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
+        ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
+        ("calculateCompton", opt::value<int>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
+        ("uniformRotation", opt::value<int>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
+        ("saveSlices", opt::value<int>()->default_value(0), "If 1, saves time-slices of the photon field in hdf5 under /misc/photonField")
+        ("gpu", opt::value<int>()->default_value(0), "If 1, uses NVIDIA CUDA for faster calculation")
+        ("help", "produce help message")
+    ;
+
+    // Variable to store our command line arguments
+    opt::variables_map vm;
+
+    // Parsing and storing arguments
+    opt::store(opt::parse_command_line(argc, argv, desc), vm);
+	opt::notify(vm);
+
+	// Print input arguments
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        exit(0);
+    }
+
+	if (comm->rank() == master) {
+		if (vm.count("inputDir"))
+    		cout << "inputDir: " << vm["inputDir"].as<string>() << endl;
+		if (vm.count("outputDir"))
+    		cout << "outputDir: " << vm["outputDir"].as<string>() << endl;
+		if (vm.count("configFile"))
+    		cout << "configFile: " << vm["configFile"].as<string>() << endl;
+		if (vm.count("beamFile"))
+    		cout << "beamFile: " << vm["beamFile"].as<string>() << endl;
+		if (vm.count("geomFile"))
+    		cout << "geomFile: " << vm["geomFile"].as<string>() << endl;
+		if (vm.count("rotationAxis"))
+    		cout << "rotationAxis: " << vm["rotationAxis"].as<string>() << endl;
+		if (vm.count("numSlices"))
+    		cout << "numSlices: " << vm["numSlices"].as<int>() << endl;
+		if (vm.count("sliceInterval"))
+    		cout << "sliceInterval: " << vm["sliceInterval"].as<int>() << endl;
+		if (vm.count("pmiStartID"))
+    		cout << "pmiStartID: " << vm["pmiStartID"].as<int>() << endl;
+		if (vm.count("pmiEndID"))
+    		cout << "pmiEndID: " << vm["pmiEndID"].as<int>() << endl;
+		if (vm.count("numDP"))
+    		cout << "numDP: " << vm["numDP"].as<int>() << endl;
+		if (vm.count("calculateCompton"))
+    		cout << "calculateCompton: " << vm["calculateCompton"].as<int>() << endl;
+		if (vm.count("uniformRotation"))
+    		cout << "uniformRotation: " << vm["uniformRotation"].as<int>() << endl;
+		if (vm.count("saveSlices"))
+    		cout << "saveSlices: " << vm["saveSlices"].as<int>() << endl;
+		if (vm.count("gpu"))
+    		cout << "gpu: " << vm["gpu"].as<int>() << endl;
+	}
+	return vm;
+} // end of parse_input
 
