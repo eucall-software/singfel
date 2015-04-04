@@ -42,6 +42,7 @@ public:
 	static void set_atomPos(Packet*);
 	static void set_atomPos(arma::fmat*);	
 	static arma::fmat get_atomPos();
+	static int get_numAtoms();
 
 	static void load_ionList(string filename, string datasetname); // load hdf5
 	static void load_ionList(string);	

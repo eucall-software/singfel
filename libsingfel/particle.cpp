@@ -92,6 +92,10 @@ fmat CParticle::get_atomPos(){
 	return atomPos;
 }
 
+int CParticle::get_numAtoms(){
+	return numAtoms;
+}
+
 void CParticle::load_ionList(string filename, string datasetname){ // load from hdf5
 	ionList = hdf5readT<irowvec>(filename,datasetname);
 	//ionList = hdf5readVector<irowvec>(filename,datasetname);

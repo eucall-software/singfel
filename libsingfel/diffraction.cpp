@@ -10,7 +10,6 @@ fcube CDiffraction::f_hkl;
 fcube CDiffraction::f_hkl_list;
 
 CDiffraction::CDiffraction() {
-//cout << "init diffraction" << endl;
 }
 
 double CDiffraction::calculate_Thomson(double ang) {
@@ -32,20 +31,14 @@ void CDiffraction::calculate_atomicFactor(particle::CParticle *particle, detecto
 	for(int i=0; i<particle->numQSamples; ++i) {
 		qs[i] = particle->qSample(i);
 	}
-//cout << "calc_atomFactor q: " << particle->qSample << endl;
 	for(int j=0; j<particle->numAtomTypes; ++j) {
 		// silly copying of arma::rowvec to vector
 		for(int i=0; i<particle->numQSamples; ++i) {
 			ft[i] = particle->ffTable(j,i); // 0 is first row
-  		}
-//cout << "calc_atomFactor ff: " << particle->ffTable.col(0) << endl;  		
-		gsl_spline_init(spline, qs, ft, particle->numQSamples);
-//cout << "enter the dragon" << endl;		
+  		}	
+		gsl_spline_init(spline, qs, ft, particle->numQSamples);	
 		for(int a=0; a<detector->py; a++) {
 		for(int b=0; b<detector->px; b++) {
-//cout << a << "," << b << "," << j << endl;
-//cout << q_mod_Bragg << endl;
-//cout << detector->q_mod << endl;
 			f_hkl(a,b,j) = gsl_spline_eval(spline, q_mod_Bragg(a,b), acc); // interpolate
 		}
 		}
@@ -62,13 +55,7 @@ void CDiffraction::get_formFactorList(particle::CParticle *particle) {
 
 void CDiffraction::get_atomicFormFactorList(particle::CParticle *particle, detector::CDetector *detector) {
 	f_hkl_list.zeros(detector->py,detector->px,particle->numAtoms);
-/*	cout << "CDiff::py: " << detector->py << endl;
-	cout << "CDiff::px: " << detector->px << endl;
-	cout << "CDiff::numAtoms: " << particle->numAtoms << endl;
-	cout << "CDiff::xyzInd: " << particle->xyzInd << endl;
-	cout << "CDiff::f_hkl: " << f_hkl << endl; */
 	for(int j = 0; j < particle->numAtoms; ++j) {
-	//cout << "j: " << j << endl;
 		f_hkl_list.slice(j) = f_hkl.slice((unsigned int) particle->xyzInd(j));
 	}
 }
@@ -107,9 +94,6 @@ fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::
 			F_hkl_sq(ind_y,ind_x) = as_scalar( pow(f * cos(map),2) + pow(f * sin(map),2) ); // 1xN Nx1
 		}
 	}
-	//cout << "f, q_xyz: " << f(0) << "," << detector->q_xyz(0,0,0) << detector->q_xyz(0,0,1) << detector->q_xyz(0,0,2) << endl;
-	//cout << "atomPos: " << particle->atomPos(0) << endl;
-	//cout << "q, map, Fhkl: " << q(0) << "," << map(0) << "," << F_hkl_sq(0,0) << endl;
 	return F_hkl_sq;
 }
 
