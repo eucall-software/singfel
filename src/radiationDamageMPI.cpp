@@ -82,9 +82,12 @@ int main( int argc, char* argv[] ){
 	int uniformRotation = 0;
 	int saveSlices = 0;
 	
+
 	// Let's parse input
 	for (int n = 1; n < argc; n++) {
-		cout << argv [ n ] << endl;
+		if (world.rank() == master) {
+			cout << argv [ n ] << endl;
+		}
 		if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
 		    sliceInterval = atoi(argv[ n+2 ]);
 		} else if (boost::algorithm::iequals(argv[ n ], "--input_dir")) {
@@ -628,5 +631,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 			return;
 		}
 	} // end of while
-}
+}// end of slave_diffract
+
+
 
