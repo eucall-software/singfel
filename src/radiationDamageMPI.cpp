@@ -619,8 +619,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
 			}
 
-			float msgDone = 0; //std::vector<float> msgDone;
-    		comm->send(master, DONETAG, msgDone);
+    		comm->send(master, DONETAG, 0);
     		
 			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
     	}
