@@ -32,7 +32,6 @@
 #include "io.h"
 
 namespace mpi = boost::mpi;
-
 using namespace std;
 using namespace arma;
 using namespace detector;
@@ -151,7 +150,7 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
   	int ntasks, rank, numProcesses, numSlaves;
   	int numTasksDone = 0;
   	boost::mpi::status status;
-  	float msg[10]; //std::vector<float> msg;
+  	float msg[4];
 
 	ntasks = (pmiEndID-pmiStartID+1)*numDP;
 	numProcesses = comm->size();
@@ -166,8 +165,6 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 		return;
 	}
 
-cout << "master:" << ntasks << endl;
-	
 	// Send
 	// 1) pmiID
 	// 2) diffrID
@@ -203,24 +200,13 @@ cout << "master:" << ntasks << endl;
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
 		counter++;
-
-//fvec abc;
-//abc << 1.0 << 2.2 << 3.4 << 5.6 << endr;
-		float* quat = &quaternion[0];//&abc[0];//std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
+		float* quat = &quaternion[0];
 		comm->send(rank, QTAG, quat,4);
-cout << "master:" << "sent quaternion" << endl;
 		// Tell the slave to compute DP
-//		std::vector<float> id(3);
-//		id.at(0) = (float) pmiID;
-//		id.at(1) = (float) diffrID;
-//		id.at(2) = (float) sliceInterval;
-fvec id;
-id << pmiID << diffrID << sliceInterval << endr;
+		fvec id;
+		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
-cout << "DPTAG send" << endl;
 		comm->send(rank, DPTAG, id1, 3);
-//comm->send(rank, DIETAG, 0);
-		cout << "diffrID: " << diffrID << endl;
 				
 		diffrID++;
 		dpID++;
@@ -232,29 +218,21 @@ cout << "DPTAG send" << endl;
 	}
 
 	// Listen for slaves
-	int msgDone = 0;//std::vector<float> msgDone;
+	int msgDone = 0;
 	
 	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
-//fvec abc;
-//abc << 1.0 << 2.2 << 3.4 << 5.6 << endr;
-		float* quat = &quaternion[0];//std::vector<float> quat = conv_to< std::vector<float> >::from(quaternion);
+		float* quat = &quaternion[0];
 		counter++;
 		comm->send(status.source(), QTAG, quat, 4);
 		// Tell the slave to compute DP
-//		std::vector<float> id(3);
-//		id.at(0) = (float) pmiID;
-//		id.at(1) = (float) diffrID;
-//		id.at(2) = (float) sliceInterval;
-fvec id;
-id << pmiID << diffrID << sliceInterval << endr;
+		fvec id;
+		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
 		comm->send(status.source(), DPTAG, id1, 3);
-//comm->send(status.source(), DIETAG, 0);
-		cout << "diffrID: " << diffrID << endl;
 		
 		diffrID++;
 		dpID++;
@@ -280,7 +258,10 @@ id << pmiID << diffrID << sliceInterval << endr;
 	}
 }
 
-static void slave_diffract(mpi::communicator* comm, string inputDir, string outputDir, string configName, string beamFile, string geomFile, int numSlices, int calculateCompton, int saveSlices) {
+static void slave_diffract(mpi::communicator* comm, string inputDir, \
+                           string outputDir, string configName, \
+                           string beamFile, string geomFile, int numSlices, \
+                           int calculateCompton, int saveSlices) {
 	
 	wall_clock timer;
 	boost::mpi::status status;
@@ -384,37 +365,22 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, string outp
 	fmat Compton(py,px);
 	fmat myPos;
 
-cout << "slave:" << comm->rank() << endl;
-
 	while (1) {
-cout << "slave:" << "enter while loop" << endl;
-
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg, 4);
 
-cout << "slave:" << "received something" << endl;
-
     	if (status.tag() == QTAG) {
-    		//quaternion = conv_to< fvec >::from(msg);
-cout << "slave:" << "quaternion" << endl;
-for (int n=0; n<4; ++n)
-    cout << msg[n] << ' ';
-cout << '\n';
+    		quaternion << msg[0] << msg[1] << msg[2] << msg[3] << endr;
     	}
 
 		// Receive how many slices assigned to this slave
 		if (status.tag() == DPTAG) {
-cout << "slave:" << "dptag" << endl;
-for (int n=0; n<3; ++n)
-    cout << msg[n] << ' ';
-cout << '\n';
 
 			timer.tic();
 
-    		//fvec id = conv_to< fvec >::from(msg);
-    		int pmiID = (int) msg[0];//id(0);
-    		int diffrID = (int) msg[1];//id(1);
-    		int sliceInterval = (int) msg[2];//id(2);
+    		int pmiID = (int) msg[0];
+    		int diffrID = (int) msg[1];
+    		int sliceInterval = (int) msg[2];
     		
     		//TO DO: Check pmiID exists in the workflow
 		
