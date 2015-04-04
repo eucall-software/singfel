@@ -19,6 +19,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/mpi.hpp>
 #include <boost/serialization/string.hpp>
+#include <boost/program_options.hpp>
 // HDF5 library
 #include "hdf5.h"
 #include "hdf5_hl.h"
@@ -32,6 +33,7 @@
 #include "io.h"
 
 namespace mpi = boost::mpi;
+namespace opt = boost::program_options;
 using namespace std;
 using namespace arma;
 using namespace detector;
@@ -45,13 +47,9 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-static void master_diffract(mpi::communicator* comm, int pmiStartID, \
-                            int pmiEndID, int numDP, int sliceInterval, \
-                            string rotationAxis, int uniformRotation);
-static void slave_diffract(mpi::communicator* comm, string inputDir, \
-                           string outputDir, string configName, \
-                           string beamFile, string geomFile, int numSlices, \
-                           int calculateCompton, int saveSlices);
+static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
+static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
+int parse_input(int argc, char* argv[], mpi::communicator* comm);
 
 int main( int argc, char* argv[] ){
 
@@ -62,83 +60,76 @@ int main( int argc, char* argv[] ){
 	const int master = 0;
 	
 	// All processes do this
-	string beamFile;
-	string geomFile;
-	int gpu = 0; // not used
-	string output;
-    
 	string inputDir;
 	string outputDir;
-	string configName;
-	string rotationAxis = "xyz";
-	
+	string configFile;
+	string beamFile;
+	string geomFile;
+	string rotationAxis;
 	int sliceInterval;
 	int numSlices;
 	int pmiStartID;
 	int pmiEndID;
 	int dpID;
 	int numDP;
-	int calculateCompton = 0;
-	int uniformRotation = 0;
-	int saveSlices = 0;
+	int calculateCompton;
+	int uniformRotation;
+	int saveSlices;
+	int gpu; // FIXME: not used
 	
+    // Constructing an options describing variable and giving it a
+    // textual description "All options"
+    opt::options_description desc("All options");
 
-	// Let's parse input
-	for (int n = 1; n < argc; n++) {
-		if (world.rank() == master) {
-			cout << argv [ n ] << endl;
-		}
-		if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
-		    sliceInterval = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--input_dir")) {
-		    inputDir = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--output_dir")) {
-		    outputDir = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--config_file")) {
-		    configName = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "-b")) {
-		    beamFile = argv[ n+1 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "-g")) {
-		    geomFile = argv[ n+1 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--gpu")) {
-		    gpu = 1;
-		} else if (boost::algorithm::iequals(argv[ n ], "--numSlices")) {
-		    numSlices = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--pmiStartID")) {
-		    pmiStartID = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--pmiEndID")) {
-		    pmiEndID = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--dpID")) {
-		    dpID = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--numDP")) {
-		    numDP = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
-		    rotationAxis = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--uniformRotation")) {
-		    uniformRotation = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--calculateCompton")) {
-		    calculateCompton = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--saveSlices")) {
-		    saveSlices = atoi(argv[ n+2 ]);
-		}
-	}
-  	
+    // When we are adding options, first parameter is a name
+    // to be used in command line. Second parameter is a type
+    // of that option, wrapped in value<> class. Third parameter
+    // must be a short description of that option
+    desc.add_options()
+        ("inputDir", opt::value<std::string>(&inputDir)->required(), "Input directory for finding /pmi and /diffr")
+        ("outputDir", opt::value<string>(&outputDir)->required(), "Output directory for saving diffraction")
+        ("configFile", opt::value<string>(&configFile)->required(), "Absolute path to the config file")
+        ("beamFile", opt::value<string>(&beamFile)->required(), "Beam file defining X-ray beam")
+        ("geomFile", opt::value<string>(&geomFile)->required(), "Geometry file defining diffraction geometry")
+        ("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
+        ("numSlices", opt::value<int>(&numSlices)->required(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
+        ("sliceInterval", opt::value<int>(&sliceInterval)->required()->default_value(1), "Calculates photon field at every slice interval")
+        ("pmiStartID", opt::value<int>()->default_value(1), "First Photon Matter Interaction (PMI) file ID to use")
+        ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
+        ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
+        ("calculateCompton", opt::value<int>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
+        ("uniformRotation", opt::value<int>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
+        ("saveSlices", opt::value<int>()->default_value(0), "If 1, saves time-slices of the photon field in hdf5 under /misc/photonField")
+        ("gpu", opt::value<int>()->default_value(0), "If 1, uses NVIDIA CUDA for faster calculation")
+        ("help", "produce help message")
+    ;
+
+    // Variable to store our command line arguments
+    opt::variables_map vm;
+
+    // Parsing and storing arguments
+    opt::store(opt::parse_command_line(argc, argv, desc), vm);
+
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        return 1;
+    }
+    opt::notify(vm);
+	
 	wall_clock timerMaster;
 
 	timerMaster.tic();
 
 	world.barrier();
 
-	srand( pmiStartID + world.rank() + (unsigned)time(NULL) );
+	srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
 
 	// Main program
 	if (world.rank() == master) {
 		/* initialize random seed: */
-		master_diffract(comm, pmiStartID, pmiEndID, numDP, sliceInterval, \
-                        rotationAxis, uniformRotation);
+		master_diffract(comm, vm);
 	} else {
-		slave_diffract(comm, inputDir, outputDir, configName, beamFile, \
-                       geomFile, numSlices, calculateCompton, saveSlices);
+		slave_diffract(comm, vm);
 	}
 	world.barrier();
 	if (world.rank() == master) {
@@ -148,7 +139,14 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndID, int numDP, int sliceInterval, string rotationAxis, int uniformRotation) {
+static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
+
+	int pmiStartID = vm["pmiStartID"].as<int>();
+	int pmiEndID = vm["pmiEndID"].as<int>();
+	int numDP = vm["numDP"].as<int>();
+	int sliceInterval = vm["sliceInterval"].as<int>();
+	string rotationAxis = vm["rotationAxis"].as<string>();
+	int uniformRotation = vm["uniformRotation"].as<int>();
 
   	int ntasks, rank, numProcesses, numSlaves;
   	int numTasksDone = 0;
@@ -261,10 +259,16 @@ static void master_diffract(mpi::communicator* comm, int pmiStartID, int pmiEndI
 	}
 }
 
-static void slave_diffract(mpi::communicator* comm, string inputDir, \
-                           string outputDir, string configName, \
-                           string beamFile, string geomFile, int numSlices, \
-                           int calculateCompton, int saveSlices) {
+static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
+
+	string inputDir = vm["inputDir"].as<std::string>();
+	string outputDir = vm["outputDir"].as<string>();
+	string configFile = vm["configFile"].as<string>();
+	string beamFile = vm["beamFile"].as<string>();
+	string geomFile = vm["geomFile"].as<string>();
+	int numSlices = vm["numSlices"].as<int>();
+	int calculateCompton = vm["calculateCompton"].as<int>();
+	int saveSlices = vm["saveSlices"].as<int>();
 	
 	wall_clock timer;
 	boost::mpi::status status;
@@ -407,7 +411,7 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 			stringstream sstm2;
 			sstm2 << inputDir << "/prepHDF5.py";
 			scriptName = sstm2.str();
-			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configName;
+			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
 			
 			// Rotate single particle			
@@ -633,5 +637,16 @@ static void slave_diffract(mpi::communicator* comm, string inputDir, \
 	} // end of while
 }// end of slave_diffract
 
+int parse_input( int argc, char* argv[], mpi::communicator* comm ) {
+	for (int n = 1; n < argc; n++) {
+		if (comm->rank() == 0) {
+			cout << argv [ n ] << endl;
+		}
+		if(boost::algorithm::iequals(argv[ n ], "--sliceInterval")) {
+		    int sliceInterval = atoi(argv[ n+2 ]);
+		}
+	}
 
+	return 0;
+}
 
