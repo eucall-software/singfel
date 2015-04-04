@@ -47,7 +47,8 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-const int master = 0;
+const int master = 0; // Process with rank=0 is the master
+const int msgLength = 4; // MPI message length
 
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
@@ -62,14 +63,13 @@ int main( int argc, char* argv[] ){
 
 	// All processes parse the input
 	opt::variables_map vm = parse_input(argc, argv, comm);
-	
+	// Set random seed
+	srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
+	world.barrier();
+
 	wall_clock timerMaster;
 
 	timerMaster.tic();
-
-	world.barrier();
-
-	srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
 
 	// Main program
 	if (world.rank() == master) {
@@ -77,7 +77,9 @@ int main( int argc, char* argv[] ){
 	} else {
 		slave_diffract(comm, vm);
 	}
+
 	world.barrier();
+
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -97,7 +99,6 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
   	int ntasks, rank, numProcesses, numSlaves;
   	int numTasksDone = 0;
   	boost::mpi::status status;
-  	float msg[4];
 
 	ntasks = (pmiEndID-pmiStartID+1)*numDP;
 	numProcesses = comm->size();
@@ -106,7 +107,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	if (numSlaves > ntasks) {
 		cout << "Reduce number of slaves and restart" << endl;
 		for (rank = 1; rank < numProcesses; ++rank) {
-			comm->send(rank, DIETAG, msg);
+			comm->send(rank, DIETAG, 1);
 			cout << "Killing: " << rank << endl;
 		}
 		return;
@@ -169,7 +170,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	
 	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
-		status = comm->recv(boost::mpi::any_source, boost::mpi::any_tag, msgDone);
+		status = comm->recv(boost::mpi::any_source, DONETAG, msgDone);
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
 		float* quat = &quaternion[0];
@@ -195,7 +196,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	
   	// Wait for status update of slaves.
 	for (rank = 1; rank < numProcesses; ++rank) {
-		status = comm->recv(rank, boost::mpi::any_tag, msgDone);
+		status = comm->recv(rank, DONETAG, msgDone);
 	}
     
 	// KILL SLAVES
@@ -307,7 +308,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	det.set_pixelMap(badpixmap);
 	uvec goodpix = det.get_goodPixelMap();
 	
-	float msg[4]; //std::vector<float> msg;
+	float msg[msgLength];
 	fmat rot3D(3,3);
 	fvec quaternion(4);
 	fmat photon_field(py,px);
@@ -319,7 +320,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	while (1) {
 		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg, 4);
+    	status = comm->recv(master, boost::mpi::any_tag, msg, msgLength);
 
     	if (status.tag() == QTAG) {
     		quaternion << msg[0] << msg[1] << msg[2] << msg[3] << endr;
@@ -571,7 +572,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
 			}
 
-    		comm->send(master, DONETAG, 0);
+    		comm->send(master, DONETAG, 1);
     		
 			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
     	}
