@@ -58,25 +58,9 @@ int main( int argc, char* argv[] ){
   	mpi::communicator world;
 	mpi::communicator* comm = &world;
 	const int master = 0;
-	
-	// All processes do this
-	string inputDir;
-	string outputDir;
-	string configFile;
-	string beamFile;
-	string geomFile;
-	string rotationAxis;
-	int sliceInterval;
-	int numSlices;
-	int pmiStartID;
-	int pmiEndID;
-	int dpID;
-	int numDP;
-	int calculateCompton;
-	int uniformRotation;
-	int saveSlices;
-	int gpu; // FIXME: not used
-	
+
+	// All processes parse the input
+
     // Constructing an options describing variable and giving it a
     // textual description "All options"
     opt::options_description desc("All options");
@@ -86,14 +70,14 @@ int main( int argc, char* argv[] ){
     // of that option, wrapped in value<> class. Third parameter
     // must be a short description of that option
     desc.add_options()
-        ("inputDir", opt::value<std::string>(&inputDir)->required(), "Input directory for finding /pmi and /diffr")
-        ("outputDir", opt::value<string>(&outputDir)->required(), "Output directory for saving diffraction")
-        ("configFile", opt::value<string>(&configFile)->required(), "Absolute path to the config file")
-        ("beamFile", opt::value<string>(&beamFile)->required(), "Beam file defining X-ray beam")
-        ("geomFile", opt::value<string>(&geomFile)->required(), "Geometry file defining diffraction geometry")
+        ("inputDir", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("outputDir", opt::value<string>(), "Output directory for saving diffraction")
+        ("configFile", opt::value<string>(), "Absolute path to the config file")
+        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
+        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
         ("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
-        ("numSlices", opt::value<int>(&numSlices)->required(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
-        ("sliceInterval", opt::value<int>(&sliceInterval)->required()->default_value(1), "Calculates photon field at every slice interval")
+        ("numSlices", opt::value<int>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
+        ("sliceInterval", opt::value<int>()->default_value(1), "Calculates photon field at every slice interval")
         ("pmiStartID", opt::value<int>()->default_value(1), "First Photon Matter Interaction (PMI) file ID to use")
         ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
         ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
