@@ -402,7 +402,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				myPos = myPos * trans(rot3D); // rotate atoms
 				particle.set_atomPos(&myPos);
 
-				// Beam //
+				// Beam // FIXME: Check that these fields exist
 				if (givenFluence == 0) {
 					n_phot = 0;
 					for (int i = 0; i < sliceInterval; i++) {
