@@ -878,6 +878,7 @@ fmat CToolbox::badpixmap2goodpixmap(fmat badpixmap) {
 	return goodpixmap;
 }
 
+//TODO: Move expansion, maximization and compression to reconMPI.cpp (remove #define TAGs)
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
 int CToolbox::expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, int numSlices, int iter) {
 
@@ -963,6 +964,7 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 			startInd += s(rank-1);
 	  	}
 
+		//TODO: Time accumulation. May need to write random access accumulator
 		// Accumulate lse for each expansion slice
 		int currentRow = 0;
 		fvec lse;
@@ -986,6 +988,8 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 		sstm3 << output << "maximization/similarity" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		outputName = sstm3.str();
 		myVal.save(outputName,raw_ascii);
+
+		//TODO: Time generating new weighted expansion slice
 		// Pick top candidates
 		uvec indices = sort_index(myVal,"ascend");
 		uvec candidatesInd;

@@ -395,6 +395,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 			// Initialize
 	    	condProb.zeros(numChunkData);
     		
+			//TODO: Time reading of expansion slice (all processes going for the same file)
 	    	//////////////////////////
 	    	// Read in expansion slice
 	    	//////////////////////////
@@ -408,7 +409,8 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 			sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
 			string filename1 = sstm1.str();
 			fmat myPixmap = load_asciiImage(filename1);
-						    		
+						   
+			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
 	    	///////////////
@@ -470,18 +472,18 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
     // must be a short description of that option
     desc.add_options()
         ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
-        ("useFileList", opt::value<int>()->default_value(0), "Output directory for saving diffraction")
+        ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
         ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
         ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
-		("rotationAxis", opt::value<string>(), "Geometry file defining diffraction geometry")
+		("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
         ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
-        ("numImages", opt::value<string>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
-        ("numSlices", opt::value<string>(), "Calculates photon field at every slice interval")
-        ("volDim", opt::value<int>(), "First Photon Matter Interaction (PMI) file ID to use")
-        ("output", opt::value<string>(), "Last Photon Matter Interaction (PMI) file ID to use")
-        ("startIter", opt::value<int>()->default_value(0), "Number of diffraction patterns per PMI file")
-        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "If 1, includes Compton scattering in the diffraction pattern")
-        ("format", opt::value<string>(), "If 1, rotates the sample uniformly in SO(3)")
+        ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
+        ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
+        ("volDim", opt::value<int>(), "Number of pixel along one dimension")
+        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
+        ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
+        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
+        ("format", opt::value<string>(), "Defines file format to use")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
         ("help", "produce help message")
     ;
