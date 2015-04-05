@@ -70,12 +70,9 @@ public:
 
 	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
 	
-	//static int expansion(int numSlices, arma::fcube* myRot, int mySize, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, string output, int iter);
-	static int expansion(opt::variables_map vm, arma::fcube* myRot, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, int iter);
-	//static int maximization(mpi::communicator* comm, int numImages, int numSlaves, uvec* goodpix, int numSlices, int numProcesses, int numCandidates, string output, int mySize, string format, string input, int iter);
-	static int maximization(mpi::communicator* comm, opt::variables_map vm, int numSlaves, arma::uvec* goodpix, int numProcesses, int numCandidates, int iter);
-	//static int compression(int mySize, fcube* myIntensity, fcube* myWeight, int numSlices, string output, fmat* pix, float pix_max, fcube* myRot, string format, int iter);
-	static int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, fcube* myRot, int iter);
+	static int expansion(opt::variables_map vm, arma::fcube* myRot, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, int numSlices, int iter);
+	static int maximization(mpi::communicator* comm, opt::variables_map vm, int numSlaves, arma::uvec* goodpix, int numProcesses, int numCandidates, int numImages, int numSlices, int iter);
+	static int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, fcube* myRot, int numSlices, int iter);
 	static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter);
 	static int saveDiffractionVolume(int mySize, string output, fcube* myIntensity, fcube* myWeight, int numProcesses, int iter);
 	static double calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type);

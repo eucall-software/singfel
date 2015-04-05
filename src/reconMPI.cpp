@@ -55,7 +55,8 @@ const int msgLength = 2000;
 #define PROBTAG 9
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
                          fcube* myRot, fmat* pix, uvec* goodpix, float pix_max,\
-                         fcube* myIntensity, fcube* myWeight, int iter);
+                         fcube* myIntensity, fcube* myWeight, int numImages, \
+                         int numSlices, int iter);
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
                         int iter);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
@@ -81,17 +82,24 @@ int main( int argc, char* argv[] ){
 	string input = vm["input"].as<string>();
 	string initialVolume = vm["initialVolume"].as<string>();
 	string rotationAxis = vm["rotationAxis"].as<string>();
-	int numSlices = vm["numSlices"].as<int>();
 	int startIter = vm["startIter"].as<int>();
 	int numIterations = vm["numIterations"].as<int>();
-	int numImages = vm["numImages"].as<int>();
+	string numImagesStr = vm["numImages"].as<string>();
+	ivec numImages = str2ivec(numImagesStr);
+	string numSlicesStr = vm["numSlices"].as<string>();
+	ivec numSlices = str2ivec(numSlicesStr);
 	string hdfField = vm["hdfField"].as<string>();
 
+	// Check the input makes sense
 	int numSlaves = comm->size()-1;
-	if (numImages < numSlaves) {
+	int maxNumImages = max(numImages);
+	if (maxNumImages < numSlaves) {
 		cerr << "Number of workers too large for this task" << endl;
 		return 0;
 	}
+	//TODO: check length of numImages == numSlices
+	//TODO: check startIter is less than length numImages
+	//TODO: check startIter+numIterations is less than length numImages
 	
 	fcube myIntensity, myWeight;
 	fmat pix;
@@ -221,7 +229,7 @@ int main( int argc, char* argv[] ){
 				cout << "Randomly merging diffraction volume..." << endl;
 				// Setup initial diffraction volume by merging randomly
 				// rotationAxis determines the random nature of the angles
-				for (int r = 0; r < numImages; r++) {
+				for (int r = 0; r < numImages[startIter]; r++) {
 				  	// Get image
 				  	if (format == "S2E") {
 				  		std::stringstream sstm;
@@ -265,25 +273,27 @@ int main( int argc, char* argv[] ){
 	
 	// Main iteration
 	fmat myQuaternions;
-	fcube myRot(3,3,numSlices);
 	fmat myR;
 
 	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
 		if (world.rank() == master) {
+			int numImagesNow = numImages[iter];
+			int numSlicesNow = numSlices[iter];
+			fcube myRot(3,3,numSlicesNow);
 			cout << "***ITER " << iter << "***" << endl;
 			if (iter == startIter) {
 				// Equal distribution of quaternions
 				if (rotationAxis == "y" || rotationAxis == "z") {
-					myQuaternions = CToolbox::pointsOn1Sphere(numSlices, rotationAxis);
+					myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
 				} else {
-  					myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  					myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
   				}
-				for (int i = 0; i < numSlices; i++) {
+				for (int i = 0; i < numSlicesNow; i++) {
 					myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
 					myRot.slice(i) = myR;
 				}
   			}
-			master_recon(comm, vm, &myRot, &pix, &goodpix, pix_max, &myIntensity, &myWeight, iter);
+			master_recon(comm, vm, &myRot, &pix, &goodpix, pix_max, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
 		} else {
 			slave_recon(comm, vm, iter);
 		}
@@ -292,11 +302,9 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, fcube* myWeight, int iter){
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
 
 	wall_clock timerMaster;
-
-	int numSlices = vm["numSlices"].as<int>();
 
   	int rank, numProcesses, numSlaves;
   	fvec quaternion;
@@ -308,7 +316,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
 
-	CToolbox::expansion(vm, myRot, pix, goodpix, pix_max, myIntensity, iter);
+	CToolbox::expansion(vm, myRot, pix, goodpix, pix_max, myIntensity, numSlices, iter);
 	
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -320,7 +328,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// Number of data candidates to update expansion slice
 	int numCandidates = 2;
 	//////////////////////
-	CToolbox::maximization(comm, vm, numSlaves, goodpix, numProcesses, numCandidates, iter);
+	CToolbox::maximization(comm, vm, numSlaves, goodpix, numProcesses, numCandidates, numImages, numSlices, iter);
 
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -328,7 +336,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start compression" << endl;
 	timerMaster.tic();
 
-	CToolbox::compression(vm, myIntensity, myWeight, pix, pix_max, myRot, iter);
+	CToolbox::compression(vm, myIntensity, myWeight, pix, pix_max, myRot, numSlices, iter);
 
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	
@@ -342,7 +350,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 
 	// ########### Reset workers ##############
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-  	float msg1[numSlices];
+  	float msg1[1];
 	for (rank = 1; rank < numProcesses; ++rank) {
 		comm->send(rank, DIETAG, msg1, 1);
 	}
@@ -352,14 +360,12 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter) {
 	
-	int numImages = vm["numImages"].as<int>();
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
 	int useFileList = vm["useFileList"].as<int>();
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
-	int numSlices = vm["numSlices"].as<int>();
 
 	int numChunkData = 0;
 	boost::mpi::status status;
@@ -371,7 +377,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	fmat imgRep;
 	uvec goodpixmap;
 	fmat myDP;
-	float msg[3]; //std::vector<int> msg;
+	float msg[3];
 	while (1) {
 
 		// Receive a message from the master
@@ -469,15 +475,14 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
 		("rotationAxis", opt::value<string>(), "Geometry file defining diffraction geometry")
         ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
-        ("numImages", opt::value<int>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
-        ("numSlices", opt::value<int>(), "Calculates photon field at every slice interval")
+        ("numImages", opt::value<string>(), "Number of time-slices to use from Photon Matter Interaction (PMI) file")
+        ("numSlices", opt::value<string>(), "Calculates photon field at every slice interval")
         ("volDim", opt::value<int>(), "First Photon Matter Interaction (PMI) file ID to use")
         ("output", opt::value<string>(), "Last Photon Matter Interaction (PMI) file ID to use")
         ("startIter", opt::value<int>()->default_value(0), "Number of diffraction patterns per PMI file")
         ("initialVolume", opt::value<string>()->default_value("randomMerge"), "If 1, includes Compton scattering in the diffraction pattern")
         ("format", opt::value<string>(), "If 1, rotates the sample uniformly in SO(3)")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
-		("test", opt::value<string>(), "read in vector")
         ("help", "produce help message")
     ;
 
@@ -497,19 +502,10 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
 	if (comm->rank() == master) {
 		if (vm.count("input"))
     		cout << "input: " << vm["input"].as<string>() << endl;
-		if (vm.count("test"))
-    		cout << "test: " << vm["test"].as<string>() << endl;
+		//TODO: print all parameters
 	}
 
-	typedef boost::tokenizer<boost::char_separator<char> > Tok;
-	boost::char_separator<char> sep(","); // default constructed
-	string line = vm["test"].as<string>();
-	Tok tok(line, sep);
-	for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-			string temp = *tok_iter;
-	        int number = atoi(temp.c_str());
-			cout << number << endl;
-	}
+
 
 	return vm;
 } // end of parse_input
