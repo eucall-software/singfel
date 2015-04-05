@@ -53,8 +53,11 @@ const int msgLength = 2000;
 
 #define CHUNKTAG 8
 #define PROBTAG 9
-static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, fcube* myWeight, int iter);//fcube* myRot, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string intput, string output, string format);
-static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter);//int numImages, int mySize, string output, int useFileList, string input, string format, int iter);
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
+                         fcube* myRot, fmat* pix, uvec* goodpix, float pix_max,\
+                         fcube* myIntensity, fcube* myWeight, int iter);
+static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
+                        int iter);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 
 int main( int argc, char* argv[] ){
@@ -448,117 +451,6 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 
 	} // end of while
 } // end of slave_recon
-/*
-	int numChunkData = 0;
-	boost::mpi::status status;
-	// Expansion related variables
-	fvec quaternion(4);
-	std::vector<int> msg;
-	// Maximization related variables
-	fmat diffraction = zeros<fmat>(mySize,mySize);
-	fvec condProb; // conditional probability
-	fmat imgRep;
-	uvec goodpixmap;
-	fmat myDP;
-	while (1) {
-
-		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg);
-    		
-    	// Calculate least squared error
-    	if (status.tag() == DPTAG) {
-	    	fvec id = conv_to< fvec >::from(msg);
-	    	int startInd = (int) id(0); // start index of measured data
-	    	int endInd = (int) id(1); // end index of measured data
-	    	numChunkData = endInd - startInd + 1; // number of measured data to process
-	    	int expansionInd = (int) id(2);
-	    		
-	    	// Initialize
-	    	condProb.zeros(numChunkData);
-    		
-	    	//////////////////////////
-	    	// Read in expansion slice
-	    	//////////////////////////
-			// Get expansion image
-			std::stringstream sstm;
-			sstm << output << "expansion/myExpansion" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			string filename = sstm.str();
-			fmat myExpansionSlice = load_asciiImage(filename);
-			// Get expansion pixmap
-			std::stringstream sstm1;
-			sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			string filename1 = sstm1.str();
-			fmat myPixmap = load_asciiImage(filename1);
-						    		
-	    	///////////////
-	    	// Read in data
-	    	///////////////
-			string line;
-			int counter = 0;
-	    	for (int i = startInd; i <= endInd; i++) {
-				//Read in measured diffraction data
-				if (format == "S2E") {
-			  		std::stringstream sstm;
-			  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
-					filename = sstm.str();
-					myDP = hdf5readT<fmat>(filename,"/data/data");
-			  	} else if (format == "list") {
-				  	myDP = load_readNthLine(input, i);
-			  	} else {
-				  	std::stringstream sstm;
-			  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
-					filename = sstm.str();
-					myDP = load_asciiImage(filename);
-				}
-				/////////////////////////////////////////////////////
-				// Compare measured diffraction with expansion slices
-				/////////////////////////////////////////////////////
-				string type = "euclidean";
-				//string type = "gaussian";
-				double val = 0.0;
-				//if (expansionInd == 0 && i == 0) { 
-					val = CToolbox::calculateSimilarity(&myExpansionSlice, &myDP, &myPixmap, type);
-				//}
-				
-				condProb(counter) = float(val);
-				counter++;
-			}
-			// Send back conditional probability to master
-			std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
-			comm->send(master, DONETAG, msgProb);
-    	}
-	
-//		if (status.tag() == SAVESLICESTAG) {
-//			if (comm->rank() == 1) {
-//				cout << "Saving slices to file" << endl;
-//				// Get image
-//				std::stringstream sstm;
-//				sstm << output << "mySlice_" << setfill('0') << setw(7) << 1 << ".dat";
-//				string filename = sstm.str();
-//				for(uvec::iterator i=goodBegin; i!=goodEnd; ++i) {
-//					myDP(*i) = -1;//cout << myDP(*i) << endl;
-//				}
-//				myDP.save(filename,raw_ascii);
-//			}
-//		}
-
-//		if (status.tag() == SAVELSETAG) {
-//			cout << "Saving LSE to file" << endl;
-//			string outputName;
-//			stringstream sstm3;
-//			sstm3 << output << "similarity/lse_" << setfill('0') << setw(7) << comm->rank() << ".dat";
-//			outputName = sstm3.str();
-//			condProb.save(outputName,raw_ascii);
-//		}
-
-		if (status.tag() == DIETAG) {
-			//cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
-		  	return;
-		}
-
-	}
-}
-*/
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
@@ -585,6 +477,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("initialVolume", opt::value<string>()->default_value("randomMerge"), "If 1, includes Compton scattering in the diffraction pattern")
         ("format", opt::value<string>(), "If 1, rotates the sample uniformly in SO(3)")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
+		("test", opt::value<string>(), "read in vector")
         ("help", "produce help message")
     ;
 
@@ -604,6 +497,19 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
 	if (comm->rank() == master) {
 		if (vm.count("input"))
     		cout << "input: " << vm["input"].as<string>() << endl;
+		if (vm.count("test"))
+    		cout << "test: " << vm["test"].as<string>() << endl;
 	}
+
+	typedef boost::tokenizer<boost::char_separator<char> > Tok;
+	boost::char_separator<char> sep(","); // default constructed
+	string line = vm["test"].as<string>();
+	Tok tok(line, sep);
+	for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+			string temp = *tok_iter;
+	        int number = atoi(temp.c_str());
+			cout << number << endl;
+	}
+
 	return vm;
 } // end of parse_input
