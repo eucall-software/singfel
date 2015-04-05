@@ -267,7 +267,7 @@ int main( int argc, char* argv[] ){
 
 	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
 		if (world.rank() == master) {
-			cout << "***ITER***" << iter << endl;
+			cout << "***ITER " << iter << "***" << endl;
 			if (iter == startIter) {
 				// Equal distribution of quaternions
 				if (rotationAxis == "y" || rotationAxis == "z") {
