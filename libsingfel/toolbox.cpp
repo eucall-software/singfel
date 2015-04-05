@@ -17,8 +17,9 @@
 
 #include <armadillo>
 
-//#include <boost/math/special_functions/factorials.hpp>
+#include <boost/program_options.hpp>
 
+namespace opt = boost::program_options;
 using namespace std;
 using namespace arma;
 using namespace toolbox;
@@ -31,6 +32,8 @@ using namespace toolbox;
 #define GOODPIXTAG 6 // goodpixelmap
 #define DONETAG 7 // done signal
 
+#define CHUNKTAG 8
+#define PROBTAG 9
 // Calculate magnitude of x,y,z
 mat CToolbox::mag(cube x){
 	x = pow(x,2);
@@ -874,7 +877,7 @@ fmat CToolbox::badpixmap2goodpixmap(fmat badpixmap) {
 	fmat goodpixmap = -1*badpixmap + 1;
 	return goodpixmap;
 }
-
+/*
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
 int CToolbox::expansion(int numSlices, fcube* myRot, int mySize, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, string output, int iter) {
 
@@ -905,7 +908,42 @@ int CToolbox::expansion(int numSlices, fcube* myRot, int mySize, fmat* pix, uvec
 
 	return 0;
 }
+*/
+// Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
+int CToolbox::expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, int iter) {
 
+	int numSlices = vm["numSlices"].as<int>();
+	int volDim = vm["volDim"].as<int>();
+	string output = vm["output"].as<string>();
+
+	int active = 1;
+	string interpolate = "linear";
+	fmat myR;
+	myR.zeros(3,3);
+	fcube myDPnPixmap; 	// first slice: diffraction pattern
+						// second slice: good pixel map
+	
+	// Slice diffraction volume and save to file
+	for (int i = 0; i < numSlices; i++) {
+		myDPnPixmap.zeros(volDim,volDim,2);
+		// Get rotation matrix
+		myR = myRot->slice(i);
+		slice3D(&myDPnPixmap, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
+		
+		// Save expansion slice to disk
+		std::stringstream sstm;
+		sstm << output << "expansion/myExpansion" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName = sstm.str();
+		myDPnPixmap.slice(0).save(outputName,raw_ascii);
+		std::stringstream sstm1;
+		sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myDPnPixmap.slice(1).save(outputName1,raw_ascii);
+	}
+
+	return 0;
+}
+/*
 // Maximization
 int CToolbox::maximization(boost::mpi::communicator* comm, int numImages, int numSlaves, uvec* goodpix, int numSlices, int numProcesses, int numCandidates, string output, int mySize, string format, string input, int iter) {
 
@@ -1013,7 +1051,132 @@ int CToolbox::maximization(boost::mpi::communicator* comm, int numImages, int nu
 
 	return 0;
 }
+*/
+// Maximization
+int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numSlaves, uvec* goodpix, int numProcesses, int numCandidates, int iter) {
 
+	int numImages = vm["numImages"].as<int>();
+	int numSlices = vm["numSlices"].as<int>();
+	string output = vm["output"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	string format = vm["format"].as<string>();
+	string input = vm["input"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+
+	int rank;
+	boost::mpi::status status;
+	////////////////////////////////////////////
+	// Send jobs to slaves
+	// 1) Start and end indices of measured data
+	// 2) Index of expansion slice
+	// 3) Compute signal
+	////////////////////////////////////////////
+	int dataPerSlave = floor( (float) numImages / (float) numSlaves );
+	int leftOver = numImages - dataPerSlave * numSlaves;
+
+	// Vector containing jobs per slave
+	uvec s(numSlaves);
+	s.fill(dataPerSlave);
+	for (int i = 0; i < numSlaves; i++) {
+		if (leftOver > 0) {
+			s(i) += 1;
+			leftOver--;
+		}
+	}
+
+	fvec myVal(numImages);
+	// Setup goodpixmap
+	uvec::iterator goodBegin = goodpix->begin();
+	uvec::iterator goodEnd = goodpix->end();
+	float msgProb[dataPerSlave+1]; // std::vector<float> msgProb;
+	int msgChunk;
+	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
+		// For each slice, each worker get a subset of measured data
+		int startInd = 0;
+		int endInd = 0;
+		for (rank = 1; rank < numProcesses; ++rank) {
+			endInd = startInd + s(rank-1) - 1;
+//			std::vector<int> id(3);
+//			id.at(0) = startInd;
+//			id.at(1) = endInd;
+//			id.at(2) = expansionInd;
+			fvec id;
+			id << startInd << endInd << expansionInd << endr;
+			float* id1 = &id[0];
+			////////////////////////////////
+			comm->send(rank, DPTAG, id1, 3); // send to slave
+			////////////////////////////////
+			startInd += s(rank-1);
+	  	}
+
+		// Accumulate lse for each expansion slice
+		int currentRow = 0;
+		fvec lse;
+		for (rank = 1; rank < numProcesses; ++rank) {
+			///////////////////////////////////////////////////////
+			status = comm->recv(rank, CHUNKTAG, msgChunk); // receive from slave
+			///////////////////////////////////////////////////////
+			///////////////////////////////////////////////////////
+			status = comm->recv(rank, PROBTAG, msgProb, msgChunk); // receive from slave
+			///////////////////////////////////////////////////////
+			//lse = conv_to< fvec >::from(msgProb);
+			for (int i = 0; i < msgChunk; i++) {//for (int i = 0; i < lse.n_elem; i++) {
+				myVal(currentRow+i) = msgProb[i];//myVal(currentRow+i) = lse(i);
+			}
+			currentRow += s(rank-1);
+		}
+
+		// Save lse
+		string outputName;
+		stringstream sstm3;
+		sstm3 << output << "maximization/similarity" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+		outputName = sstm3.str();
+		myVal.save(outputName,raw_ascii);
+		// Pick top candidates
+		uvec indices = sort_index(myVal,"ascend");
+		uvec candidatesInd;
+		candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
+		// Calculate norm cond prob
+		fvec candidatesVal;
+		candidatesVal.zeros(numCandidates+1);
+		for (int i = 0; i <= numCandidates; i++) {
+			candidatesVal(i) = myVal(candidatesInd(i));
+		}
+		fvec normVal = -candidatesVal / sum(candidatesVal);
+		normVal -= min(normVal);
+		normVal /= sum(normVal);
+		// Update expansion slices
+		fmat myDP1;
+		myDP1.zeros(volDim,volDim);
+		fmat myDP2;
+		string filename;
+		for (int r = 0; r < numCandidates; r++) {
+			// Get measured diffraction pattern
+			if (format == "S2E") {
+				myDP2.zeros(volDim,volDim);
+				std::stringstream sstm;
+		  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
+				filename = sstm.str();
+				// Read in diffraction				
+				myDP2 = hdf5readT<fmat>(filename,hdfField);
+			} else if (format == "list") {
+				myDP2.zeros(volDim,volDim);
+				myDP2 = load_readNthLine(input, r);
+			}
+			// Weighted mean
+			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+				myDP1(*p) += normVal(r) * myDP2(*p);
+			}
+		}
+		// Save updated expansion slices
+		std::stringstream sstm2;
+		sstm2 << output << "expansion/myExpansionUpdate" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+		filename = sstm2.str();
+		myDP1.save(filename,raw_ascii);	
+	}
+	return 0;
+}
+/*
 // Compression
 int CToolbox::compression(int mySize, fcube* myIntensity, fcube* myWeight, int numSlices, string output, fmat* pix, float pix_max, fcube* myRot, string format, int iter) {
 	myWeight->zeros(mySize,mySize,mySize);
@@ -1051,9 +1214,74 @@ int CToolbox::compression(int mySize, fcube* myIntensity, fcube* myWeight, int n
 	CToolbox::normalize(myIntensity, myWeight);
 	return 0;
 }
+*/
+// Compression
+int CToolbox::compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, fcube* myRot, int iter) {
+//int volDim,int numSlices, string output,string format,
+	int volDim = vm["volDim"].as<int>();
+	int numSlices = vm["numSlices"].as<int>();
+	string output = vm["output"].as<string>();
+	string format = vm["format"].as<string>();
+	//int numImages = vm["numImages"].as<int>();
+	//string input = vm["input"].as<string>();
+
+	myWeight->zeros(volDim,volDim,volDim);
+	myIntensity->zeros(volDim,volDim,volDim);
+	int active = 1;
+	string interpolate = "linear";
+	string filename;
+	string filename1;
+	fmat pixmap;
+	pixmap.zeros(volDim,volDim);
+	fcube myDPnPixmap; 	// first slice: diffraction pattern
+						// second slice: good pixel map
+	fmat myR;
+	for (int r = 0; r < numSlices; r++) {
+		myDPnPixmap.zeros(volDim,volDim,2);
+		// Get image
+		std::stringstream sstm;
+		sstm << output << "expansion/myExpansionUpdate" << iter << "_" << setfill('0') << setw(7) << r << ".dat";
+		filename = sstm.str();
+		myDPnPixmap.slice(0) = load_asciiImage(filename);
+		std::stringstream sstm1;
+		if (format == "S2E") {
+			sstm1 << output << "badpixelmap.dat";
+		} else if (format == "list") {
+			sstm1 << output << "badpixelmap.dat";
+		}
+		filename1 = sstm1.str();		
+		pixmap = load_asciiImage(filename1); // load badpixmap
+		myDPnPixmap.slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+		// Get rotation matrix
+		myR = myRot->slice(r);
+		CToolbox::merge3D(&myDPnPixmap, pix, &myR, pix_max, myIntensity, myWeight, active, interpolate);
+	}
+	// Normalize here
+	CToolbox::normalize(myIntensity, myWeight);
+	return 0;
+}
 
 int CToolbox::saveDiffractionVolume(int mySize, string output, fcube* myIntensity, fcube* myWeight, int numProcesses, int iter) {
 	for (int i = 0; i < mySize; i++) {
+		std::stringstream sstm;
+		sstm << output << "compression/vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName = sstm.str();
+		myIntensity->slice(i).save(outputName,raw_ascii);
+		// Temporary
+		std::stringstream sstm1;
+		sstm1 << output << "compression/volWeight" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		string outputName1 = sstm1.str();
+		myWeight->slice(i).save(outputName1,raw_ascii);
+	}
+	return 0;
+}
+
+int CToolbox::saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter) {
+
+	int volDim = vm["volDim"].as<int>();
+	string output = vm["output"].as<string>();
+
+	for (int i = 0; i < volDim; i++) {
 		std::stringstream sstm;
 		sstm << output << "compression/vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
