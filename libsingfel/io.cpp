@@ -21,6 +21,9 @@
 
 #include <armadillo>
 
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
+
 using namespace std;
 using namespace arma;
 using namespace particle;
@@ -48,6 +51,21 @@ using namespace toolbox;
 #ifndef H5_NO_NAMESPACE
     using namespace H5;
 #endif
+
+// Convert a string containing comma separated integers to ivec
+ivec str2ivec(std::string line){
+	ivec myVec(100); // number of elements unknown
+	typedef boost::tokenizer<boost::char_separator<char> > Tok;
+	boost::char_separator<char> sep(","); // default constructed
+	Tok tok(line, sep);
+	int counter = 0;
+	for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+		string temp = *tok_iter;
+		myVec[counter] = atoi(temp.c_str());
+		counter++;
+	}
+	return myVec;
+}
 
 int hdf5write(std::string filename, std::string datasetname, arma::fmat data){
 	const H5std_string FILE_NAME( filename );

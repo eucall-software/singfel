@@ -10,6 +10,17 @@
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_errno.h>
 #include <algorithm>
+#include <fstream>
+#include <string>
+// Armadillo library
+#include <armadillo>
+// Boost library
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/mpi.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/program_options.hpp>
+// SingFEL library
 #include "detector.h"
 #include "beam.h"
 #include "particle.h"
@@ -17,19 +28,9 @@
 #include "toolbox.h"
 #include "diffraction.cuh"
 #include "io.h"
-#include <fstream>
-#include <string>
-
-#include <armadillo>
-
-#include <boost/tokenizer.hpp>
-#include <boost/algorithm/string.hpp>
-
-#include <boost/mpi.hpp>
-#include <boost/serialization/string.hpp>
 
 namespace mpi = boost::mpi;
-
+namespace opt = boost::program_options;
 using namespace std;
 using namespace arma;
 using namespace detector;
@@ -38,6 +39,8 @@ using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
 
+const int master = 0;
+const int msgLength = 2000;
 #define USE_CUDA 0
 
 #define MODELTAG 1	// mySlices matrix
@@ -47,8 +50,16 @@ using namespace toolbox;
 #define SAVELSETAG 5 // save LSE signal
 #define GOODPIXTAG 6 // goodpixelmap
 #define DONETAG 7 // done signal
-static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string intput, string output, string format);
-static void slave_recon(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format, int iter);
+
+#define CHUNKTAG 8
+#define PROBTAG 9
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
+                         fcube* myRot, fmat* pix, uvec* goodpix, float pix_max,\
+                         fcube* myIntensity, fcube* myWeight, int numImages, \
+                         int numSlices, int iter);
+static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
+                        int iter);
+opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 
 int main( int argc, char* argv[] ){
 
@@ -59,65 +70,36 @@ int main( int argc, char* argv[] ){
   	mpi::communicator world;
 	mpi::communicator* comm = &world;
 
+	// All processes parse the input
+	opt::variables_map vm = parse_input(argc, argv, comm);
+	// Set random seed
 	srand( world.rank() );
 
-	// Every worker parses input
-	int master = 0;
-	string input;
-	int useFileList = 0;
-	string quaternionList;
-	string beamFile;
-	string geomFile;	
-	int numIterations = 0;
-	int numImages = 0;
-	int mySize = 0;
-	int numSlices = 0;
-	int startIter = 0;
-	string output;
-	string intialVolume = "randomMerge";
-	string format;
-	string rotationAxis = "xyz";
-	// Let's parse input
-	for (int n = 1; n < argc; n++) {
-		if (world.rank() == master) {
-			cout << argv [ n ] << endl;
-		}
-	    if(boost::algorithm::iequals(argv[ n ], "-i")) {
-	        input = argv[ n+1 ];
-	    } else if (boost::algorithm::iequals(argv[ n ], "-f")) {
-	        useFileList = atoi(argv[ n+1 ]);
-	    } else if (boost::algorithm::iequals(argv[ n ], "-q")) {
-	        quaternionList = argv[ n+1 ];
-	    } else if (boost::algorithm::iequals(argv[ n ], "-b")) {
-	        beamFile = argv[ n+1 ];
-	    } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
-	        geomFile = argv[ n+1 ];
-	    } else if (boost::algorithm::iequals(argv[ n ], "--num_iterations")) {
-        	numIterations = atoi(argv[ n+2 ]);
-	    } else if (boost::algorithm::iequals(argv[ n ], "--num_images")) {
-	        numImages = atoi(argv[ n+2 ]);
-	    } else if (boost::algorithm::iequals(argv[ n ], "--num_slices")) {
-	        numSlices = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--vol_dim")) {
-		    mySize = atof(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--output_name")) {
-		    output = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--start_iter_from")) {
-		    startIter = atoi(argv[ n+2 ]);
-		} else if (boost::algorithm::iequals(argv[ n ], "--initial_volume")) {
-		    intialVolume = argv[ n+2 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "--format")) {
-            format = argv[ n+2 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "--rotationAxis")) {
-            rotationAxis = argv[ n+2 ];
-        }
-	}
+	string beamFile = vm["beamFile"].as<string>();
+	string geomFile = vm["geomFile"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	string format = vm["format"].as<string>();
+	string input = vm["input"].as<string>();
+	string initialVolume = vm["initialVolume"].as<string>();
+	string rotationAxis = vm["rotationAxis"].as<string>();
+	int startIter = vm["startIter"].as<int>();
+	int numIterations = vm["numIterations"].as<int>();
+	string numImagesStr = vm["numImages"].as<string>();
+	ivec numImages = str2ivec(numImagesStr);
+	string numSlicesStr = vm["numSlices"].as<string>();
+	ivec numSlices = str2ivec(numSlicesStr);
+	string hdfField = vm["hdfField"].as<string>();
 
+	// Check the input makes sense
 	int numSlaves = comm->size()-1;
-	if (numImages < numSlaves) {
+	int maxNumImages = max(numImages);
+	if (maxNumImages < numSlaves) {
 		cerr << "Number of workers too large for this task" << endl;
 		return 0;
 	}
+	//TODO: check length of numImages == numSlices
+	//TODO: check startIter is less than length numImages
+	//TODO: check startIter+numIterations is less than length numImages
 	
 	fcube myIntensity, myWeight;
 	fmat pix;
@@ -225,8 +207,8 @@ int main( int argc, char* argv[] ){
   		fmat myDP(py,px);
 	  	fmat myR;
 	  	myR.zeros(3,3);
-		myWeight.zeros(mySize,mySize,mySize);
-		myIntensity.zeros(mySize,mySize,mySize);
+		myWeight.zeros(volDim,volDim,volDim);
+		myIntensity.zeros(volDim,volDim,volDim);
 
 		timerMaster.tic();
 		
@@ -243,18 +225,17 @@ int main( int argc, char* argv[] ){
 			infile.open(input.c_str());
 		}
 	
-		if (world.rank() == master) {
-			if ( strcmp(intialVolume.c_str(),"randomMerge")==0 ) {
+			if ( strcmp(initialVolume.c_str(),"randomMerge")==0 ) {
 				cout << "Randomly merging diffraction volume..." << endl;
 				// Setup initial diffraction volume by merging randomly
 				// rotationAxis determines the random nature of the angles
-				for (int r = 0; r < numImages; r++) {
+				for (int r = 0; r < numImages[startIter]; r++) {
 				  	// Get image
 				  	if (format == "S2E") {
 				  		std::stringstream sstm;
 				  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
 						filename = sstm.str();
-						myDP = hdf5readT<fmat>(filename,"/data/data");
+						myDP = hdf5readT<fmat>(filename,hdfField);
 				  	} else if (format == "list") {
 				  		std::getline(infile, line);
 				  		myDP = load_asciiImage(line);
@@ -276,15 +257,14 @@ int main( int argc, char* argv[] ){
 				CToolbox::normalize(&myIntensity,&myWeight);
 		  	} else { // Load pre-existing diffraction volume
 				cout << "Loading diffraction volume..." << endl;
-				for (int i = 0; i < mySize; i++) {
+				for (int i = 0; i < volDim; i++) {
 					std::stringstream sstm;
-					sstm << intialVolume << setfill('0') << setw(7) << i << ".dat";
+					sstm << initialVolume << setfill('0') << setw(7) << i << ".dat";
 					string outputName = sstm.str();
 					myIntensity.slice(i) = load_asciiImage(outputName);
 				}
-			}	
-		}
-	}
+			} // end of intial diffraction volume
+	} // end of master
 
 	world.barrier();
 	if (world.rank() == master) {
@@ -293,38 +273,41 @@ int main( int argc, char* argv[] ){
 	
 	// Main iteration
 	fmat myQuaternions;
-	fcube myRot(3,3,numSlices);
 	fmat myR;
-	for (int iter = startIter; iter < numIterations; iter++) { // number of iterations
+
+	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
 		if (world.rank() == master) {
+			int numImagesNow = numImages[iter];
+			int numSlicesNow = numSlices[iter];
+			fcube myRot(3,3,numSlicesNow);
+			cout << "***ITER " << iter << "***" << endl;
 			if (iter == startIter) {
 				// Equal distribution of quaternions
 				if (rotationAxis == "y" || rotationAxis == "z") {
-					myQuaternions = CToolbox::pointsOn1Sphere(numSlices, rotationAxis);
+					myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
 				} else {
-  					myQuaternions = CToolbox::pointsOn4Sphere(numSlices);
+  					myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
   				}
-				for (int i = 0; i < numSlices; i++) {
+				for (int i = 0; i < numSlicesNow; i++) {
 					myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
 					myRot.slice(i) = myR;
 				}
   			}
-			master_recon(comm, &myRot, &myIntensity, &myWeight, &pix, pix_max, &goodpix, numImages, mySize, iter, startIter, numIterations, numSlices, input, output, format);
+			master_recon(comm, vm, &myRot, &pix, &goodpix, pix_max, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
 		} else {
-			slave_recon(comm, numImages, mySize, output, useFileList, input, format, iter);
+			slave_recon(comm, vm, iter);
 		}
 		world.barrier();
 	}
   	return 0;
 }
 
-static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, uvec* goodpix, int numImages, int mySize, int iter, int startIter, int numIterations, int numSlices, string input, string output, string format) {
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
 
 	wall_clock timerMaster;
 
   	int rank, numProcesses, numSlaves;
   	fvec quaternion;
-  	//boost::mpi::status status;
 
 	numProcesses = comm->size();
 	numSlaves = numProcesses-1;
@@ -332,8 +315,8 @@ static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensi
 	// ########### EXPANSION ##############
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
-	
-	CToolbox::expansion(numSlices, myRot, mySize, pix, goodpix, pix_max, myIntensity, output, iter);
+
+	CToolbox::expansion(vm, myRot, pix, goodpix, pix_max, myIntensity, numSlices, iter);
 	
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -345,7 +328,7 @@ static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensi
 	// Number of data candidates to update expansion slice
 	int numCandidates = 2;
 	//////////////////////
-	CToolbox::maximization(comm, numImages, numSlaves, goodpix, numSlices, numProcesses, numCandidates, output, mySize, format, input, iter);
+	CToolbox::maximization(comm, vm, numSlaves, goodpix, numProcesses, numCandidates, numImages, numSlices, iter);
 
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -353,7 +336,7 @@ static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensi
 	cout << "Start compression" << endl;
 	timerMaster.tic();
 
-	CToolbox::compression(mySize, myIntensity, myWeight, numSlices, output, pix, pix_max, myRot, format, iter);
+	CToolbox::compression(vm, myIntensity, myWeight, pix, pix_max, myRot, numSlices, iter);
 
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	
@@ -361,49 +344,58 @@ static void master_recon(mpi::communicator* comm, fcube* myRot, fcube* myIntensi
 	cout << "Saving diffraction volume..." << endl;
 	timerMaster.tic();
 
-	CToolbox::saveDiffractionVolume(mySize, output, myIntensity, myWeight, numProcesses, iter);
+	CToolbox::saveDiffractionVolume(vm, myIntensity, myWeight, iter);
 
 	cout << "Save time: " << timerMaster.toc() <<" seconds."<<endl;
 
 	// ########### Reset workers ##############
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-  	std::vector<int> msg1;
+  	float msg1[1];
 	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, msg1);
+		comm->send(rank, DIETAG, msg1, 1);
 	}
 
 	cout << "Done iteration: " << iter << endl;
 }
 
-static void slave_recon(mpi::communicator* comm, int numImages, int mySize, string output, int useFileList, string input, string format, int iter) {
+static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter) {
+	
+	int volDim = vm["volDim"].as<int>();
+	string output = vm["output"].as<string>();
+	int useFileList = vm["useFileList"].as<int>();
+	string input = vm["input"].as<string>();
+	string format = vm["format"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+
 	int numChunkData = 0;
 	boost::mpi::status status;
-	const int master = 0;
 	// Expansion related variables
 	fvec quaternion(4);
-	std::vector<int> msg;
 	// Maximization related variables
-	fmat diffraction = zeros<fmat>(mySize,mySize);
+	fmat diffraction = zeros<fmat>(volDim,volDim);
 	fvec condProb; // conditional probability
 	fmat imgRep;
 	uvec goodpixmap;
 	fmat myDP;
+	float msg[3];
 	while (1) {
 
 		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg);
-    		
+		/////////////////////////////////////////////////////////
+    	status = comm->recv(master, boost::mpi::any_tag, msg, 3);
+		/////////////////////////////////////////////////////////   		
+
     	// Calculate least squared error
     	if (status.tag() == DPTAG) {
-	    	fvec id = conv_to< fvec >::from(msg);
-	    	int startInd = (int) id(0); // start index of measured data
-	    	int endInd = (int) id(1); // end index of measured data
-	    	numChunkData = endInd - startInd + 1; // number of measured data to process
-	    	int expansionInd = (int) id(2);
-	    		
-	    	// Initialize
+    		int startInd = (int) msg[0];
+    		int endInd = (int) msg[1];
+    		int expansionInd = (int) msg[2];
+			numChunkData = endInd - startInd + 1; // number of measured data to process
+
+			// Initialize
 	    	condProb.zeros(numChunkData);
     		
+			//TODO: Time reading of expansion slice (all processes going for the same file)
 	    	//////////////////////////
 	    	// Read in expansion slice
 	    	//////////////////////////
@@ -417,7 +409,8 @@ static void slave_recon(mpi::communicator* comm, int numImages, int mySize, stri
 			sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
 			string filename1 = sstm1.str();
 			fmat myPixmap = load_asciiImage(filename1);
-						    		
+						   
+			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
 	    	///////////////
@@ -429,7 +422,7 @@ static void slave_recon(mpi::communicator* comm, int numImages, int mySize, stri
 			  		std::stringstream sstm;
 			  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
 					filename = sstm.str();
-					myDP = hdf5readT<fmat>(filename,"/data/data");
+					myDP = hdf5readT<fmat>(filename,hdfField);
 			  	} else if (format == "list") {
 				  	myDP = load_readNthLine(input, i);
 			  	} else {
@@ -452,40 +445,69 @@ static void slave_recon(mpi::communicator* comm, int numImages, int mySize, stri
 				counter++;
 			}
 			// Send back conditional probability to master
-			std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
-			comm->send(master, DONETAG, msgProb);
-    	}
+			float* msgProb = &condProb[0]; //std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
+			/////////////////////////////////////////////////////
+			comm->send(master, CHUNKTAG, numChunkData); // send chunk size
+			comm->send(master, PROBTAG, msgProb, numChunkData); // send probability in chunk size
+			/////////////////////////////////////////////////////
+		}
 
-/*	
-		if (status.tag() == SAVESLICESTAG) {
-			if (comm->rank() == 1) {
-				cout << "Saving slices to file" << endl;
-				// Get image
-				std::stringstream sstm;
-				sstm << output << "mySlice_" << setfill('0') << setw(7) << 1 << ".dat";
-				string filename = sstm.str();
-				for(uvec::iterator i=goodBegin; i!=goodEnd; ++i) {
-					myDP(*i) = -1;//cout << myDP(*i) << endl;
-				}
-				myDP.save(filename,raw_ascii);
-			}
-		}
-*/
-/*
-		if (status.tag() == SAVELSETAG) {
-			cout << "Saving LSE to file" << endl;
-			string outputName;
-			stringstream sstm3;
-			sstm3 << output << "similarity/lse_" << setfill('0') << setw(7) << comm->rank() << ".dat";
-			outputName = sstm3.str();
-			condProb.save(outputName,raw_ascii);
-		}
-*/
 		if (status.tag() == DIETAG) {
 			//cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
 		  	return;
 		}
 
-	}
-}
+	} // end of while
+} // end of slave_recon
 
+opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
+
+    // Constructing an options describing variable and giving it a
+    // textual description "All options"
+    opt::options_description desc("All options");
+
+    // When we are adding options, first parameter is a name
+    // to be used in command line. Second parameter is a type
+    // of that option, wrapped in value<> class. Third parameter
+    // must be a short description of that option
+    desc.add_options()
+        ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
+        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
+        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
+		("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
+        ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
+        ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
+        ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
+        ("volDim", opt::value<int>(), "Number of pixel along one dimension")
+        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
+        ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
+        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
+        ("format", opt::value<string>(), "Defines file format to use")
+        ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
+        ("help", "produce help message")
+    ;
+
+    // Variable to store our command line arguments
+    opt::variables_map vm;
+
+    // Parsing and storing arguments
+    opt::store(opt::parse_command_line(argc, argv, desc), vm);
+	opt::notify(vm);
+
+	// Print input arguments
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        exit(0);
+    }
+
+	if (comm->rank() == master) {
+		if (vm.count("input"))
+    		cout << "input: " << vm["input"].as<string>() << endl;
+		//TODO: print all parameters
+	}
+
+
+
+	return vm;
+} // end of parse_input
