@@ -901,11 +901,11 @@ int CToolbox::expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* go
 		
 		// Save expansion slice to disk
 		std::stringstream sstm;
-		sstm << output << "expansion/myExpansion" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
 		myDPnPixmap.slice(0).save(outputName,raw_ascii);
 		std::stringstream sstm1;
-		sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm1 << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName1 = sstm1.str();
 		myDPnPixmap.slice(1).save(outputName1,raw_ascii);
 	}
@@ -913,8 +913,10 @@ int CToolbox::expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* go
 	return 0;
 }
 
-// Maximization
+// Maximizationwall_clock timerMaster;
 int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numSlaves, uvec* goodpix, int numProcesses, int numCandidates, int numImages, int numSlices, int iter) {
+
+wall_clock timer;
 
 	string output = vm["output"].as<string>();
 	int volDim = vm["volDim"].as<int>();
@@ -947,9 +949,11 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 	// Setup goodpixmap
 	uvec::iterator goodBegin = goodpix->begin();
 	uvec::iterator goodEnd = goodpix->end();
-	float msgProb[dataPerSlave+1]; // std::vector<float> msgProb;
+	float msgProb[max(s)];
+	cout << "max msgProb length: " << max(s) << endl;
 	int msgChunk;
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
+	cout << "expansionInd: " << expansionInd << endl;
 		// For each slice, each worker get a subset of measured data
 		int startInd = 0;
 		int endInd = 0;
@@ -964,10 +968,10 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 			startInd += s(rank-1);
 	  	}
 
+timer.tic();
 		//TODO: Time accumulation. May need to write random access accumulator
 		// Accumulate lse for each expansion slice
-		int currentRow = 0;
-		fvec lse;
+		int currentInd = 0;
 		for (rank = 1; rank < numProcesses; ++rank) {
 			///////////////////////////////////////////////////////
 			status = comm->recv(rank, CHUNKTAG, msgChunk); // receive from slave
@@ -975,22 +979,23 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 			///////////////////////////////////////////////////////
 			status = comm->recv(rank, PROBTAG, msgProb, msgChunk); // receive from slave
 			///////////////////////////////////////////////////////
-			//lse = conv_to< fvec >::from(msgProb);
-			for (int i = 0; i < msgChunk; i++) {//for (int i = 0; i < lse.n_elem; i++) {
-				myVal(currentRow+i) = msgProb[i];//myVal(currentRow+i) = lse(i);
+			for (int i = 0; i < msgChunk; i++) {
+				myVal(currentInd) = msgProb[i];
+				currentInd++;
 			}
-			currentRow += s(rank-1);
 		}
+cout << "Master: Received all probtags " <<timer.toc()<<endl;
 
 		// Save lse
 		string outputName;
 		stringstream sstm3;
-		sstm3 << output << "maximization/similarity" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+		sstm3 << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		outputName = sstm3.str();
 		myVal.save(outputName,raw_ascii);
-
+//timer.tic();
 		//TODO: Time generating new weighted expansion slice
 		// Pick top candidates
+cout << "sort start" << endl;
 		uvec indices = sort_index(myVal,"ascend");
 		uvec candidatesInd;
 		candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
@@ -1000,6 +1005,7 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 		for (int i = 0; i <= numCandidates; i++) {
 			candidatesVal(i) = myVal(candidatesInd(i));
 		}
+cout << "candidatesVal: " << candidatesVal << "->" << candidatesInd << endl;
 		fvec normVal = -candidatesVal / sum(candidatesVal);
 		normVal -= min(normVal);
 		normVal /= sum(normVal);
@@ -1013,7 +1019,7 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 			if (format == "S2E") {
 				myDP2.zeros(volDim,volDim);
 				std::stringstream sstm;
-		  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
+		  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
 				filename = sstm.str();
 				// Read in diffraction				
 				myDP2 = hdf5readT<fmat>(filename,hdfField);
@@ -1021,16 +1027,21 @@ int CToolbox::maximization(boost::mpi::communicator* comm, opt::variables_map vm
 				myDP2.zeros(volDim,volDim);
 				myDP2 = load_readNthLine(input, r);
 			}
+			cout << "calculated weighted slice" << endl;
 			// Weighted mean
 			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
 				myDP1(*p) += normVal(r) * myDP2(*p);
 			}
 		}
+//cout << "Master generates new expansion slice " <<timer.toc()<<endl;
+//timer.tic();
+cout << "save expansionUpdate" << endl;
 		// Save updated expansion slices
 		std::stringstream sstm2;
-		sstm2 << output << "expansion/myExpansionUpdate" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+		sstm2 << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		filename = sstm2.str();
 		myDP1.save(filename,raw_ascii);	
+//cout << "Master save expansion slice " <<timer.toc()<<endl;
 	}
 	return 0;
 }
@@ -1057,14 +1068,14 @@ int CToolbox::compression(opt::variables_map vm, fcube* myIntensity, fcube* myWe
 		myDPnPixmap.zeros(volDim,volDim,2);
 		// Get image
 		std::stringstream sstm;
-		sstm << output << "expansion/myExpansionUpdate" << iter << "_" << setfill('0') << setw(7) << r << ".dat";
+		sstm << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << r << ".dat";
 		filename = sstm.str();
 		myDPnPixmap.slice(0) = load_asciiImage(filename);
 		std::stringstream sstm1;
 		if (format == "S2E") {
-			sstm1 << output << "badpixelmap.dat";
+			sstm1 << output << "/badpixelmap.dat";
 		} else if (format == "list") {
-			sstm1 << output << "badpixelmap.dat";
+			sstm1 << output << "/badpixelmap.dat";
 		}
 		filename1 = sstm1.str();		
 		pixmap = load_asciiImage(filename1); // load badpixmap
@@ -1081,12 +1092,12 @@ int CToolbox::compression(opt::variables_map vm, fcube* myIntensity, fcube* myWe
 int CToolbox::saveDiffractionVolume(int mySize, string output, fcube* myIntensity, fcube* myWeight, int numProcesses, int iter) {
 	for (int i = 0; i < mySize; i++) {
 		std::stringstream sstm;
-		sstm << output << "compression/vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
 		myIntensity->slice(i).save(outputName,raw_ascii);
 		// Temporary
 		std::stringstream sstm1;
-		sstm1 << output << "compression/volWeight" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm1 << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName1 = sstm1.str();
 		myWeight->slice(i).save(outputName1,raw_ascii);
 	}
@@ -1100,12 +1111,12 @@ int CToolbox::saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, f
 
 	for (int i = 0; i < volDim; i++) {
 		std::stringstream sstm;
-		sstm << output << "compression/vol" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName = sstm.str();
 		myIntensity->slice(i).save(outputName,raw_ascii);
 		// Temporary
 		std::stringstream sstm1;
-		sstm1 << output << "compression/volWeight" << iter << "_" << setfill('0') << setw(7) << i << ".dat";
+		sstm1 << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
 		string outputName1 = sstm1.str();
 		myWeight->slice(i).save(outputName1,raw_ascii);
 	}

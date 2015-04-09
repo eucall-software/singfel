@@ -75,11 +75,11 @@ int main( int argc, char* argv[] ){
 	// Set random seed
 	srand( world.rank() );
 
+	string input = vm["input"].as<string>();
 	string beamFile = vm["beamFile"].as<string>();
 	string geomFile = vm["geomFile"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	string format = vm["format"].as<string>();
-	string input = vm["input"].as<string>();
 	string initialVolume = vm["initialVolume"].as<string>();
 	string rotationAxis = vm["rotationAxis"].as<string>();
 	int startIter = vm["startIter"].as<int>();
@@ -233,7 +233,7 @@ int main( int argc, char* argv[] ){
 				  	// Get image
 				  	if (format == "S2E") {
 				  		std::stringstream sstm;
-				  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
+				  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
 						filename = sstm.str();
 						myDP = hdf5readT<fmat>(filename,hdfField);
 				  	} else if (format == "list") {
@@ -241,7 +241,7 @@ int main( int argc, char* argv[] ){
 				  		myDP = load_asciiImage(line);
 				  	} else {
 					  	std::stringstream sstm;
-				  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".dat";
+				  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".dat";
 						filename = sstm.str();
 						myDP = load_asciiImage(filename);
 					}
@@ -259,7 +259,7 @@ int main( int argc, char* argv[] ){
 				cout << "Loading diffraction volume..." << endl;
 				for (int i = 0; i < volDim; i++) {
 					std::stringstream sstm;
-					sstm << initialVolume << setfill('0') << setw(7) << i << ".dat";
+					sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 					string outputName = sstm.str();
 					myIntensity.slice(i) = load_asciiImage(outputName);
 				}
@@ -359,7 +359,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 }
 
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter) {
-	
+//wall_clock timer;	
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
 	int useFileList = vm["useFileList"].as<int>();
@@ -394,22 +394,29 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 
 			// Initialize
 	    	condProb.zeros(numChunkData);
-    		
+/*if (comm->rank()==5){
+timer.tic();    	
+}*/	
 			//TODO: Time reading of expansion slice (all processes going for the same file)
 	    	//////////////////////////
 	    	// Read in expansion slice
 	    	//////////////////////////
 			// Get expansion image
 			std::stringstream sstm;
-			sstm << output << "expansion/myExpansion" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			sstm << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
 			string filename = sstm.str();
 			fmat myExpansionSlice = load_asciiImage(filename);
 			// Get expansion pixmap
 			std::stringstream sstm1;
-			sstm1 << output << "expansion/myExpansionPixmap" << iter << "_" << setfill('0') << setw(7) << expansionInd << ".dat";
+			sstm1 << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << expansionInd << ".dat";
 			string filename1 = sstm1.str();
 			fmat myPixmap = load_asciiImage(filename1);
-						   
+/*if (comm->rank()==5){
+cout << "Read expansion files " <<timer.toc()<<endl;	
+}
+if (comm->rank()==5){
+timer.tic();		
+}*/			   
 			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
@@ -420,17 +427,21 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 				//Read in measured diffraction data
 				if (format == "S2E") {
 			  		std::stringstream sstm;
-			  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
+			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
 					filename = sstm.str();
 					myDP = hdf5readT<fmat>(filename,hdfField);
 			  	} else if (format == "list") {
 				  	myDP = load_readNthLine(input, i);
 			  	} else {
 				  	std::stringstream sstm;
-			  		sstm << input << "diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
+			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
 					filename = sstm.str();
 					myDP = load_asciiImage(filename);
 				}
+/*if (comm->rank()==5){
+cout << "Read diffr file " <<timer.toc()<<endl;
+timer.tic();
+}*/
 				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
@@ -443,6 +454,10 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 				
 				condProb(counter) = float(val);
 				counter++;
+/*
+if (comm->rank()==5){
+cout << "Calculate probability " <<timer.toc()<<endl;
+}*/
 			}
 			// Send back conditional probability to master
 			float* msgProb = &condProb[0]; //std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
@@ -472,6 +487,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
     // must be a short description of that option
     desc.add_options()
         ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
         ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
         ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
         ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
@@ -480,7 +496,6 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
         ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
         ("volDim", opt::value<int>(), "Number of pixel along one dimension")
-        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
         ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
         ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
         ("format", opt::value<string>(), "Defines file format to use")
@@ -506,8 +521,6 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
     		cout << "input: " << vm["input"].as<string>() << endl;
 		//TODO: print all parameters
 	}
-
-
 
 	return vm;
 } // end of parse_input
