@@ -682,7 +682,7 @@ void calculate_dp(Packet *pack){
     	ss << pack->finish;	//add number to the stream
     			
 		string name = "../detector_counts_" + ss.str() + ".dat";
-		umat detector_counts = CToolbox::convert_to_poisson(detector_intensity);
+		umat detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 		detector_counts.save(name,raw_ascii);
 		
 		string name1 = "../dp_" + ss.str() + ".dat";
@@ -695,7 +695,7 @@ void calculate_dp(Packet *pack){
 		string name2 = "../F_hkl_sq_cudaChunk_" + ss.str() + ".dat";
 		F_hkl_sq.save(name2,raw_ascii);
 
-cout << "pack->finish: " << pack->finish << endl;
+		cout << "pack->finish: " << pack->finish << endl;
 
 		if (pack->finish == 0) {
 			det.solidAngle.save("../solidAngle.dat",raw_ascii);
@@ -706,7 +706,8 @@ cout << "pack->finish: " << pack->finish << endl;
 		}
 		cout << "End of F save" << endl;
 		det.dp = trans(det.dp);//detector_counts = trans(detector_counts);
-		pack->dp = det.dp.memptr();//pack->dp = detector_counts.memptr();
+		//pack->dp = det.dp.memptr();
+		pack->dp = detector_counts.memptr();
 		cout << "pack->dp: " << pack->dp << endl;
 		cout << "End of io loop: " << timer.toc() <<" seconds."<<endl;
 	} 

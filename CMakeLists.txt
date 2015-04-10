@@ -82,13 +82,13 @@ IF(Boost_FOUND)
   #FILE(COPY hello.py DESTINATION .)
   #ADD_TEST(01-HelloWorld hello.py)
 
-  ADD_LIBRARY(toolbox SHARED ../libsingfel/toolbox.cpp)
+  ADD_LIBRARY(toolbox SHARED libsingfel/toolbox.cpp)
   TARGET_LINK_LIBRARIES(toolbox ${Boost_LIBRARIES})
   #FILE(COPY toolbox.py DESTINATION .)
   #ADD_TEST(toolbox2 toolbox.py)
 
 ELSEIF(NOT Boost_FOUND)
-  MESSAGE("Unable to find correct Boost version. Did you set BOOST_ROOT?")
+  MESSAGE("Unable to find correct Boost version. Did you set BOOST_DIR?")
 ENDIF()
 MESSAGE("CHUCKIE BOOST SAYS: ${Boost_LIBRARIES}")
 ###### FIND BOOST WORKS, BUT LET'S USE LOCAL INSTALL ######
