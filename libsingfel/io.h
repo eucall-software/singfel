@@ -1426,6 +1426,25 @@ struct Packet {
 void calculate_dp(Packet*);
 int write_HDF5(char *);
 
+struct BeamInfo {
+// Information contained in the beamfile
+	double photon_energy;	// (eV)
+	double focus_radius;	// (m)
+	double fluence;			// (something)
+};
+
+void readBeamFile(BeamInfo* beamInfo, string beamFile);
+
+struct GeomInfo {
+// Information contained in the geomfile
+	double d;			// (m) detector distance
+	double pix_width;	// (m)
+	int px_in;			// number of pixel along x
+	string badpixmap;	// this information should go into the detector class
+};
+
+void readGeomFile(GeomInfo* geomInfo, string geomFile);
+
 class CIO{
 	//int b;
 public:

@@ -58,43 +58,44 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
                          fcube* myRot, fmat* pix, uvec* goodpix, float pix_max,\
                          fcube* myIntensity, fcube* myWeight, int numImages, \
                          int numSlices, int iter);
-
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
                         int iter);
-
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
-
-static int expansion(opt::variables_map vm, arma::fcube* myRot, arma::fmat* pix, arma::uvec* goodpix, float pix_max, arma::fcube* myIntensity, int numSlices, int iter);
-
-static int maximization(mpi::communicator* comm, opt::variables_map vm, int numSlaves, arma::uvec* goodpix, int numProcesses, int numCandidates, int numImages, int numSlices, int iter);
-
-static int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, fcube* myRot, int numSlices, int iter);
-
-static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter);
-
+static int expansion(opt::variables_map vm, arma::fcube* myRot, \
+                     arma::fmat* pix, arma::uvec* goodpix, float pix_max, \
+                     arma::fcube* myIntensity, int numSlices, int iter);
+static int maximization(mpi::communicator* comm, opt::variables_map vm, \
+                        int numSlaves, arma::uvec* goodpix, int numProcesses, \
+                        int numCandidates, int numImages, int numSlices, \
+                        int iter);
+static int compression(opt::variables_map vm, fcube* myIntensity, \
+                       fcube* myWeight, fmat* pix, float pix_max, fcube* myRot,\
+                       int numSlices, int iter);
+static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, \
+                                 fcube* myWeight, int iter);
 uvec numJobsPerSlave(int numImages, int numSlaves);
-
-void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd);
-
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd);
-
-void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, int expansionInd);
-
-void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, fvec* condProb);
-
-void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* myProb);
-
-void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat* updatedSlice);
-
-void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
-
-void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
-
+void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, \
+                       uvec* candidatesInd);
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, \
+                          uvec* goodpix, fvec* normCondProb, \
+                          uvec* candidatesInd);
+void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, \
+                      uvec* numJobsForEachSlave, int expansionInd);
+void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, \
+                            uvec* numJobsForEachSlave, fvec* condProb);
+void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, \
+                       fvec* myProb);
+void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, \
+                         fmat* updatedSlice);
+void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, \
+                        fcube* myDPnPixmap);
+void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, \
+                          fcube* myDPnPixmap);
 void loadDP(opt::variables_map vm, int ind, fmat* myDP);
-
 void load_readNthLine(opt::variables_map vm, int N, fmat* img);
-
-void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, fmat* myDP);
+void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, \
+                            fmat* myDP);
+void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
 
 int main( int argc, char* argv[] ){
 
@@ -141,95 +142,36 @@ int main( int argc, char* argv[] ){
 	float pix_max;
 	uvec goodpix;
 	
-	if (world.rank() == master) {	
-		/****** Beam ******/
-		// Let's read in our beam file
-		double photon_energy = 0;
-		double focus_radius = 0;
-		double fluence = 0;
-		string line;
-		ifstream myFile(beamFile.c_str());
-		while (getline(myFile, line)) {
-			if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-				// line now contains a valid input
-				cout << line << endl;
-				typedef boost::tokenizer<boost::char_separator<char> > Tok;
-				boost::char_separator<char> sep(" ="); // default constructed
-				Tok tok(line, sep);
-				for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-				    if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
-				        string temp = *++tok_iter;
-				        photon_energy = atof(temp.c_str()); // photon energy to wavelength
-				        break;
-				    } else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
-				        string temp = *++tok_iter;
-				        fluence = atof(temp.c_str()); // number of photons per pulse
-				        break;
-				    } else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
-				        string temp = *++tok_iter;
-				        focus_radius = atof(temp.c_str()); // focus radius
-				        break;
-				    }
-				}
-			}
-		}
+	if (world.rank() == master) {
+		BeamInfo beamInfo;
+		readBeamFile(&beamInfo, beamFile);
+		
 		CBeam beam = CBeam();
-		beam.set_photon_energy(photon_energy);
+		beam.set_photon_energy(beamInfo.photon_energy);
 
-		/****** Detector ******/
-		double d = 0;					// (m) detector distance
-		double pix_width = 0;			// (m)
-		int px_in = 0;                  // number of pixel along x
-		string badpixmap = ""; // this information should go into the detector class
-		// Parse the geom file
-		ifstream myGeomFile(geomFile.c_str());
-		while (getline(myGeomFile, line)) {
-			if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-				// line now contains a valid input  
-		        typedef boost::tokenizer<boost::char_separator<char> > Tok;
-		        boost::char_separator<char> sep(" ="); // default constructed
-		        Tok tok(line, sep);
-		        for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-		            if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
-		                string temp = *++tok_iter;
-		                d = atof(temp.c_str());
-		                break;
-		            } else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
-		                string temp = *++tok_iter;
-		                pix_width = atof(temp.c_str());
-		                break;
-		            } else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
-		                string temp = *++tok_iter;
-		                px_in = atof(temp.c_str());
-		                break;
-		            } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
-		                string temp = *++tok_iter;
-		                badpixmap = temp;
-		                break;
-		            }
-		        }
-		    }
-		}
-		double pix_height = pix_width;		// (m)
-		const int px = px_in;				// number of pixels in x
+		GeomInfo geomInfo;
+		readGeomFile(&geomInfo, geomFile);
+		
+		double pix_height = geomInfo.pix_width;		// (m)
+		const int px = geomInfo.px_in;				// number of pixels in x
 		const int py = px;					// number of pixels in y
 		double cx = ((double) px-1)/2;		// this can be user defined
 		double cy = ((double) py-1)/2;		// this can be user defined
 
 		CDetector det = CDetector();
-		det.set_detector_dist(d);	
-		det.set_pix_width(pix_width);	
+		det.set_detector_dist(geomInfo.d);	
+		det.set_pix_width(pix_height);	
 		det.set_pix_height(pix_height);
 		det.set_numPix(py,px);
 		det.set_center_x(cx);
 		det.set_center_y(cy);
-		det.set_pixelMap(badpixmap);
+		det.set_pixelMap(geomInfo.badpixmap);
 		det.init_dp(&beam);
 		pix = det.pixSpace;
 		pix_max = det.pixSpaceMax;
 		goodpix = det.get_goodPixelMap();
 
-		double theta = atan((px/2*pix_height)/d);
+		double theta = atan((px/2*pix_height)/geomInfo.d);
 		double qmax = 2/beam.get_wavelength()*sin(theta/2);
 		double dmin = 1/(2*qmax);
 		if (world.rank() == 0) {
@@ -260,7 +202,7 @@ int main( int argc, char* argv[] ){
 			infile.open(input.c_str());
 		}
 	
-			if ( strcmp(initialVolume.c_str(),"randomMerge")==0 ) {
+			if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
 				cout << "Randomly merging diffraction volume..." << endl;
 				// Setup initial diffraction volume by merging randomly
 				// rotationAxis determines the random nature of the angles
@@ -272,6 +214,7 @@ int main( int argc, char* argv[] ){
 						filename = sstm.str();
 						myDP = hdf5readT<fmat>(filename,hdfField);
 				  	} else if (format == "list") {
+				  		string line;
 				  		std::getline(infile, line);
 				  		myDP = load_asciiImage(line);
 				  	} else {
@@ -605,7 +548,7 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat
 		// Get updated expansion slice
 		loadUpdatedExpansion(vm, iter, sliceInd, &myDPnPixmap);
 		// Get rotation matrix
-		myR = myRot->slice(sliceInd);
+		getRotationMatrix(&myR, myRot, sliceInd);
 		// Merge into 3D diffraction volume
 		CToolbox::merge3D(&myDPnPixmap, pix, &myR, pix_max, myIntensity, myWeight, active, interpolate);
 	}
@@ -614,21 +557,29 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat
 	return 0;
 }
 
-int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter) {
+void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd) {
+	fmat& _myR = myR[0];
+	_myR.zeros(3,3);
+	_myR = myRot->slice(sliceInd);
+}
 
+int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter) {
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
 
+	std::stringstream ss;
+	string filename;
 	for (int i = 0; i < volDim; i++) {
-		std::stringstream sstm;
-		sstm << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
-		string outputName = sstm.str();
-		myIntensity->slice(i).save(outputName,raw_ascii);
-		// Temporary
-		std::stringstream sstm1;
-		sstm1 << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
-		string outputName1 = sstm1.str();
-		myWeight->slice(i).save(outputName1,raw_ascii);
+		// save volume intensity
+		ss.str("");
+		ss << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myIntensity->slice(i).save(filename,raw_ascii);
+		// save volume weights
+		ss.str("");
+		ss << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myWeight->slice(i).save(filename,raw_ascii);
 	}
 	return 0;
 }
@@ -675,9 +626,6 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 			calculateWeightedImage(goodpix, normCondProb->at(i), updatedSlice, &myDP);
 		}
 	}
-	cout << "calculating weighted slice" << endl;
-
-	cout << "done weighted slice" << endl;
 }
 
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd) {
