@@ -71,7 +71,7 @@ public:
 	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
 	
 	static double calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type);
-	static double calculateGaussianSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, float stdDev);
+	static double calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* dataSlice, float stdDev);
 
 private:
 	double mNumber;

@@ -86,11 +86,15 @@ void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* 
 
 void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat* updatedSlice);
 
+void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
+
 void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
 
 void loadDP(opt::variables_map vm, int ind, fmat* myDP);
 
 void load_readNthLine(opt::variables_map vm, int N, fmat* img);
+
+void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, fmat* myDP);
 
 int main( int argc, char* argv[] ){
 
@@ -415,6 +419,8 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	uvec goodpixmap;
 	fmat myDP;
 	float msg[3];
+	fcube modelDPnPixmap; 	// first slice: expansion slice
+							// second slice: good pixel map
 	while (1) {
 
 		// Receive a message from the master
@@ -437,16 +443,8 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	    	// Read in expansion slice
 	    	//////////////////////////
 			// Get expansion image
-			std::stringstream sstm;
-			sstm << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			string filename = sstm.str();
-			fmat myExpansionSlice = load_asciiImage(filename);
-			// Get expansion pixmap
-			std::stringstream sstm1;
-			sstm1 << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << expansionInd << ".dat";
-			string filename1 = sstm1.str();
-			fmat myPixmap = load_asciiImage(filename1);
-		   
+			loadExpansionSlice(vm, iter, expansionInd, &modelDPnPixmap);
+					   
 			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
@@ -462,7 +460,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 			  	} else {
 				  	std::stringstream sstm;
 			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
-					filename = sstm.str();
+					string filename = sstm.str();
 					myDP = load_asciiImage(filename);
 				}
 
@@ -471,7 +469,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 				/////////////////////////////////////////////////////
 				double val = 0.0;
 				if (useGaussianProb) {
-					val = CToolbox::calculateGaussianSimilarity(&myExpansionSlice, &myDP, &myPixmap, gaussianStdDev(iter));
+					val = CToolbox::calculateGaussianSimilarity(&modelDPnPixmap, &myDP, gaussianStdDev(iter));
 				}
 				
 				condProb(counter) = float(val);
@@ -661,30 +659,20 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 	
 	int numCandidates = _candidatesInd.n_elem;
 	_updatedSlice.zeros(volDim,volDim);
-	fmat myDP2;
-	string filename;
-	std::stringstream sstm;
-	// Setup goodpixmap
-	uvec::iterator goodBegin = goodpix->begin();
-	uvec::iterator goodEnd = goodpix->end();
-	
+	fmat myDP;
 	// Load measured diffraction pattern from file
 	if (format == "S2E") {
 		for (int i = 0; i < numCandidates; i++) {
-			loadDP(vm, _candidatesInd(i)+1, &myDP2);
-			// Weighted mean
-			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-				_updatedSlice(*p) += _normCondProb(i) * myDP2(*p);
-			}
+			// load measured diffraction pattern
+			loadDP(vm, _candidatesInd(i)+1, &myDP);
+			// calculate weighted image and add to updatedSlice
+			calculateWeightedImage(goodpix, normCondProb->at(i), updatedSlice, &myDP);
 		}
 	} else if (format == "list") { //TODO: this needs testing
 		for (int i = 0; i < numCandidates; i++) {
-			myDP2.zeros(volDim,volDim);
-			load_readNthLine(vm, i, &myDP2);
-			// Weighted mean
-			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-				_updatedSlice(*p) += _normCondProb(i) * myDP2(*p);
-			}
+			load_readNthLine(vm, i, &myDP);
+			// calculate weighted image and add to updatedSlice
+			calculateWeightedImage(goodpix, normCondProb->at(i), updatedSlice, &myDP);
 		}
 	}
 	cout << "calculating weighted slice" << endl;
@@ -775,6 +763,22 @@ void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat
 	updatedSlice->save(filename,raw_ascii);
 }
 
+void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, fcube* modelDPnPixmap) {		
+	string output = vm["output"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	modelDPnPixmap->zeros(volDim,volDim,2);
+	
+	std::stringstream ss;
+	ss << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << sliceInd << ".dat";
+	string filename = ss.str();
+	modelDPnPixmap->slice(0) = load_asciiImage(filename); // load expansion slice
+	// Get expansion pixmap
+	ss.str("");
+	ss << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << sliceInd << ".dat";
+	filename = ss.str();
+	modelDPnPixmap->slice(1) = load_asciiImage(filename); // load goodpixmap
+}
+
 void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap) {
 	string output = vm["output"].as<string>();
 	int volDim = vm["volDim"].as<int>();
@@ -825,6 +829,17 @@ void load_readNthLine(opt::variables_map vm, int N, fmat* img) {
 
 }
 
+void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, fmat* myDP) {
+	fmat& _updatedSlice = updatedSlice[0];
+	fmat& _myDP = myDP[0];
+	// Setup goodpixmap
+	uvec::iterator goodBegin = goodpix->begin();
+	uvec::iterator goodEnd = goodpix->end();
+	
+	for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+		_updatedSlice(*p) += weight * _myDP(*p);
+	}
+}
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 

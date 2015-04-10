@@ -929,21 +929,22 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 	return sim;
 }
 
-double CToolbox::calculateGaussianSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, float stdDev) {
-	fmat& myExpansionSlice = modelSlice[0];
-	fmat& myDP = dataSlice[0];
-	fmat& myPixmap = pixmap[0];
+double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, float stdDev) {
+	fcube& _modelDPnPixmap = modelDPnPixmap[0];
+	fmat& _myDP = myDP[0];
 
-	int dim = myPixmap.n_rows;
+	fmat mySlice = _modelDPnPixmap.slice(0);
+	fmat goodpixmap = _modelDPnPixmap.slice(1);
+	int dim = _myDP.n_rows;
 	int p;
 	double sim = 1.0; // measure of similarity
 	int numGoodpixels = 0;
 			
 	for(int a = 0; a < dim; a++) {
 	for(int b = 0; b < dim; b++) {
-		if (myPixmap(b,a) == 1) {
+		if (goodpixmap(b,a) == 1) {
 			p = a*dim + b;
-			sim *= exp( -pow(myDP(p)-myExpansionSlice(p),2) / (2*pow(stdDev,2)) );
+			sim *= exp( -pow(_myDP(p)-mySlice(p),2) / (2*pow(stdDev,2)) );
 			numGoodpixels++;
 		}
 	}
