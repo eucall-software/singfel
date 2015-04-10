@@ -76,7 +76,17 @@ uvec numJobsPerSlave(int numImages, int numSlaves);
 
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd);
 
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, int volDim, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd);
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd);
+
+void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, int expansionInd);
+
+void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, fvec* condProb);
+
+void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* myProb);
+
+void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat* updatedSlice);
+
+void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
 
 int main( int argc, char* argv[] ){
 
@@ -521,99 +531,58 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 
 	wall_clock timer;
 
-	string output = vm["output"].as<string>();
-	int volDim = vm["volDim"].as<int>();
-	string format = vm["format"].as<string>();
-	string input = vm["input"].as<string>();
-	string hdfField = vm["hdfField"].as<string>();
 	bool useGaussianProb = false;
 	if (vm.count("gaussianStdDev")) {
 		useGaussianProb = true;
 	}
-	int rank, numElements;
-	boost::mpi::status status;
-	fvec myProb(numImages);
+	bool saveCondProb = false;
+	if (vm.count("saveCondProb")) {
+		saveCondProb = vm["saveCondProb"].as<bool>();
+	}
 	
-	////////////////////////////////////////////
-	// Send jobs to slaves
-	// 1) Start and end indices of measured data
-	// 2) Index of expansion slice
-	// 3) Compute signal
-	////////////////////////////////////////////
-
-	// Calculate number jobs for each slave
 	uvec numJobsForEachSlave(numSlaves);
+	fvec myProb(numImages);
+	fvec normCondProb;
+	uvec candidatesInd;
+	fmat updatedSlice;
+		
+	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
-	float msgProb[max(numJobsForEachSlave)];
-	cout << "max msgProb length: " << max(numJobsForEachSlave) << endl;
+	
+cout << "max msgProb length: " << max(numJobsForEachSlave) << endl;
 	
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
-	cout << "expansionInd: " << expansionInd << endl;
+cout << "expansionInd: " << expansionInd << endl;
 		// For each slice, each worker get a subset of measured data
-		int startInd = 0;
-		int endInd = 0;
-		for (rank = 1; rank < numProcesses; ++rank) {
-			endInd = startInd + numJobsForEachSlave(rank-1) - 1;
-			fvec id;
-			id << startInd << endInd << expansionInd << endr;
-			float* id1 = &id[0];
-			////////////////////////////////
-			comm->send(rank, DPTAG, id1, 3); // send to slave
-			////////////////////////////////
-			startInd += numJobsForEachSlave(rank-1);
-	  	}
+		sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, expansionInd);
 
 //timer.tic();
 		//TODO: Time accumulation. May need to write random access accumulator
-		// Accumulate lse for each expansion slice
-		int currentInd = 0;
-		for (rank = 1; rank < numProcesses; ++rank) {
-			///////////////////////////////////////////////////////
-			//status = comm->recv(rank, CHUNKTAG, msgChunk); // receive from slave
-			///////////////////////////////////////////////////////
-			numElements = numJobsForEachSlave(rank-1);
-			///////////////////////////////////////////////////////
-			status = comm->recv(rank, PROBTAG, msgProb, numElements); // receive from slave
-			///////////////////////////////////////////////////////
-			for (int i = 0; i < numElements; i++) {
-				myProb(currentInd) = msgProb[i];
-				currentInd++;
-			}
-		}
-cout << "currentInd: " << currentInd << endl;
+		// Accumulate conditional probabilities for each expansion slice
+		receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, &myProb);
+		
 //cout << "Master: Received all probtags " <<timer.toc()<<endl;
 
-		// Save lse
-		string outputName;
-		stringstream sstm3;
-		sstm3 << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
-		outputName = sstm3.str();
-		myProb.save(outputName,raw_ascii);
+		if (saveCondProb) {
+			saveCondProb2File(vm, iter, expansionInd, &myProb);
+		}
 //timer.tic();
 		//TODO: Time generating new weighted expansion slice
 		// Pick top candidates
 cout << "sort start" << endl;
-		fvec normCondProb;
-		uvec candidatesInd;
+		
 		if (useGaussianProb) {
 			normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
 		}
 cout << "normVal: " << normCondProb << endl;
 		// Update expansion slice
-		fmat updatedSlice;
-		updateExpansionSlice(vm, &updatedSlice, volDim, goodpix, &normCondProb, &candidatesInd);
-		
+		updateExpansionSlice(vm, &updatedSlice, goodpix, &normCondProb, &candidatesInd);
 		
 //cout << "Master generates new expansion slice " <<timer.toc()<<endl;
 //timer.tic();
-cout << "save expansionUpdate" << endl;
-		string filename;
-		// Save updated expansion slices
-		std::stringstream sstm2;
-		sstm2 << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << expansionInd << ".dat";
-		filename = sstm2.str();
-		updatedSlice.save(filename,raw_ascii);	
+		saveExpansionUpdate(vm, iter, expansionInd, &updatedSlice);
+
 //cout << "Master save expansion slice " <<timer.toc()<<endl;
 	}
 	return 0;
@@ -630,31 +599,15 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat
 	myIntensity->zeros(volDim,volDim,volDim);
 	int active = 1;
 	string interpolate = "linear";
-	string filename;
-	string filename1;
-	fmat pixmap;
-	pixmap.zeros(volDim,volDim);
 	fcube myDPnPixmap; 	// first slice: diffraction pattern
 						// second slice: good pixel map
 	fmat myR;
-	for (int r = 0; r < numSlices; r++) {
-		myDPnPixmap.zeros(volDim,volDim,2);
-		// Get image
-		std::stringstream sstm;
-		sstm << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << r << ".dat";
-		filename = sstm.str();
-		myDPnPixmap.slice(0) = load_asciiImage(filename);
-		std::stringstream sstm1;
-		if (format == "S2E") {
-			sstm1 << output << "/badpixelmap.dat";
-		} else if (format == "list") {
-			sstm1 << output << "/badpixelmap.dat";
-		}
-		filename1 = sstm1.str();		
-		pixmap = load_asciiImage(filename1); // load badpixmap
-		myDPnPixmap.slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+	for (int sliceInd = 0; sliceInd < numSlices; sliceInd++) {
+		// Get updated expansion slice
+		loadUpdatedExpansion(vm, iter, sliceInd, &myDPnPixmap);
 		// Get rotation matrix
-		myR = myRot->slice(r);
+		myR = myRot->slice(sliceInd);
+		// Merge into 3D diffraction volume
 		CToolbox::merge3D(&myDPnPixmap, pix, &myR, pix_max, myIntensity, myWeight, active, interpolate);
 	}
 	// Normalize here
@@ -695,10 +648,11 @@ uvec numJobsPerSlave(int numImages, int numSlaves) {
 	return numJobsForEachSlave;
 }
 
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, int volDim, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd) {
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd) {
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
+	int volDim = vm["volDim"].as<int>();
 	
 	fmat& _updatedSlice = updatedSlice[0];
 	fvec& _normCondProb = normCondProb[0];
@@ -752,6 +706,88 @@ void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uv
 	_normCondProb = candidatesVal / sum(candidatesVal);
 }
 
+////////////////////////////////////////////
+// Send jobs to slaves
+// 1) Start index of measured diffraction pattern
+// 2) End index of measured diffraction pattern
+// 3) Index of expansion slice
+////////////////////////////////////////////
+void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, int expansionInd) {
+	uvec& _numJobsForEachSlave = numJobsForEachSlave[0];
+	
+	int startInd = 0;
+	int endInd = 0;
+	for (int rank = 1; rank < numProcesses; ++rank) {
+		endInd = startInd + _numJobsForEachSlave(rank-1) - 1;
+		fvec id;
+		id << startInd << endInd << expansionInd << endr;
+		float* id1 = &id[0];
+		////////////////////////////////
+		comm->send(rank, DPTAG, id1, 3); // send to slave
+		////////////////////////////////
+		startInd += _numJobsForEachSlave(rank-1);
+	}
+}
+
+void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, fvec* condProb) {
+	uvec& _numJobsForEachSlave = numJobsForEachSlave[0];
+	fvec& _condProb = condProb[0];
+	
+	int currentInd = 0;
+	int numElements;
+	float msgProb[max(_numJobsForEachSlave)];
+	for (int rank = 1; rank < numProcesses; ++rank) {
+		numElements = _numJobsForEachSlave(rank-1);
+		///////////////////////////////////////////////////////
+		comm->recv(rank, PROBTAG, msgProb, numElements); // receive from slave
+		///////////////////////////////////////////////////////
+		for (int i = 0; i < numElements; i++) {
+			_condProb(currentInd) = msgProb[i];
+			currentInd++;
+		}
+	}
+	cout << "currentInd: " << currentInd << endl;
+}
+
+void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* myProb) {
+	string output = vm["output"].as<string>();
+
+	string outputName;
+	stringstream sstm;
+	sstm << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
+	outputName = sstm.str();
+	myProb->save(outputName,raw_ascii);
+}
+
+void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat* updatedSlice) {
+	string output = vm["output"].as<string>();
+		
+	string filename;
+	// Save updated expansion slices
+	std::stringstream sstm;
+	sstm << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << expansionInd << ".dat";
+	filename = sstm.str();
+	updatedSlice->save(filename,raw_ascii);
+}
+
+void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap) {
+		string output = vm["output"].as<string>();
+		int volDim = vm["volDim"].as<int>();
+		myDPnPixmap->zeros(volDim,volDim,2);
+		
+		// Get image
+		std::stringstream ss;
+		ss << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << sliceInd << ".dat";
+		string filename = ss.str();
+		myDPnPixmap->slice(0) = load_asciiImage(filename);
+		// Get goodpixmap
+		ss.str("");
+		ss << output << "/badpixelmap.dat";
+		filename = ss.str();
+		fmat pixmap = load_asciiImage(filename); // load badpixmap
+		myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+}
+
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
     // Constructing an options describing variable and giving it a
@@ -778,6 +814,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("format", opt::value<string>(), "Defines file format to use")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
         ("gaussianStdDev", opt::value<string>(), "Use Gaussian likelihood for maximization with the following standard deviations (Comma separated list)")
+        ("saveCondProb", opt::value<bool>(), "Optionally save conditional probabilities")
         ("help", "produce help message")
     ;
 
