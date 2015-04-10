@@ -88,6 +88,10 @@ void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat
 
 void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap);
 
+void loadDP(opt::variables_map vm, int ind, fmat* myDP);
+
+void load_readNthLine(opt::variables_map vm, int N, fmat* img);
+
 int main( int argc, char* argv[] ){
 
 	wall_clock timerMaster;
@@ -452,12 +456,9 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	    	for (int i = startInd; i <= endInd; i++) {
 				//Read in measured diffraction data
 				if (format == "S2E") {
-			  		std::stringstream sstm;
-			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".h5";
-					filename = sstm.str();
-					myDP = hdf5readT<fmat>(filename,hdfField);
-			  	} else if (format == "list") {
-				  	myDP = load_readNthLine(input, i);
+					loadDP(vm, i+1, &myDP);
+			  	} else if (format == "list") { // TODO: this needs testing
+				  	load_readNthLine(vm, i, &myDP);
 			  	} else {
 				  	std::stringstream sstm;
 			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
@@ -662,29 +663,33 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 	_updatedSlice.zeros(volDim,volDim);
 	fmat myDP2;
 	string filename;
+	std::stringstream sstm;
 	// Setup goodpixmap
 	uvec::iterator goodBegin = goodpix->begin();
 	uvec::iterator goodEnd = goodpix->end();
-	for (int r = 0; r < numCandidates; r++) {
-		// Load measured diffraction pattern from file
-		if (format == "S2E") {
-			myDP2.zeros(volDim,volDim);
-			std::stringstream sstm;
-	  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << _candidatesInd(r)+1 << ".h5";
-			filename = sstm.str();
-			// Read in diffraction				
-			myDP2 = hdf5readT<fmat>(filename,hdfField);
-		} else if (format == "list") {
-			myDP2.zeros(volDim,volDim);
-			myDP2 = load_readNthLine(input, r);
+	
+	// Load measured diffraction pattern from file
+	if (format == "S2E") {
+		for (int i = 0; i < numCandidates; i++) {
+			loadDP(vm, _candidatesInd(i)+1, &myDP2);
+			// Weighted mean
+			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+				_updatedSlice(*p) += _normCondProb(i) * myDP2(*p);
+			}
 		}
-		cout << "calculating weighted slice" << endl;
-		// Weighted mean
-		for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-			_updatedSlice(*p) += _normCondProb(r) * myDP2(*p);
+	} else if (format == "list") { //TODO: this needs testing
+		for (int i = 0; i < numCandidates; i++) {
+			myDP2.zeros(volDim,volDim);
+			load_readNthLine(vm, i, &myDP2);
+			// Weighted mean
+			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+				_updatedSlice(*p) += _normCondProb(i) * myDP2(*p);
+			}
 		}
-		cout << "done weighted slice" << endl;
 	}
+	cout << "calculating weighted slice" << endl;
+
+	cout << "done weighted slice" << endl;
 }
 
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd) {
@@ -771,22 +776,55 @@ void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat
 }
 
 void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* myDPnPixmap) {
-		string output = vm["output"].as<string>();
-		int volDim = vm["volDim"].as<int>();
-		myDPnPixmap->zeros(volDim,volDim,2);
+	string output = vm["output"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	myDPnPixmap->zeros(volDim,volDim,2);
 		
-		// Get image
-		std::stringstream ss;
-		ss << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << sliceInd << ".dat";
-		string filename = ss.str();
-		myDPnPixmap->slice(0) = load_asciiImage(filename);
-		// Get goodpixmap
-		ss.str("");
-		ss << output << "/badpixelmap.dat";
-		filename = ss.str();
-		fmat pixmap = load_asciiImage(filename); // load badpixmap
-		myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+	// Get image
+	std::stringstream ss;
+	ss << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << sliceInd << ".dat";
+	string filename = ss.str();
+	myDPnPixmap->slice(0) = load_asciiImage(filename);
+	// Get goodpixmap
+	ss.str("");
+	ss << output << "/badpixelmap.dat";
+	filename = ss.str();
+	fmat pixmap = load_asciiImage(filename); // load badpixmap
+	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
 }
+
+void loadDP(opt::variables_map vm, int ind, fmat* myDP) {
+	string input = vm["input"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	fmat& _myDP = myDP[0];
+	
+	_myDP.zeros(volDim,volDim);
+	std::stringstream ss;
+	ss.str("");
+	ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
+	string filename = ss.str();
+	// Read in diffraction				
+	_myDP = hdf5readT<fmat>(filename,hdfField);
+}
+
+void load_readNthLine(opt::variables_map vm, int N, fmat* img) {
+	string input = vm["input"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	fmat& _img = img[0];
+
+	_img.zeros(volDim,volDim);
+	std::ifstream infile;
+	infile.open(input.c_str());
+	string line;
+	// skip N lines
+	for (int r = 0; r <= N; r++) { //reads Nth line of the file
+		std::getline(infile, line);
+	}
+	_img = load_asciiImage(line);
+
+}
+
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 

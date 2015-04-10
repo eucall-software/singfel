@@ -1426,8 +1426,6 @@ struct Packet {
 void calculate_dp(Packet*);
 int write_HDF5(char *);
 
-arma::fmat load_readNthLine(std::string input, int N);
-
 class CIO{
 	//int b;
 public:

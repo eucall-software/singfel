@@ -428,20 +428,6 @@ fmat load_asciiRotation(string x){
 	return rotation;
 }
 
-fmat load_readNthLine(string input, int N){
-	fmat img;
-	std::ifstream infile;
-	infile.open(input.c_str());
-	string line;
-	// skip N lines
-	for (int r = 0; r <= N; r++) {
-		std::getline(infile, line);
-	}
-	img = load_asciiImage(line);
-   
-	return img;
-}
-
 void load_constant(int ang){
 	cout << ang << endl;
 }
