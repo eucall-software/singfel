@@ -74,8 +74,10 @@ static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcub
 
 uvec numJobsPerSlave(int numImages, int numSlaves);
 
-void normalizeCondProb(fvec* myProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd);
-	
+void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd);
+
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, int volDim, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd);
+
 int main( int argc, char* argv[] ){
 
 	wall_clock timerMaster;
@@ -531,9 +533,6 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 	int rank, numElements;
 	boost::mpi::status status;
 	fvec myProb(numImages);
-	// Setup goodpixmap
-	uvec::iterator goodBegin = goodpix->begin();
-	uvec::iterator goodEnd = goodpix->end();
 	
 	////////////////////////////////////////////
 	// Send jobs to slaves
@@ -601,39 +600,20 @@ cout << "sort start" << endl;
 			normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
 		}
 cout << "normVal: " << normCondProb << endl;
-		// Update expansion slices
-		fmat myDP1;
-		myDP1.zeros(volDim,volDim);
-		fmat myDP2;
-		string filename;
-		for (int r = 0; r < numCandidates; r++) {
-			// Load measured diffraction pattern from file
-			if (format == "S2E") {
-				myDP2.zeros(volDim,volDim);
-				std::stringstream sstm;
-		  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << candidatesInd(r)+1 << ".h5";
-				filename = sstm.str();
-				// Read in diffraction				
-				myDP2 = hdf5readT<fmat>(filename,hdfField);
-			} else if (format == "list") {
-				myDP2.zeros(volDim,volDim);
-				myDP2 = load_readNthLine(input, r);
-			}
-			cout << "calculating weighted slice" << endl;
-			// Weighted mean
-			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-				myDP1(*p) += normCondProb(r) * myDP2(*p);
-			}
-			cout << "done weighted slice" << endl;
-		}
+		// Update expansion slice
+		fmat updatedSlice;
+		updateExpansionSlice(vm, &updatedSlice, volDim, goodpix, &normCondProb, &candidatesInd);
+		
+		
 //cout << "Master generates new expansion slice " <<timer.toc()<<endl;
 //timer.tic();
 cout << "save expansionUpdate" << endl;
+		string filename;
 		// Save updated expansion slices
 		std::stringstream sstm2;
 		sstm2 << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		filename = sstm2.str();
-		myDP1.save(filename,raw_ascii);	
+		updatedSlice.save(filename,raw_ascii);	
 //cout << "Master save expansion slice " <<timer.toc()<<endl;
 	}
 	return 0;
@@ -713,6 +693,44 @@ uvec numJobsPerSlave(int numImages, int numSlaves) {
 		}
 	}
 	return numJobsForEachSlave;
+}
+
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, int volDim, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd) {
+	string input = vm["input"].as<string>();
+	string format = vm["format"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+	
+	fmat& _updatedSlice = updatedSlice[0];
+	fvec& _normCondProb = normCondProb[0];
+	uvec& _candidatesInd = candidatesInd[0];
+	
+	int numCandidates = _candidatesInd.n_elem;
+	_updatedSlice.zeros(volDim,volDim);
+	fmat myDP2;
+	string filename;
+	// Setup goodpixmap
+	uvec::iterator goodBegin = goodpix->begin();
+	uvec::iterator goodEnd = goodpix->end();
+	for (int r = 0; r < numCandidates; r++) {
+		// Load measured diffraction pattern from file
+		if (format == "S2E") {
+			myDP2.zeros(volDim,volDim);
+			std::stringstream sstm;
+	  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << _candidatesInd(r)+1 << ".h5";
+			filename = sstm.str();
+			// Read in diffraction				
+			myDP2 = hdf5readT<fmat>(filename,hdfField);
+		} else if (format == "list") {
+			myDP2.zeros(volDim,volDim);
+			myDP2 = load_readNthLine(input, r);
+		}
+		cout << "calculating weighted slice" << endl;
+		// Weighted mean
+		for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
+			_updatedSlice(*p) += _normCondProb(r) * myDP2(*p);
+		}
+		cout << "done weighted slice" << endl;
+	}
 }
 
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd) {
