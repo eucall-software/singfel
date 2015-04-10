@@ -54,14 +54,39 @@ using namespace toolbox;
 
 // Convert a string containing comma separated integers to ivec
 ivec str2ivec(std::string line){
-	ivec myVec(100); // number of elements unknown
+	int numElements = 100;
+	ivec myVec(numElements); // number of elements unknown
 	typedef boost::tokenizer<boost::char_separator<char> > Tok;
 	boost::char_separator<char> sep(","); // default constructed
 	Tok tok(line, sep);
 	int counter = 0;
 	for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+		if (counter == numElements) {
+			cout << "Too many elements in the string" << endl;
+			exit(0);
+		}
 		string temp = *tok_iter;
 		myVec[counter] = atoi(temp.c_str());
+		counter++;
+	}
+	return myVec;
+}
+
+// Convert a string containing comma separated integers to ivec
+fvec str2fvec(std::string line){
+	int numElements = 100;
+	fvec myVec(numElements); // number of elements unknown
+	typedef boost::tokenizer<boost::char_separator<char> > Tok;
+	boost::char_separator<char> sep(","); // default constructed
+	Tok tok(line, sep);
+	int counter = 0;
+	for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+		if (counter == numElements) {
+			cout << "Too many elements in the string" << endl;
+			exit(0);
+		}
+		string temp = *tok_iter;
+		myVec[counter] = atof(temp.c_str());
 		counter++;
 	}
 	return myVec;

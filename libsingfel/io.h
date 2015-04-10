@@ -1370,6 +1370,7 @@ extern "C" {
 
 // Convert a string containing comma separated integers to ivec
 arma::ivec str2ivec(std::string);
+arma::fvec str2fvec(std::string);
 
 arma::fmat hdf5read(std::string,std::string);
 //int hdf5write(std::string,std::string,arma::fmat);

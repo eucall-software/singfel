@@ -888,31 +888,7 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 	double sim; // measure of similarity
 	int numGoodpixels = 0;
 			
-	if (type == "gaussian") {
-		sim = 1.0;
-		//int myFirst = 0;
-		float std = 1000000.; // FIXME: Don't hard-code Gaussian standard deviation
-		for(int a = 0; a < dim; a++) {
-		for(int b = 0; b < dim; b++) {
-			if (myPixmap(b,a) == 1) {
-				p = a*dim + b;
-				//sim *= exp( -pow(log(myDP(p)+1)-log(myExpansionSlice(p)+1),2) / (2*pow(std,2)) );
-				sim *= exp( -pow(myDP(p)-myExpansionSlice(p),2) / (2*pow(std,2)) );
-				/*
-				if (myFirst < 10) {
-					cout << "a:" << a << endl;
-					cout << "b:" << b << endl;
-					cout << "expansion: " << myExpansionSlice(p) << endl;
-					cout << "data: " << myDP(p) << endl;
-					cout << "sim: " << exp( -pow(log(myDP(p)+1)-log(myExpansionSlice(p)+1),2) / (2*pow(std,2)) ) << endl;
-					myFirst++;
-				}
-				*/
-			}
-		}
-		}
-		sim = 1 - sim; // more similar = small sim
-	} else if (type == "poisson") {
+	if (type == "poisson") {
 		sim = 1.0;	
 		for(int a = 0; a < dim; a++) {
 		for(int b = 0; b < dim; b++) {
@@ -950,6 +926,29 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 		cout << "calculateSimilarity type not known" << endl;
 		exit(EXIT_FAILURE);
 	}
+	return sim;
+}
+
+double CToolbox::calculateGaussianSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, float stdDev) {
+	fmat& myExpansionSlice = modelSlice[0];
+	fmat& myDP = dataSlice[0];
+	fmat& myPixmap = pixmap[0];
+
+	int dim = myPixmap.n_rows;
+	int p;
+	double sim = 1.0; // measure of similarity
+	int numGoodpixels = 0;
+			
+	for(int a = 0; a < dim; a++) {
+	for(int b = 0; b < dim; b++) {
+		if (myPixmap(b,a) == 1) {
+			p = a*dim + b;
+			sim *= exp( -pow(myDP(p)-myExpansionSlice(p),2) / (2*pow(stdDev,2)) );
+			numGoodpixels++;
+		}
+	}
+	}
+	sim /= numGoodpixels; // normalize by number of pixels compared
 	return sim;
 }
 

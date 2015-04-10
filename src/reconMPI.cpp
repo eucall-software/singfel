@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <limits>
 // Armadillo library
 #include <armadillo>
 // Boost library
@@ -72,6 +73,8 @@ static int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeigh
 static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter);
 
 uvec numJobsPerSlave(int numImages, int numSlaves);
+
+void normalizeCondProb(fvec* myProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd);
 	
 int main( int argc, char* argv[] ){
 
@@ -378,7 +381,13 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
-
+	fvec gaussianStdDev;
+	bool useGaussianProb = false;
+	if (vm.count("gaussianStdDev")) {
+		useGaussianProb = true;
+		string gaussianStdDevStr = vm["gaussianStdDev"].as<string>();
+		gaussianStdDev = str2fvec(gaussianStdDevStr);
+	}
 	int numChunkData = 0;
 	boost::mpi::status status;
 	// Expansion related variables
@@ -406,9 +415,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 
 			// Initialize
 	    	condProb.zeros(numChunkData);
-/*if (comm->rank()==5){
-timer.tic();    	
-}*/	
+
 			//TODO: Time reading of expansion slice (all processes going for the same file)
 	    	//////////////////////////
 	    	// Read in expansion slice
@@ -423,12 +430,7 @@ timer.tic();
 			sstm1 << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << expansionInd << ".dat";
 			string filename1 = sstm1.str();
 			fmat myPixmap = load_asciiImage(filename1);
-/*if (comm->rank()==5){
-cout << "Read expansion files " <<timer.toc()<<endl;	
-}
-if (comm->rank()==5){
-timer.tic();		
-}*/			   
+		   
 			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
@@ -450,94 +452,31 @@ timer.tic();
 					filename = sstm.str();
 					myDP = load_asciiImage(filename);
 				}
-/*if (comm->rank()==5){
-cout << "Read diffr file " <<timer.toc()<<endl;
-timer.tic();
-}*/
+
 				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
-				string type = "euclidean";
-				//string type = "gaussian";
 				double val = 0.0;
-				//if (expansionInd == 0 && i == 0) { 
-					val = CToolbox::calculateSimilarity(&myExpansionSlice, &myDP, &myPixmap, type);
-				//}
+				if (useGaussianProb) {
+					val = CToolbox::calculateGaussianSimilarity(&myExpansionSlice, &myDP, &myPixmap, gaussianStdDev(iter));
+				}
 				
 				condProb(counter) = float(val);
 				counter++;
-/*
-if (comm->rank()==5){
-cout << "Calculate probability " <<timer.toc()<<endl;
-}*/
 			}
 			// Send back conditional probability to master
-			float* msgProb = &condProb[0]; //std::vector<float> msgProb = conv_to< std::vector<float> >::from(vectorise(condProb));
+			float* msgProb = &condProb[0];
 			/////////////////////////////////////////////////////
-			comm->send(master, CHUNKTAG, numChunkData); // send chunk size
 			comm->send(master, PROBTAG, msgProb, numChunkData); // send probability in chunk size
 			/////////////////////////////////////////////////////
 		}
 
 		if (status.tag() == DIETAG) {
-			//cout << comm->rank() << ": I'm told to exit from my while loop" << endl;
 		  	return;
 		}
 
 	} // end of while
 } // end of slave_recon
-
-
-
-opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
-
-    // Constructing an options describing variable and giving it a
-    // textual description "All options"
-    opt::options_description desc("All options");
-
-    // When we are adding options, first parameter is a name
-    // to be used in command line. Second parameter is a type
-    // of that option, wrapped in value<> class. Third parameter
-    // must be a short description of that option
-    desc.add_options()
-        ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
-        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
-        ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
-        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
-        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
-		("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
-        ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
-        ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
-        ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
-        ("volDim", opt::value<int>(), "Number of pixel along one dimension")
-        ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
-        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
-        ("format", opt::value<string>(), "Defines file format to use")
-        ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
-        ("help", "produce help message")
-    ;
-
-    // Variable to store our command line arguments
-    opt::variables_map vm;
-
-    // Parsing and storing arguments
-    opt::store(opt::parse_command_line(argc, argv, desc), vm);
-	opt::notify(vm);
-
-	// Print input arguments
-    if (vm.count("help")) {
-        std::cout << desc << "\n";
-        exit(0);
-    }
-
-	if (comm->rank() == master) {
-		if (vm.count("input"))
-    		cout << "input: " << vm["input"].as<string>() << endl;
-		//TODO: print all parameters
-	}
-
-	return vm;
-} // end of parse_input
 
 //TODO: Move expansion, maximization and compression to reconMPI.cpp (remove #define TAGs)
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
@@ -585,9 +524,17 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 	string format = vm["format"].as<string>();
 	string input = vm["input"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
-
-	int rank;
+	bool useGaussianProb = false;
+	if (vm.count("gaussianStdDev")) {
+		useGaussianProb = true;
+	}
+	int rank, numElements;
 	boost::mpi::status status;
+	fvec myProb(numImages);
+	// Setup goodpixmap
+	uvec::iterator goodBegin = goodpix->begin();
+	uvec::iterator goodEnd = goodpix->end();
+	
 	////////////////////////////////////////////
 	// Send jobs to slaves
 	// 1) Start and end indices of measured data
@@ -595,17 +542,12 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 	// 3) Compute signal
 	////////////////////////////////////////////
 
-	// Vector containing number jobs for each slave
+	// Calculate number jobs for each slave
 	uvec numJobsForEachSlave(numSlaves);
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
-
-	fvec myVal(numImages);
-	// Setup goodpixmap
-	uvec::iterator goodBegin = goodpix->begin();
-	uvec::iterator goodEnd = goodpix->end();
 	float msgProb[max(numJobsForEachSlave)];
 	cout << "max msgProb length: " << max(numJobsForEachSlave) << endl;
-	int msgChunk;
+	
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
 	cout << "expansionInd: " << expansionInd << endl;
@@ -629,16 +571,18 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 		int currentInd = 0;
 		for (rank = 1; rank < numProcesses; ++rank) {
 			///////////////////////////////////////////////////////
-			status = comm->recv(rank, CHUNKTAG, msgChunk); // receive from slave
+			//status = comm->recv(rank, CHUNKTAG, msgChunk); // receive from slave
 			///////////////////////////////////////////////////////
+			numElements = numJobsForEachSlave(rank-1);
 			///////////////////////////////////////////////////////
-			status = comm->recv(rank, PROBTAG, msgProb, msgChunk); // receive from slave
+			status = comm->recv(rank, PROBTAG, msgProb, numElements); // receive from slave
 			///////////////////////////////////////////////////////
-			for (int i = 0; i < msgChunk; i++) {
-				myVal(currentInd) = msgProb[i];
+			for (int i = 0; i < numElements; i++) {
+				myProb(currentInd) = msgProb[i];
 				currentInd++;
 			}
 		}
+cout << "currentInd: " << currentInd << endl;
 //cout << "Master: Received all probtags " <<timer.toc()<<endl;
 
 		// Save lse
@@ -646,24 +590,17 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numS
 		stringstream sstm3;
 		sstm3 << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
 		outputName = sstm3.str();
-		myVal.save(outputName,raw_ascii);
+		myProb.save(outputName,raw_ascii);
 //timer.tic();
 		//TODO: Time generating new weighted expansion slice
 		// Pick top candidates
 cout << "sort start" << endl;
-		uvec indices = sort_index(myVal,"ascend");
+		fvec normCondProb;
 		uvec candidatesInd;
-		candidatesInd = indices.subvec(0,numCandidates); // numCandidates+1
-		// Calculate norm cond prob
-		fvec candidatesVal;
-		candidatesVal.zeros(numCandidates+1);
-		for (int i = 0; i <= numCandidates; i++) {
-			candidatesVal(i) = myVal(candidatesInd(i));
+		if (useGaussianProb) {
+			normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
 		}
-cout << "candidatesVal: " << candidatesVal << "->" << candidatesInd << endl;
-		fvec normVal = -candidatesVal / sum(candidatesVal);
-		normVal -= min(normVal);
-		normVal /= sum(normVal);
+cout << "normVal: " << normCondProb << endl;
 		// Update expansion slices
 		fmat myDP1;
 		myDP1.zeros(volDim,volDim);
@@ -682,11 +619,12 @@ cout << "candidatesVal: " << candidatesVal << "->" << candidatesInd << endl;
 				myDP2.zeros(volDim,volDim);
 				myDP2 = load_readNthLine(input, r);
 			}
-			cout << "calculated weighted slice" << endl;
+			cout << "calculating weighted slice" << endl;
 			// Weighted mean
 			for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-				myDP1(*p) += normVal(r) * myDP2(*p);
+				myDP1(*p) += normCondProb(r) * myDP2(*p);
 			}
+			cout << "done weighted slice" << endl;
 		}
 //cout << "Master generates new expansion slice " <<timer.toc()<<endl;
 //timer.tic();
@@ -776,3 +714,73 @@ uvec numJobsPerSlave(int numImages, int numSlaves) {
 	}
 	return numJobsForEachSlave;
 }
+
+void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uvec* candidatesInd) {
+	fvec& _condProb = condProb[0];
+	fvec& _normCondProb = normCondProb[0];
+	uvec& _candidatesInd = candidatesInd[0];
+	
+	_normCondProb.zeros(numCandidates);
+	_candidatesInd.zeros(numCandidates);
+	uvec indices = sort_index(_condProb,"descend");
+	_candidatesInd = indices.subvec(0,numCandidates-1);
+	// Calculate norm cond prob
+	fvec candidatesVal(numCandidates);
+	// fill with smallest floating value to avoid dividing by zero
+	candidatesVal.fill(std::numeric_limits<float>::min());
+	for (int i = 0; i < numCandidates; i++) {
+		candidatesVal(i) = _condProb(_candidatesInd(i));
+	}
+	_normCondProb = candidatesVal / sum(candidatesVal);
+}
+
+opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
+
+    // Constructing an options describing variable and giving it a
+    // textual description "All options"
+    opt::options_description desc("All options");
+
+    // When we are adding options, first parameter is a name
+    // to be used in command line. Second parameter is a type
+    // of that option, wrapped in value<> class. Third parameter
+    // must be a short description of that option
+    desc.add_options()
+        ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
+        ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
+        ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
+        ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
+		("rotationAxis", opt::value<string>()->default_value("xyz"), "Euler rotation convention")
+        ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
+        ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
+        ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
+        ("volDim", opt::value<int>(), "Number of pixel along one dimension")
+        ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
+        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
+        ("format", opt::value<string>(), "Defines file format to use")
+        ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
+        ("gaussianStdDev", opt::value<string>(), "Use Gaussian likelihood for maximization with the following standard deviations (Comma separated list)")
+        ("help", "produce help message")
+    ;
+
+    // Variable to store our command line arguments
+    opt::variables_map vm;
+
+    // Parsing and storing arguments
+    opt::store(opt::parse_command_line(argc, argv, desc), vm);
+	opt::notify(vm);
+
+	// Print input arguments
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        exit(0);
+    }
+
+	if (comm->rank() == master) {
+		if (vm.count("input"))
+    		cout << "input: " << vm["input"].as<string>() << endl;
+		//TODO: print all parameters
+	}
+
+	return vm;
+} // end of parse_input
