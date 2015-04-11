@@ -100,6 +100,8 @@ void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, \
                             fmat* myDP);
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
 void displayResolution(CDetector* det, CBeam* beam);
+void generateUniformRotations(string rotationAxis, int numSlicesNow, \
+                              fcube* myRot);
 
 int main( int argc, char* argv[] ){
 
@@ -201,27 +203,13 @@ int main( int argc, char* argv[] ){
 	}
 	
 	// Main iteration
-	fmat myQuaternions;
-	fmat myR;
-
 	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
 		if (world.rank() == master) {
 			int numImagesNow = numImages[iter];
 			int numSlicesNow = numSlices[iter];
 			fcube myRot(3,3,numSlicesNow);
-			cout << "***ITER " << iter << "***" << endl;
-			if (iter == startIter) {
-				// Equal distribution of quaternions
-				if (rotationAxis == "y" || rotationAxis == "z") {
-					myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
-				} else {
-  					myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
-  				}
-				for (int i = 0; i < numSlicesNow; i++) {
-					myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
-					myRot.slice(i) = myR;
-				}
-  			}
+			cout << "***** ITER " << iter << " *****" << endl;
+			generateUniformRotations(rotationAxis, numSlicesNow, &myRot);
 			master_recon(comm, vm, &myRot, &det, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
 		} else {
 			slave_recon(comm, vm, iter);
@@ -231,6 +219,22 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
+void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRot) {
+	fcube& _myRot = myRot[0];
+	
+	fmat myQuaternions;
+	fmat myR;
+	// Equal distribution of quaternions
+	if (rotationAxis == "y" || rotationAxis == "z") {
+		myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
+	} else {
+		myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
+	}
+	for (int i = 0; i < numSlicesNow; i++) {
+		myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
+		_myRot.slice(i) = myR;
+	}
+}
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
 	string numCandidatesStr = vm["numCandidates"].as<string>();
 	ivec numCandidates = str2ivec(numCandidatesStr);
