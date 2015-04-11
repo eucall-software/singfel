@@ -2,7 +2,8 @@
 #define BEAM_H
 #include <armadillo>
 #include "io.h"
-
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -43,6 +44,7 @@ public:
 	static double get_photonsPerPulsePerArea();
 	static void set_param(Packet*);
 	static void update();
+	void readBeamFile(string beamFile);
 };
 
 }

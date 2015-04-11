@@ -13,6 +13,7 @@
 #include <fstream>
 #include <string>
 #include <limits>
+#include <assert.h>
 // Armadillo library
 #include <armadillo>
 // Boost library
@@ -144,34 +145,23 @@ int main( int argc, char* argv[] ){
 	uvec goodpix;
 	
 	if (world.rank() == master) {
-		BeamInfo beamInfo;
-		readBeamFile(&beamInfo, beamFile);
-		
 		CBeam beam = CBeam();
-		beam.set_photon_energy(beamInfo.photon_energy);
-
-		GeomInfo geomInfo;
-		readGeomFile(&geomInfo, geomFile);
+		beam.readBeamFile(beamFile);
 		
-		double pix_height = geomInfo.pix_width;		// (m)
-		const int px = geomInfo.px_in;				// number of pixels in x
-		const int py = px;					// number of pixels in y
-		double cx = ((double) px-1)/2;		// this can be user defined
-		double cy = ((double) py-1)/2;		// this can be user defined
-
 		CDetector det = CDetector();
-		det.set_detector_dist(geomInfo.d);	
-		det.set_pix_width(pix_height);	
-		det.set_pix_height(pix_height);
-		det.set_numPix(py,px);
-		det.set_center_x(cx);
-		det.set_center_y(cy);
-		det.set_pixelMap(geomInfo.badpixmap);
+		det.readGeomFile(geomFile);
+
+		// diffraction geometry needs the wavelength
 		det.init_dp(&beam);
-		pix = det.pixSpace;
-		pix_max = det.pixSpaceMax;
+		
+		const int px = det.get_numPix_x();	// number of pixels in x
+		const int py = det.get_numPix_y();	// number of pixels in y
+
+		pix = det.pixSpace;						// pixel reciprocal space
+		pix_max = det.pixSpaceMax;				// max pixel reciprocal space
 		goodpix = det.get_goodPixelMap();
 
+		// optionally display resolution
 		displayResolution(&det,&beam);
 	
 		// Only Master initializes intensity volume
@@ -752,6 +742,8 @@ void loadDP(opt::variables_map vm, int ind, fmat* myDP) {
 	_myDP = hdf5readT<fmat>(filename,hdfField);
 }
 
+// Reads Nth line of a file containing names of diffraction patterns
+// TODO: check
 void load_readNthLine(opt::variables_map vm, int N, fmat* img) {
 	string input = vm["input"].as<string>();
 	int volDim = vm["volDim"].as<int>();

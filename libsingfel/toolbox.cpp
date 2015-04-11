@@ -18,6 +18,7 @@
 #include <armadillo>
 
 #include <boost/program_options.hpp>
+#include <assert.h>
 
 namespace opt = boost::program_options;
 using namespace std;
@@ -951,6 +952,7 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, 
 	}
 	}
 	sim = exp(sim);
+	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
 	return sim;
 }

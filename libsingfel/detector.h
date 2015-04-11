@@ -134,13 +134,14 @@ public:
 	static double get_center_x();
 	static void set_center_y(double);
 	static double get_center_y();
-	void set_pixelMap(std::string);
+	void set_pixelMap(std::string badpixelmap);
 	arma::uvec get_goodPixelMap();
 	arma::uvec get_badPixelMap();
 	void apply_badPixels();
 	static void apply_badPixels(arma::fmat*);	
 	static void init_dp(beam::CBeam *beam);
 	static void set_param(Packet*);
+	void readGeomFile(string geomFile);
 protected:
 
 private:
