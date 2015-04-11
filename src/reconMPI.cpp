@@ -42,6 +42,7 @@ using namespace diffraction;
 using namespace toolbox;
 
 const int master = 0;
+const int lenDPTAG = 4;
 
 #define MODELTAG 1	// mySlices matrix
 #define DPTAG 2	// diffraction pattern
@@ -57,8 +58,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
                          fcube* myRot, CDetector* det, fcube* myIntensity, \
                          fcube* myWeight, int numImages, int numSlices, \
                          int iter);
-static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
-                        int iter);
+static void slave_recon(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 static int expansion(opt::variables_map vm, arma::fcube* myRot, \
                      arma::fcube* myIntensity, CDetector* det, int numSlices, \
@@ -79,7 +79,7 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, \
                           CDetector* det, fvec* normCondProb, \
                           uvec* candidatesInd);
 void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, \
-                      uvec* numJobsForEachSlave, int expansionInd);
+                      uvec* numJobsForEachSlave, int expansionInd, int iter);
 void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, \
                             uvec* numJobsForEachSlave, fvec* condProb);
 void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, \
@@ -151,9 +151,6 @@ int main( int argc, char* argv[] ){
 
 		// diffraction geometry needs the wavelength
 		det.init_dp(&beam);
-		
-		const int px = det.get_numPix_x();	// number of pixels in x
-		const int py = det.get_numPix_y();	// number of pixels in y
 
 		// optionally display resolution
 		displayResolution(&det,&beam);
@@ -179,21 +176,28 @@ int main( int argc, char* argv[] ){
 	} // end of master
 
 	world.barrier();
-	
 	// Main iteration
-	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
-		if (world.rank() == master) {
+	if (world.rank() == master) {
+		for (int iter = startIter; iter < startIter+numIterations; iter++) {
 			int numImagesNow = numImages[iter];
 			int numSlicesNow = numSlices[iter];
 			fcube myRot(3,3,numSlicesNow);
 			cout << "***** ITER " << iter << " *****" << endl;
 			generateUniformRotations(rotationAxis, numSlicesNow, &myRot);
 			master_recon(comm, vm, &myRot, &det, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
-		} else {
-			slave_recon(comm, vm, iter);
 		}
-		world.barrier();
+	} else {
+		slave_recon(comm, vm); // slaves keep on running
 	}
+	
+	float msg[1];
+	if (world.rank() == master) {
+		int numProcesses = world.size();
+		for (int rank = 1; rank < numProcesses; ++rank) {
+			comm->send(rank, DIETAG, msg, 1);
+		}
+	}
+	
   	return 0;
 }
 
@@ -214,6 +218,7 @@ void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRo
 		_myRot.slice(i) = myR;
 	}
 }
+
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
 	string numCandidatesStr = vm["numCandidates"].as<string>();
 	ivec numCandidates = str2ivec(numCandidatesStr);
@@ -224,7 +229,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 
 	wall_clock timerMaster;
 
-  	int rank, numProcesses, numSlaves;
+  	int rank, numProcesses, numSlaves, status;
   	fvec quaternion;
 
 	numProcesses = comm->size();
@@ -233,53 +238,51 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// ########### EXPANSION ##############
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
-
-	expansion(vm, myRot, myIntensity, det, numSlices, iter);
-	
+	status = expansion(vm, myRot, myIntensity, det, numSlices, iter);
+	assert(status==0);
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 
 	// ########### MAXIMIZATION ##############	
 	cout << "Start maximization" << endl;
 	timerMaster.tic();
-
-	maximization(comm, vm, det, numSlaves, numProcesses, numCandidates(iter), numImages, numSlices, iter);
-
+	status = maximization(comm, vm, det, numSlaves, numProcesses, \
+	                      numCandidates(iter), numImages, numSlices, iter);
+	assert(status==0);
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
 	// ########### COMPRESSION ##############
 	cout << "Start compression" << endl;
 	timerMaster.tic();
-
-	compression(vm, myIntensity, myWeight, det, myRot, numSlices, iter);
-
+	status = compression(vm, myIntensity, myWeight, det, myRot, numSlices, \
+	                     iter);
+	assert(status==0);
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	
 	// ########### Save diffraction volume ##############
 	cout << "Saving diffraction volume..." << endl;
-	timerMaster.tic();
-
-	saveDiffractionVolume(vm, myIntensity, myWeight, iter);
-
-	cout << "Save time: " << timerMaster.toc() <<" seconds."<<endl;
-
+	status = saveDiffractionVolume(vm, myIntensity, myWeight, iter);
+	assert(status==0);
 	// ########### Reset workers ##############
-  	// Tell all the slaves to exit by sending an empty message with the DIETAG.
+  	// Tell all the slaves to exit
+  	/*
   	float msg[1];
 	for (rank = 1; rank < numProcesses; ++rank) {
 		comm->send(rank, DIETAG, msg, 1);
 	}
-
+	*/
 	cout << "Done iteration: " << iter << endl;
 }
 
-static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter) {
-//wall_clock timer;	
+static void slave_recon(mpi::communicator* comm, opt::variables_map vm) {
+wall_clock timer;
+
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
 	int useFileList = vm["useFileList"].as<int>();
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
+	
 	fvec gaussianStdDev;
 	bool useGaussianProb = false;
 	if (vm.count("gaussianStdDev")) {
@@ -289,22 +292,18 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	}
 	int numChunkData = 0;
 	boost::mpi::status status;
-	// Expansion related variables
-	fvec quaternion(4);
 	// Maximization related variables
-	fmat diffraction = zeros<fmat>(volDim,volDim);
 	fvec condProb; // conditional probability
-	fmat imgRep;
 	uvec goodpixmap;
 	fmat myDP;
-	float msg[3];
+	float msg[lenDPTAG];
 	fcube modelDPnPixmap; 	// first slice: expansion slice
 							// second slice: good pixel map
 	while (1) {
 
 		// Receive a message from the master
 		/////////////////////////////////////////////////////////
-    	status = comm->recv(master, boost::mpi::any_tag, msg, 3);
+    	status = comm->recv(master, boost::mpi::any_tag, msg, lenDPTAG);
 		/////////////////////////////////////////////////////////   		
 
     	// Calculate least squared error
@@ -312,6 +311,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
     		int startInd = (int) msg[0];
     		int endInd = (int) msg[1];
     		int expansionInd = (int) msg[2];
+    		int iter = (int) msg[3];
 			numChunkData = endInd - startInd + 1; // number of measured data to process
 
 			// Initialize
@@ -330,6 +330,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 	    	///////////////
 			string line;
 			int counter = 0;
+			
 	    	for (int i = startInd; i <= endInd; i++) {
 				//Read in measured diffraction data
 				if (format == "S2E") {
@@ -354,6 +355,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 				condProb(counter) = float(val);
 				counter++;
 			}
+			
 			// Send back conditional probability to master
 			float* msgProb = &condProb[0];
 			/////////////////////////////////////////////////////
@@ -417,40 +419,30 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 	
-cout << "max msgProb length: " << max(numJobsForEachSlave) << endl;
-	
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
-cout << "expansionInd: " << expansionInd << endl;
 		// For each slice, each worker get a subset of measured data
-		sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, expansionInd);
+		sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, \
+		                 expansionInd, iter);
 
-//timer.tic();
-		//TODO: Time accumulation. May need to write random access accumulator
 		// Accumulate conditional probabilities for each expansion slice
 		receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, &myProb);
 		
-//cout << "Master: Received all probtags " <<timer.toc()<<endl;
-
 		if (saveCondProb) {
 			saveCondProb2File(vm, iter, expansionInd, &myProb);
 		}
-//timer.tic();
-		//TODO: Time generating new weighted expansion slice
-		// Pick top candidates
 		
 		if (useGaussianProb) {
 			normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
+		} else {
+			// TODO: There must be a default option
 		}
-cout << "normVal: " << normCondProb << endl;
+
 		// Update expansion slice
 		updateExpansionSlice(vm, &updatedSlice, det, &normCondProb, &candidatesInd);
 		
-//cout << "Master generates new expansion slice " <<timer.toc()<<endl;
-//timer.tic();
+		// Save updated expansion slice
 		saveExpansionUpdate(vm, &updatedSlice, iter, expansionInd);
-
-//cout << "Master save expansion slice " <<timer.toc()<<endl;
 	}
 	return 0;
 }
@@ -577,7 +569,7 @@ void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uv
 // 2) End index of measured diffraction pattern
 // 3) Index of expansion slice
 ////////////////////////////////////////////
-void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, int expansionInd) {
+void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* numJobsForEachSlave, int expansionInd, int iter) {
 	uvec& _numJobsForEachSlave = numJobsForEachSlave[0];
 	
 	int startInd = 0;
@@ -585,10 +577,11 @@ void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* nu
 	for (int rank = 1; rank < numProcesses; ++rank) {
 		endInd = startInd + _numJobsForEachSlave(rank-1) - 1;
 		fvec id;
-		id << startInd << endInd << expansionInd << endr;
+		id << startInd << endInd << expansionInd << iter << endr; // number of elements == lenDPTAG
+		assert(id.n_elem == lenDPTAG);
 		float* id1 = &id[0];
 		////////////////////////////////
-		comm->send(rank, DPTAG, id1, id.n_elem); // send to slave
+		comm->send(rank, DPTAG, id1, lenDPTAG); // send to slave
 		////////////////////////////////
 		startInd += _numJobsForEachSlave(rank-1);
 	}
@@ -611,7 +604,6 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uv
 			currentInd++;
 		}
 	}
-	cout << "currentInd: " << currentInd << endl;
 }
 
 void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* myProb) {
