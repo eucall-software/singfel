@@ -56,9 +56,9 @@ const int msgLength = 2000;
 #define CHUNKTAG 8
 #define PROBTAG 9
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
-                         fcube* myRot, fmat* pix, uvec* goodpix, float pix_max,\
-                         fcube* myIntensity, fcube* myWeight, int numImages, \
-                         int numSlices, int iter);
+                         fcube* myRot, CDetector* det, fcube* myIntensity, \
+                         fcube* myWeight, int numImages, int numSlices, \
+                         int iter);
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
                         int iter);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
@@ -140,15 +140,11 @@ int main( int argc, char* argv[] ){
 	//TODO: check startIter+numIterations is less than length numImages
 	
 	fcube myIntensity, myWeight;
-	fmat pix;
-	float pix_max;
-	uvec goodpix;
+	CDetector det = CDetector();
 	
 	if (world.rank() == master) {
 		CBeam beam = CBeam();
 		beam.readBeamFile(beamFile);
-		
-		CDetector det = CDetector();
 		det.readGeomFile(geomFile);
 
 		// diffraction geometry needs the wavelength
@@ -156,10 +152,6 @@ int main( int argc, char* argv[] ){
 		
 		const int px = det.get_numPix_x();	// number of pixels in x
 		const int py = det.get_numPix_y();	// number of pixels in y
-
-		pix = det.pixSpace;						// pixel reciprocal space
-		pix_max = det.pixSpaceMax;				// max pixel reciprocal space
-		goodpix = det.get_goodPixelMap();
 
 		// optionally display resolution
 		displayResolution(&det,&beam);
@@ -214,7 +206,7 @@ int main( int argc, char* argv[] ){
 			
 					myR = CToolbox::quaternion2rot3D(quaternion);
 					active = 1;
-					CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
+					CToolbox::merge3D(&myDP, &myR, &myIntensity, &myWeight, &det, active, interpolate);
 			  	}
 				// Normalize here
 				CToolbox::normalize(&myIntensity,&myWeight);
@@ -256,7 +248,7 @@ int main( int argc, char* argv[] ){
 					myRot.slice(i) = myR;
 				}
   			}
-			master_recon(comm, vm, &myRot, &pix, &goodpix, pix_max, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
+			master_recon(comm, vm, &myRot, &det, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
 		} else {
 			slave_recon(comm, vm, iter);
 		}
@@ -265,7 +257,11 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
+
+	fmat pix = det->pixSpace;					// pixel reciprocal space
+	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
+	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
 
 	wall_clock timerMaster;
 
@@ -279,7 +275,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
 
-	expansion(vm, myRot, pix, goodpix, pix_max, myIntensity, numSlices, iter);
+	expansion(vm, myRot, &pix, &goodpix, pix_max, myIntensity, numSlices, iter);
 	
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -291,7 +287,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// Number of data candidates to update expansion slice
 	int numCandidates = 2;
 	//////////////////////
-	maximization(comm, vm, numSlaves, goodpix, numProcesses, numCandidates, numImages, numSlices, iter);
+	maximization(comm, vm, numSlaves, &goodpix, numProcesses, numCandidates, numImages, numSlices, iter);
 
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -299,7 +295,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start compression" << endl;
 	timerMaster.tic();
 
-	compression(vm, myIntensity, myWeight, pix, pix_max, myRot, numSlices, iter);
+	compression(vm, myIntensity, myWeight, &pix, pix_max, myRot, numSlices, iter);
 
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	

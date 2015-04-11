@@ -24,6 +24,7 @@ namespace opt = boost::program_options;
 using namespace std;
 using namespace arma;
 using namespace toolbox;
+using namespace detector;
 
 #define MODELTAG 1	// mySlices matrix
 #define DPTAG 2	// diffraction pattern
@@ -787,10 +788,12 @@ void CToolbox::normalize(fcube *myIntensity1, fcube *myWeight1) {
 // Insert a Ewald's slice into a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
-    fmat& pix = myPoints[0];
+void CToolbox::merge3D(fmat *myValue, fmat *myRot, fcube *myIntensity, fcube *myWeight, CDetector* det, int active, string interpolate ) {
     fmat& myR = myRot[0];
-
+	
+	fmat pix = det->pixSpace;					// pixel reciprocal space
+	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
+	uvec goodpix = det->get_goodPixelMap();		// good detector pixels		
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
@@ -801,9 +804,9 @@ void CToolbox::merge3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
         pixRot = trans(pixRot);  
     }
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        interp_linear3D(myValue,&pixRot,goodpix,myIntensity,myWeight);
+        interp_linear3D(myValue,&pixRot,&goodpix,myIntensity,myWeight);
     } else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
-        interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
+        interp_nearestNeighbor(myValue,&pixRot,&goodpix,myIntensity,myWeight);
     }
 }
 

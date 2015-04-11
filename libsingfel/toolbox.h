@@ -60,7 +60,9 @@ public:
 	static void interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void insert_slice(arma::fcube*, arma::fmat*, arma::fcube*, arma::fcube*);
 	static void interp_nearestNeighbor(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
-	static void merge3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, arma::fcube*, int active = 0, std::string interpolate="nearest");
+	static void merge3D(arma::fmat* DP, arma::fmat* R, arma::fcube* volume, \
+	                    arma::fcube* weights, detector::CDetector* det, \
+	                    int active = 0, std::string interpolate="nearest");
 	static void merge3D(arma::fcube*, arma::fmat*, arma::fmat*, float, arma::fcube*, arma::fcube*, int active = 0, std::string interpolate="nearest");
 		
 	static void normalize(arma::fcube*, arma::fcube*);
