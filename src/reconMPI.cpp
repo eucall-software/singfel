@@ -63,8 +63,8 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
                         int iter);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 static int expansion(opt::variables_map vm, arma::fcube* myRot, \
-                     arma::fcube* myIntensity, CDetector* det, \
-                     int numSlices, int iter);
+                     arma::fcube* myIntensity, CDetector* det, int numSlices, \
+                     int iter);
 static int maximization(mpi::communicator* comm, opt::variables_map vm, \
                         CDetector* det, int numSlaves, int numProcesses, \
                         int numCandidates, int numImages, int numSlices, \
@@ -483,7 +483,6 @@ cout << "expansionInd: " << expansionInd << endl;
 //timer.tic();
 		//TODO: Time generating new weighted expansion slice
 		// Pick top candidates
-cout << "sort start" << endl;
 		
 		if (useGaussianProb) {
 			normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
