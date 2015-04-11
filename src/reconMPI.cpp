@@ -86,8 +86,10 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, \
                             uvec* numJobsForEachSlave, fvec* condProb);
 void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, \
                        fvec* myProb);
-void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, \
-                         fmat* updatedSlice);
+void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, \
+                        int ind);
+void saveExpansionUpdate(opt::variables_map vm, fmat* updatedSlice, int iter, \
+                         int expansionInd);
 void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, \
                         fcube* myDPnPixmap);
 void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, \
@@ -416,9 +418,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 //TODO: Move expansion, maximization and compression to reconMPI.cpp (remove #define TAGs)
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
 int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, CDetector* det, int numSlices, int iter) {
-
 	int volDim = vm["volDim"].as<int>();
-	string output = vm["output"].as<string>();
 
 	int active = 1;
 	string interpolate = "linear";
@@ -433,16 +433,8 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, CDetector
 		// Get rotation matrix
 		myR = myRot->slice(i);
 		CToolbox::slice3D(&myDPnPixmap, &myR, myIntensity, det, active, interpolate);
-		
 		// Save expansion slice to disk
-		std::stringstream sstm;
-		sstm << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << i << ".dat";
-		string outputName = sstm.str();
-		myDPnPixmap.slice(0).save(outputName,raw_ascii);
-		std::stringstream sstm1;
-		sstm1 << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << i << ".dat";
-		string outputName1 = sstm1.str();
-		myDPnPixmap.slice(1).save(outputName1,raw_ascii);
+		saveExpansionSlice(vm, &myDPnPixmap, iter, i);
 	}
 
 	return 0;
@@ -504,7 +496,7 @@ cout << "normVal: " << normCondProb << endl;
 		
 //cout << "Master generates new expansion slice " <<timer.toc()<<endl;
 //timer.tic();
-		saveExpansionUpdate(vm, iter, expansionInd, &updatedSlice);
+		saveExpansionUpdate(vm, &updatedSlice, iter, expansionInd);
 
 //cout << "Master save expansion slice " <<timer.toc()<<endl;
 	}
@@ -680,7 +672,21 @@ void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* 
 	myProb->save(outputName,raw_ascii);
 }
 
-void saveExpansionUpdate(opt::variables_map vm, int iter, int expansionInd, fmat* updatedSlice) {
+void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, int ind) {
+	string output = vm["output"].as<string>();
+
+	std::stringstream ss;
+	string filename;
+	ss << output << "/expansion/iter" << iter << "/expansion_" << setfill('0') << setw(7) << ind << ".dat";
+	filename = ss.str();
+	myDPnPixmap->slice(0).save(filename,raw_ascii);
+	ss.str("");
+	ss << output << "/expansion/iter" << iter << "/expansionPixmap_" << setfill('0') << setw(7) << ind << ".dat";
+	filename = ss.str();
+	myDPnPixmap->slice(1).save(filename,raw_ascii);
+}
+
+void saveExpansionUpdate(opt::variables_map vm, fmat* updatedSlice, int iter, int expansionInd) {
 	string output = vm["output"].as<string>();
 		
 	string filename;
