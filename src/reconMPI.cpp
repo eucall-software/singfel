@@ -182,36 +182,8 @@ int main( int argc, char* argv[] ){
 		}
 	
 			if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
-				cout << "Randomly merging diffraction volume..." << endl;
-				// Setup initial diffraction volume by merging randomly
-				// rotationAxis determines the random nature of the angles
-				for (int r = 0; r < numImages[startIter]; r++) {
-				  	// Get image
-				  	if (format == "S2E") {
-				  		std::stringstream sstm;
-				  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
-						filename = sstm.str();
-						myDP = hdf5readT<fmat>(filename,hdfField);
-				  	} else if (format == "list") {
-				  		string line;
-				  		std::getline(infile, line);
-				  		myDP = load_asciiImage(line);
-				  	} else {
-					  	std::stringstream sstm;
-				  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".dat";
-						filename = sstm.str();
-						myDP = load_asciiImage(filename);
-					}
-			
-					// Get rotation matrix
-				  	quaternion = CToolbox::getRandomRotation(rotationAxis);
-			
-					myR = CToolbox::quaternion2rot3D(quaternion);
-					active = 1;
-					CToolbox::merge3D(&myDP, &myR, &myIntensity, &myWeight, &det, active, interpolate);
-			  	}
-				// Normalize here
-				CToolbox::normalize(&myIntensity,&myWeight);
+				cout << "Random diffraction volume..." << endl;
+				myIntensity.randu(volDim,volDim,volDim);
 		  	} else { // Load pre-existing diffraction volume
 				cout << "Loading diffraction volume..." << endl;
 				for (int i = 0; i < volDim; i++) {
