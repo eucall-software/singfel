@@ -63,14 +63,14 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, \
                         int iter);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 static int expansion(opt::variables_map vm, arma::fcube* myRot, \
-                     arma::fmat* pix, arma::uvec* goodpix, float pix_max, \
-                     arma::fcube* myIntensity, int numSlices, int iter);
+                     arma::fcube* myIntensity, CDetector* det, \
+                     int numSlices, int iter);
 static int maximization(mpi::communicator* comm, opt::variables_map vm, \
-                        int numSlaves, arma::uvec* goodpix, int numProcesses, \
+                        CDetector* det, int numSlaves, int numProcesses, \
                         int numCandidates, int numImages, int numSlices, \
                         int iter);
 static int compression(opt::variables_map vm, fcube* myIntensity, \
-                       fcube* myWeight, fmat* pix, float pix_max, fcube* myRot,\
+                       fcube* myWeight, CDetector* det, fcube* myRot,\
                        int numSlices, int iter);
 static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, \
                                  fcube* myWeight, int iter);
@@ -78,7 +78,7 @@ uvec numJobsPerSlave(int numImages, int numSlaves);
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, \
                        uvec* candidatesInd);
 void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, \
-                          uvec* goodpix, fvec* normCondProb, \
+                          CDetector* det, fvec* normCondProb, \
                           uvec* candidatesInd);
 void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, \
                       uvec* numJobsForEachSlave, int expansionInd);
@@ -275,7 +275,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start expansion" << endl;
 	timerMaster.tic();
 
-	expansion(vm, myRot, &pix, &goodpix, pix_max, myIntensity, numSlices, iter);
+	expansion(vm, myRot, myIntensity, det, numSlices, iter);
 	
 	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -287,7 +287,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// Number of data candidates to update expansion slice
 	int numCandidates = 2;
 	//////////////////////
-	maximization(comm, vm, numSlaves, &goodpix, numProcesses, numCandidates, numImages, numSlices, iter);
+	maximization(comm, vm, det, numSlaves, numProcesses, numCandidates, numImages, numSlices, iter);
 
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -295,7 +295,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start compression" << endl;
 	timerMaster.tic();
 
-	compression(vm, myIntensity, myWeight, &pix, pix_max, myRot, numSlices, iter);
+	compression(vm, myIntensity, myWeight, det, myRot, numSlices, iter);
 
 	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 	
@@ -415,7 +415,7 @@ static void slave_recon(mpi::communicator* comm, opt::variables_map vm, int iter
 
 //TODO: Move expansion, maximization and compression to reconMPI.cpp (remove #define TAGs)
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
-int expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, float pix_max, fcube* myIntensity, int numSlices, int iter) {
+int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, CDetector* det, int numSlices, int iter) {
 
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
@@ -432,7 +432,7 @@ int expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, flo
 		myDPnPixmap.zeros(volDim,volDim,2);
 		// Get rotation matrix
 		myR = myRot->slice(i);
-		CToolbox::slice3D(&myDPnPixmap, pix, goodpix, &myR, pix_max, myIntensity, active, interpolate);
+		CToolbox::slice3D(&myDPnPixmap, &myR, myIntensity, det, active, interpolate);
 		
 		// Save expansion slice to disk
 		std::stringstream sstm;
@@ -450,7 +450,7 @@ int expansion(opt::variables_map vm, fcube* myRot, fmat* pix, uvec* goodpix, flo
 
 // Maximization
 // goodpix: good pixel on a detector (used for beamstops and gaps)
-int maximization(boost::mpi::communicator* comm, opt::variables_map vm, int numSlaves, uvec* goodpix, int numProcesses, int numCandidates, int numImages, int numSlices, int iter) {
+int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetector* det, int numSlaves, int numProcesses, int numCandidates, int numImages, int numSlices, int iter) {
 
 	wall_clock timer;
 
@@ -500,7 +500,7 @@ cout << "sort start" << endl;
 		}
 cout << "normVal: " << normCondProb << endl;
 		// Update expansion slice
-		updateExpansionSlice(vm, &updatedSlice, goodpix, &normCondProb, &candidatesInd);
+		updateExpansionSlice(vm, &updatedSlice, det, &normCondProb, &candidatesInd);
 		
 //cout << "Master generates new expansion slice " <<timer.toc()<<endl;
 //timer.tic();
@@ -512,7 +512,8 @@ cout << "normVal: " << normCondProb << endl;
 }
 
 // Compression
-int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat* pix, float pix_max, fcube* myRot, int numSlices, int iter) {
+int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
+                CDetector* det, fcube* myRot, int numSlices, int iter) {
 
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
@@ -531,7 +532,7 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, fmat
 		// Get rotation matrix
 		getRotationMatrix(&myR, myRot, sliceInd);
 		// Merge into 3D diffraction volume
-		CToolbox::merge3D(&myDPnPixmap, pix, &myR, pix_max, myIntensity, myWeight, active, interpolate);
+		CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
 	}
 	// Normalize here
 	CToolbox::normalize(myIntensity, myWeight);
@@ -579,7 +580,7 @@ uvec numJobsPerSlave(int numImages, int numSlaves) {
 	return numJobsForEachSlave;
 }
 
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodpix, fvec* normCondProb, uvec* candidatesInd) {
+void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, CDetector* det, fvec* normCondProb, uvec* candidatesInd) {
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
@@ -587,6 +588,7 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 	
 	fmat& _updatedSlice = updatedSlice[0];
 	uvec& _candidatesInd = candidatesInd[0];
+	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
 	
 	int numCandidates = _candidatesInd.n_elem;
 	_updatedSlice.zeros(volDim,volDim);
@@ -597,13 +599,13 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 			// load measured diffraction pattern
 			loadDP(vm, _candidatesInd(i)+1, &myDP);
 			// calculate weighted image and add to updatedSlice
-			calculateWeightedImage(goodpix, normCondProb->at(i), updatedSlice, &myDP);
+			calculateWeightedImage(&goodpix, normCondProb->at(i), updatedSlice, &myDP);
 		}
 	} else if (format == "list") { //TODO: this needs testing
 		for (int i = 0; i < numCandidates; i++) {
 			load_readNthLine(vm, i, &myDP);
 			// calculate weighted image and add to updatedSlice
-			calculateWeightedImage(goodpix, normCondProb->at(i), updatedSlice, &myDP);
+			calculateWeightedImage(&goodpix, normCondProb->at(i), updatedSlice, &myDP);
 		}
 	}
 }

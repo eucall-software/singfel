@@ -813,11 +813,13 @@ void CToolbox::merge3D(fmat *myValue, fmat *myRot, fcube *myIntensity, fcube *my
 // Insert a Ewald's slice into a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::merge3D(fcube *myValue, fmat *myPoints, fmat *myRot, float pix_max, fcube *myIntensity, fcube *myWeight, int active, string interpolate ) {
-    fmat& pix = myPoints[0];
-    //cout << "pix: " << pix(0,0) << " " << pix(0,1) << " " << pix(0,2) << endl;
+void CToolbox::merge3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
+                       fcube *myWeight, CDetector* det, int active, \
+                       string interpolate ) {
     fmat& myR = myRot[0];
-    //myR.print("myR: ");
+
+	fmat pix = det->pixSpace;					// pixel reciprocal space
+	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
@@ -859,9 +861,12 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::slice3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, int active, string interpolate ) {
-    fmat& pix = myPoints[0];
+void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, CDetector* det, int active, string interpolate ) {
     fmat& myR = myRot[0];
+    
+    fmat pix = det->pixSpace;					// pixel reciprocal space
+	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
+	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
     fmat pixRot;
 	pixRot.zeros(pix.n_elem,3);
 	if (active == 1) {
@@ -873,7 +878,7 @@ void CToolbox::slice3D(fcube *myValue, fmat *myPoints, uvec *goodpix, fmat *myRo
     }
     //pixRot.print("pixRot: ");
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        extract_interp_linear3D(myValue,&pixRot,goodpix,myIntensity);
+        extract_interp_linear3D(myValue,&pixRot,&goodpix,myIntensity);
     }
 }
 
