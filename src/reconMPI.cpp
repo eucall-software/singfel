@@ -198,6 +198,7 @@ int main( int argc, char* argv[] ){
 }
 
 void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRot) {
+	assert(myRot);
 	fcube& _myRot = myRot[0];
 	
 	fmat myQuaternions;
@@ -785,8 +786,18 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
     }
 
 	if (comm->rank() == master) {
-		if (vm.count("input"))
-    		cout << "input: " << vm["input"].as<string>() << endl;
+		if (!vm.count("input")) {
+    		cout << "NOTICE: input field is required" << endl;
+    		exit(0);
+    	}
+		if (!vm.count("beamFile")) {
+    		cout << "NOTICE: beamFile field is required" << endl;
+    		exit(0);
+    	}
+    	if (!vm.count("geomFile")) {
+    		cout << "NOTICE: geomFile field is required" << endl;
+    		exit(0);
+    	}
 		//TODO: print all parameters
 	}
 

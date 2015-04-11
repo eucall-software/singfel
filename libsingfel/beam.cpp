@@ -145,6 +145,7 @@ void CBeam::set_param(Packet *pack){
 }
 
 void CBeam::readBeamFile(string beamFile) {
+	assert(beamFile != "");
 	/****** Beam ******/
 	// Parse the beam file
 	string line;
