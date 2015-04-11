@@ -929,6 +929,7 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 	return sim;
 }
 
+// Calculates Gaussian log-likelihood
 double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, float stdDev) {
 	fcube& _modelDPnPixmap = modelDPnPixmap[0];
 	fmat& _myDP = myDP[0];
@@ -937,18 +938,19 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, 
 	fmat goodpixmap = _modelDPnPixmap.slice(1);
 	int dim = _myDP.n_rows;
 	int p;
-	double sim = 1.0; // measure of similarity
+	double sim = 0.0; // measure of similarity
 	int numGoodpixels = 0;
 			
 	for(int a = 0; a < dim; a++) {
 	for(int b = 0; b < dim; b++) {
 		if (goodpixmap(b,a) == 1) {
 			p = a*dim + b;
-			sim *= exp( -pow(_myDP(p)-mySlice(p),2) / (2*pow(stdDev,2)) );
+			sim -= pow(_myDP(p)-mySlice(p),2) / (2*pow(stdDev,2));
 			numGoodpixels++;
 		}
 	}
 	}
+	sim = exp(sim);
 	sim /= numGoodpixels; // normalize by number of pixels compared
 	return sim;
 }

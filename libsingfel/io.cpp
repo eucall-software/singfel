@@ -584,6 +584,7 @@ void readGeomFile(GeomInfo* geomInfo, string geomFile) {
 	    }
 	}
 }
+
 void calculate_dp(Packet *pack){
 
 	wall_clock timer;

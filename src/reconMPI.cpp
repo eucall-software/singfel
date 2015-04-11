@@ -96,6 +96,7 @@ void load_readNthLine(opt::variables_map vm, int N, fmat* img);
 void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, \
                             fmat* myDP);
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
+void displayResolution(CDetector* det, CBeam* beam);
 
 int main( int argc, char* argv[] ){
 
@@ -171,13 +172,7 @@ int main( int argc, char* argv[] ){
 		pix_max = det.pixSpaceMax;
 		goodpix = det.get_goodPixelMap();
 
-		double theta = atan((px/2*pix_height)/geomInfo.d);
-		double qmax = 2/beam.get_wavelength()*sin(theta/2);
-		double dmin = 1/(2*qmax);
-		if (world.rank() == 0) {
-			cout << "max q to the edge: " << qmax*1e-10 << " A^-1" << endl;
-			cout << "Half period resolution: " << dmin*1e10 << " A" << endl;
-		}
+		displayResolution(&det,&beam);
 	
 		// Only Master initializes intensity volume
 		string filename;
@@ -605,7 +600,6 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, uvec* goodp
 	int volDim = vm["volDim"].as<int>();
 	
 	fmat& _updatedSlice = updatedSlice[0];
-	fvec& _normCondProb = normCondProb[0];
 	uvec& _candidatesInd = candidatesInd[0];
 	
 	int numCandidates = _candidatesInd.n_elem;
@@ -639,8 +633,6 @@ void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, uv
 	_candidatesInd = indices.subvec(0,numCandidates-1);
 	// Calculate norm cond prob
 	fvec candidatesVal(numCandidates);
-	// fill with smallest floating value to avoid dividing by zero
-	candidatesVal.fill(std::numeric_limits<float>::min());
 	for (int i = 0; i < numCandidates; i++) {
 		candidatesVal(i) = _condProb(_candidatesInd(i));
 	}
@@ -787,6 +779,18 @@ void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, fma
 	for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
 		_updatedSlice(*p) += weight * _myDP(*p);
 	}
+}
+
+void displayResolution(CDetector* det, CBeam* beam) {
+	double d = det->get_detector_dist();
+	double pix_height = det->get_pix_height();
+	int py = det->get_numPix_y();
+	
+	double theta = atan((py/2*pix_height)/d);
+	double qmax = 2/beam->get_wavelength()*sin(theta/2);
+	double dmin = 1/(2*qmax);
+	cout << "max q to the edge: " << qmax*1e-10 << " A^-1" << endl;
+	cout << "Half period resolution: " << dmin*1e10 << " A" << endl;
 }
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
