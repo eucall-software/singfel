@@ -839,7 +839,9 @@ void CToolbox::merge3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot, float pix_max, fcube *myIntensity, int active, string interpolate ) {
+void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, \
+                       fmat *myRot, float pix_max, fcube *myIntensity, \
+                       int active, string interpolate ) {
     fmat& pix = myPoints[0];
     fmat& myR = myRot[0];
     fmat pixRot;
@@ -861,7 +863,8 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, fmat *myRot
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, CDetector* det, int active, string interpolate ) {
+void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
+                       CDetector* det, int active, string interpolate ) {
     fmat& myR = myRot[0];
     
     fmat pix = det->pixSpace;					// pixel reciprocal space

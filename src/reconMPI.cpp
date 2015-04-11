@@ -260,7 +260,9 @@ int main( int argc, char* argv[] ){
 }
 
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
-
+	string numCandidatesStr = vm["numCandidates"].as<string>();
+	ivec numCandidates = str2ivec(numCandidatesStr);
+	
 	fmat pix = det->pixSpace;					// pixel reciprocal space
 	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
 	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
@@ -285,11 +287,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	cout << "Start maximization" << endl;
 	timerMaster.tic();
 
-	//////////////////////
-	// Number of data candidates to update expansion slice
-	int numCandidates = 2;
-	//////////////////////
-	maximization(comm, vm, det, numSlaves, numProcesses, numCandidates, numImages, numSlices, iter);
+	maximization(comm, vm, det, numSlaves, numProcesses, numCandidates(iter), numImages, numSlices, iter);
 
 	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
 
@@ -809,6 +807,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("numIterations", opt::value<int>(), "Number of iterations to perform from startIter")
         ("numImages", opt::value<string>(), "Number of measured diffraction patterns (Comma separated list)")
         ("numSlices", opt::value<string>(), "Number of Ewald slices in the expansion step (Comma separated list)")
+        ("numCandidates", opt::value<string>(), "Number of best fitting images to update expansion slice (Comma separated list)")
         ("volDim", opt::value<int>(), "Number of pixel along one dimension")
         ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
         ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
