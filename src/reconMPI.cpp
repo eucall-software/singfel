@@ -42,8 +42,6 @@ using namespace diffraction;
 using namespace toolbox;
 
 const int master = 0;
-const int msgLength = 2000;
-#define USE_CUDA 0
 
 #define MODELTAG 1	// mySlices matrix
 #define DPTAG 2	// diffraction pattern
@@ -161,46 +159,26 @@ int main( int argc, char* argv[] ){
 		displayResolution(&det,&beam);
 	
 		// Only Master initializes intensity volume
-		string filename;
-  		fmat myDP(py,px);
-	  	fmat myR;
-	  	myR.zeros(3,3);
 		myWeight.zeros(volDim,volDim,volDim);
 		myIntensity.zeros(volDim,volDim,volDim);
 
 		timerMaster.tic();
-		
-		int active;
-		string interpolate = "linear";
-		
-		fmat rot3D(3,3);
-		fvec u(3);
-		fvec quaternion(4);
 	
-		std::ifstream infile;
-		if (format == "list") {
-			cout << "Using image list: " << input << endl;
-			infile.open(input.c_str());
-		}
-	
-			if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
-				cout << "Random diffraction volume..." << endl;
-				myIntensity.randu(volDim,volDim,volDim);
-		  	} else { // Load pre-existing diffraction volume
-				cout << "Loading diffraction volume..." << endl;
-				for (int i = 0; i < volDim; i++) {
-					std::stringstream sstm;
-					sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
-					string outputName = sstm.str();
-					myIntensity.slice(i) = load_asciiImage(outputName);
-				}
-			} // end of intial diffraction volume
+		if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
+			cout << "Random diffraction volume..." << endl;
+			myIntensity.randu(volDim,volDim,volDim);
+		} else { // Load pre-existing diffraction volume
+			cout << "Loading diffraction volume..." << endl;
+			for (int i = 0; i < volDim; i++) {
+				std::stringstream sstm;
+				sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
+				string outputName = sstm.str();
+				myIntensity.slice(i) = load_asciiImage(outputName);
+			}
+		} // end of intial diffraction volume
 	} // end of master
 
 	world.barrier();
-	if (world.rank() == master) {
-		cout << "Initialization time: " << timerMaster.toc() <<" seconds."<<endl;
-	}
 	
 	// Main iteration
 	for (int iter = startIter; iter < startIter+numIterations; iter++) { // number of iterations
@@ -285,9 +263,9 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 
 	// ########### Reset workers ##############
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-  	float msg1[1];
+  	float msg[1];
 	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, msg1, 1);
+		comm->send(rank, DIETAG, msg, 1);
 	}
 
 	cout << "Done iteration: " << iter << endl;
@@ -609,7 +587,7 @@ void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, uvec* nu
 		id << startInd << endInd << expansionInd << endr;
 		float* id1 = &id[0];
 		////////////////////////////////
-		comm->send(rank, DPTAG, id1, 3); // send to slave
+		comm->send(rank, DPTAG, id1, id.n_elem); // send to slave
 		////////////////////////////////
 		startInd += _numJobsForEachSlave(rank-1);
 	}
