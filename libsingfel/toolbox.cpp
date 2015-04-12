@@ -941,7 +941,7 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, 
 	fmat goodpixmap = _modelDPnPixmap.slice(1);
 	int dim = _myDP.n_rows;
 	int p;
-	double sim = 0.0; // measure of similarity
+	double sim = 0.; // measure of similarity
 	int numGoodpixels = 0;
 			
 	for(int a = 0; a < dim; a++) {
@@ -962,6 +962,7 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, 
 		cout << "googpixmap: " << goodpixmap;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;
+		sim = 0.;
 	}
 	return sim;
 }
