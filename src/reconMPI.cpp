@@ -100,6 +100,7 @@ void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
 void displayResolution(CDetector* det, CBeam* beam);
 void generateUniformRotations(string rotationAxis, int numSlicesNow, \
                               fcube* myRot);
+void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
 
 int main( int argc, char* argv[] ){
 
@@ -419,7 +420,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 	
-	float lastPercentDone = 0;
+	int lastPercentDone = 0;
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
 		// For each slice, each worker get a subset of measured data
@@ -446,18 +447,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 		saveExpansionUpdate(vm, &updatedSlice, iter, expansionInd);
 		
 		// Display status
-		float percentDone = (expansionInd+1)*100./numSlices;
-		if (percentDone > lastPercentDone+1) {
-			lastPercentDone = percentDone;
-			for (int i = 0; i < 100; i++) {
-				if (i <= percentDone) {
-					cout << "*";
-				} else {
-					cout << "-";
-				}
-			}
-			cout << '\r';
-		}
+		displayStatusBar(expansionInd+1,numSlices,&lastPercentDone);
 	}
 	return 0;
 }
@@ -746,6 +736,21 @@ void displayResolution(CDetector* det, CBeam* beam) {
 	double dmin = 1/(2*qmax);
 	cout << "max q to the edge: " << qmax*1e-10 << " A^-1" << endl;
 	cout << "Half period resolution: " << dmin*1e10 << " A" << endl;
+}
+
+void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
+	int percentDone = round(numDone*100./totalJobs);
+	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
+		*lastPercentDone = percentDone;
+		for (int i = 0; i < 100; i++) {
+			if (i <= percentDone) {
+				cout << "*";
+			} else {
+				cout << "-";
+			}
+		}
+		cout << '\r';
+	}
 }
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
