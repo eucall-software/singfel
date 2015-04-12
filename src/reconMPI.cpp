@@ -65,8 +65,8 @@ static int expansion(opt::variables_map vm, arma::fcube* myRot, \
                      int iter);
 static int maximization(mpi::communicator* comm, opt::variables_map vm, \
                         CDetector* det, int numSlaves, int numProcesses, \
-                        int numCandidates, int numImages, int numSlices, \
-                        int iter);
+                        int numCandidates, int numImages, \
+                        int numSlices, int iter);
 static int compression(opt::variables_map vm, fcube* myIntensity, \
                        fcube* myWeight, CDetector* det, fcube* myRot,\
                        int numSlices, int iter);
@@ -101,6 +101,12 @@ void displayResolution(CDetector* det, CBeam* beam);
 void generateUniformRotations(string rotationAxis, int numSlicesNow, \
                               fcube* myRot);
 void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
+void getBestCandidateProb(fvec* normCondProb, fvec* candidateProb, \
+                           int expansionInd);
+void getGoodSlicesIndex(fvec* candidateProb, float percentile, \
+                        uvec* goodSlicesInd);
+void saveBestCandidateProb(opt::variables_map vm, fvec* candidateProb, int iter);
+void loadCandidateProb(opt::variables_map vm, int iter, fvec* candidateProb);
 
 int main( int argc, char* argv[] ){
 
@@ -221,14 +227,16 @@ void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRo
 }
 
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
-	string numCandidatesStr = vm["numCandidates"].as<string>();
-	ivec numCandidates = str2ivec(numCandidatesStr);
-	
-	fmat pix = det->pixSpace;					// pixel reciprocal space
-	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
-	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
 
 	wall_clock timerMaster;
+
+	string numCandidatesStr = vm["numCandidates"].as<string>();
+	ivec numCandidates = str2ivec(numCandidatesStr);
+	string justDo = "EMC";
+	if (vm.count("justDo")) {
+		justDo = vm["justDo"].as<string>();
+		boost::to_upper(justDo);
+	}
 
   	int rank, numProcesses, numSlaves, status;
   	fvec quaternion;
@@ -237,40 +245,37 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	numSlaves = numProcesses-1;
 
 	// ########### EXPANSION ##############
-	cout << "Start expansion" << endl;
-	timerMaster.tic();
-	status = expansion(vm, myRot, myIntensity, det, numSlices, iter);
-	assert(status==0);
-	cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
-
-	// ########### MAXIMIZATION ##############	
-	cout << "Start maximization" << endl;
-	timerMaster.tic();
-	status = maximization(comm, vm, det, numSlaves, numProcesses, \
-	                      numCandidates(iter), numImages, numSlices, iter);
-	assert(status==0);
-	cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
-
-	// ########### COMPRESSION ##############
-	cout << "Start compression" << endl;
-	timerMaster.tic();
-	status = compression(vm, myIntensity, myWeight, det, myRot, numSlices, \
-	                     iter);
-	assert(status==0);
-	cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
-	
-	// ########### Save diffraction volume ##############
-	cout << "Saving diffraction volume..." << endl;
-	status = saveDiffractionVolume(vm, myIntensity, myWeight, iter);
-	assert(status==0);
-	// ########### Reset workers ##############
-  	// Tell all the slaves to exit
-  	/*
-  	float msg[1];
-	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, msg, 1);
+	if (justDo == "EMC" || justDo == "E") {
+		cout << "Start expansion" << endl;
+		timerMaster.tic();
+		status = expansion(vm, myRot, myIntensity, det, numSlices, iter);
+		assert(status==0);
+		cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 	}
-	*/
+	// ########### MAXIMIZATION ##############
+	if (justDo == "EMC" || justDo == "M") {
+		cout << "Start maximization" << endl;
+		timerMaster.tic();
+		status = maximization(comm, vm, det, numSlaves, numProcesses, \
+		                      numCandidates(iter), numImages, \
+		                      numSlices, iter);
+		assert(status==0);
+		cout << "Maximization time: " << timerMaster.toc() <<" seconds."<<endl;
+	}
+	// ########### COMPRESSION ##############
+	if (justDo == "EMC" || justDo == "C") {
+		cout << "Start compression" << endl;
+		timerMaster.tic();
+		status = compression(vm, myIntensity, myWeight, det, myRot, numSlices, \
+			                 iter);
+		assert(status==0);
+		cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
+		// ########### Save diffraction volume ##############
+		cout << "Saving diffraction volume..." << endl;
+		status = saveDiffractionVolume(vm, myIntensity, myWeight, iter);
+		assert(status==0);
+		}
+
 	cout << "Done iteration: " << iter << endl;
 }
 
@@ -371,9 +376,9 @@ wall_clock timer;
 	} // end of while
 } // end of slave_recon
 
-//TODO: Move expansion, maximization and compression to reconMPI.cpp (remove #define TAGs)
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
-int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, CDetector* det, int numSlices, int iter) {
+int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
+              CDetector* det, int numSlices, int iter) {
 	int volDim = vm["volDim"].as<int>();
 
 	int active = 1;
@@ -398,7 +403,10 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, CDetector
 
 // Maximization
 // goodpix: good pixel on a detector (used for beamstops and gaps)
-int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetector* det, int numSlaves, int numProcesses, int numCandidates, int numImages, int numSlices, int iter) {
+int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
+                 CDetector* det, int numSlaves, int numProcesses, \
+                 int numCandidates, int numImages, \
+                 int numSlices, int iter) {
 
 	wall_clock timer;
 
@@ -416,7 +424,8 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 	fvec normCondProb;
 	uvec candidatesInd;
 	fmat updatedSlice;
-		
+	fvec candidateProb(numSlices);
+	
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 	
@@ -440,6 +449,9 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 			// TODO: There must be a default option
 		}
 
+		// get best candidate probability for each expansion slice
+		getBestCandidateProb(&normCondProb, &candidateProb, expansionInd);
+
 		// Update expansion slice
 		updateExpansionSlice(vm, &updatedSlice, det, &normCondProb, &candidatesInd);
 		
@@ -449,17 +461,26 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 		// Display status
 		displayStatusBar(expansionInd+1,numSlices,&lastPercentDone);
 	}
+	// save best candidate probabilities for all expansion slices
+	saveBestCandidateProb(vm, &candidateProb, iter);
+	
 	return 0;
 }
 
 // Compression
 int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
-                CDetector* det, fcube* myRot, int numSlices, int iter) {
+                CDetector* det, fcube* myRot, int numSlices, \
+                int iter) {
 
 	int volDim = vm["volDim"].as<int>();
-	string output = vm["output"].as<string>();
-	string format = vm["format"].as<string>();
-
+	bool usePercentile = false;
+	fvec percentile;
+	if (vm.count("percentile")) {
+		usePercentile = true;
+		string percentileStr = vm["percentile"].as<string>();
+		percentile = str2fvec(percentileStr);
+	}
+	
 	myWeight->zeros(volDim,volDim,volDim);
 	myIntensity->zeros(volDim,volDim,volDim);
 	int active = 1;
@@ -467,13 +488,30 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
 	fcube myDPnPixmap; 	// first slice: diffraction pattern
 						// second slice: good pixel map
 	fmat myR;
-	for (int sliceInd = 0; sliceInd < numSlices; sliceInd++) {
-		// Get updated expansion slice
-		loadUpdatedExpansion(vm, iter, sliceInd, &myDPnPixmap);
-		// Get rotation matrix
-		getRotationMatrix(&myR, myRot, sliceInd);
-		// Merge into 3D diffraction volume
-		CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+	uvec goodSlicesInd;
+	fvec candidateProb;
+	if (usePercentile) {
+		loadCandidateProb(vm, iter, &candidateProb);
+		getGoodSlicesIndex(&candidateProb, percentile(iter), &goodSlicesInd);
+		uvec::iterator a = goodSlicesInd.begin();
+		uvec::iterator b = goodSlicesInd.end();
+		for(uvec::iterator sliceInd = a; sliceInd != b; ++sliceInd) {
+			// Get updated expansion slice
+			loadUpdatedExpansion(vm, iter, *sliceInd, &myDPnPixmap);
+			// Get rotation matrix
+			getRotationMatrix(&myR, myRot, *sliceInd);
+			// Merge into 3D diffraction volume
+			CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+		}
+	} else {
+		for (int sliceInd = 0; sliceInd < numSlices; sliceInd++) {
+			// Get updated expansion slice
+			loadUpdatedExpansion(vm, iter, sliceInd, &myDPnPixmap);
+			// Get rotation matrix
+			getRotationMatrix(&myR, myRot, sliceInd);
+			// Merge into 3D diffraction volume
+			CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+		}
 	}
 	// Normalize here
 	CToolbox::normalize(myIntensity, myWeight);
@@ -753,6 +791,44 @@ void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
 	}
 }
 
+// Used to decide how good each expansion update is
+void getBestCandidateProb(fvec* normCondProb, fvec* candidateProb, \
+                           int expansionInd) {
+	fvec& _normCondProb = normCondProb[0];
+	fvec& _candidateProb = candidateProb[0];
+	
+	_candidateProb(expansionInd) = max(_normCondProb);
+}
+
+void saveBestCandidateProb(opt::variables_map vm, fvec* candidateProb, int iter) {
+	string output = vm["output"].as<string>();
+	
+	string filename;
+	std::stringstream sstm;
+	sstm << output << "/maximization/iter" << iter << "/bestCandidateProb.dat";
+	filename = sstm.str();
+	candidateProb->save(filename,raw_ascii);
+}
+
+void loadCandidateProb(opt::variables_map vm, int iter, fvec* candidateProb) {
+	string output = vm["output"].as<string>();
+	
+	string filename;
+	std::stringstream sstm;
+	sstm << output << "/maximization/iter" << iter << "/bestCandidateProb.dat";
+	filename = sstm.str();
+	candidateProb->load(filename,raw_ascii);
+}
+
+void getGoodSlicesIndex(fvec* candidateProb, float percentile, uvec* goodSlicesInd) {
+	fvec& _candidateProb = candidateProb[0];
+	uvec& _goodSlicesInd = goodSlicesInd[0];
+	int numElem = _candidateProb.n_elem;
+	int numChosen = round(numElem * percentile/100.); //1000 * 0.8
+	uvec indices = sort_index(_candidateProb,"descend");
+	_goodSlicesInd = indices.subvec(0,numChosen-1);
+}
+
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
     // Constructing an options describing variable and giving it a
@@ -776,11 +852,13 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("numCandidates", opt::value<string>(), "Number of best fitting images to update expansion slice (Comma separated list)")
         ("volDim", opt::value<int>(), "Number of pixel along one dimension")
         ("startIter", opt::value<int>()->default_value(0), "Start iteration number used to index 2 vectors: numImages and numSlices (count from 0)")
-        ("initialVolume", opt::value<string>()->default_value("randomMerge"), "Absolute path to initial volume")
+        ("initialVolume", opt::value<string>()->default_value("randomStart"), "Absolute path to initial volume")
         ("format", opt::value<string>(), "Defines file format to use")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
         ("gaussianStdDev", opt::value<string>(), "Use Gaussian likelihood for maximization with the following standard deviations (Comma separated list)")
         ("saveCondProb", opt::value<bool>(), "Optionally save conditional probabilities")
+        ("justDo", opt::value<string>(), "Choose which E,M,C step to perform")
+        ("percentile", opt::value<string>(), "Top percentile expansion slices to use for compression (Comma separated list)")
         ("help", "produce help message")
     ;
 
