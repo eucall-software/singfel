@@ -27,16 +27,6 @@ using namespace arma;
 using namespace toolbox;
 using namespace detector;
 
-#define MODELTAG 1	// mySlices matrix
-#define DPTAG 2	// diffraction pattern
-#define DIETAG 3 // die signal
-#define SAVESLICESTAG 4 // save slices signal
-#define SAVELSETAG 5 // save LSE signal
-#define GOODPIXTAG 6 // goodpixelmap
-#define DONETAG 7 // done signal
-
-#define CHUNKTAG 8
-#define PROBTAG 9
 // Calculate magnitude of x,y,z
 mat CToolbox::mag(cube x){
 	x = pow(x,2);
