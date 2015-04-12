@@ -393,8 +393,6 @@ fmat load_asciiImage(string x){
 		cout << "Error: problem with loading file, " << x << endl;
 		exit(EXIT_FAILURE);
 	}
-	//cout << "myDP(0): " << B(0) << endl;
-	//cout << "myDP(5): " << B(5) << endl;
 	return B;
 }
 

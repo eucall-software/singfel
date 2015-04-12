@@ -419,6 +419,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 	
+	float lastPercentDone = 0;
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
 		// For each slice, each worker get a subset of measured data
@@ -443,6 +444,20 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, CDetecto
 		
 		// Save updated expansion slice
 		saveExpansionUpdate(vm, &updatedSlice, iter, expansionInd);
+		
+		// Display status
+		float percentDone = (expansionInd+1)*100./numSlices;
+		if (percentDone > lastPercentDone+1) {
+			lastPercentDone = percentDone;
+			for (int i = 0; i < 100; i++) {
+				if (i <= percentDone) {
+					cout << "*";
+				} else {
+					cout << "-";
+				}
+			}
+			cout << '\r';
+		}
 	}
 	return 0;
 }

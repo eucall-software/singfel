@@ -19,6 +19,7 @@
 
 #include <boost/program_options.hpp>
 #include <assert.h>
+#include <limits>
 
 namespace opt = boost::program_options;
 using namespace std;
@@ -965,6 +966,13 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, 
 	sim = exp(sim);
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
+	if (numGoodpixels == 0 || sim == std::numeric_limits<double>::infinity()) {
+		cout << "myDP: " << myDP;
+		cout << "mySlice: " << mySlice;
+		cout << "googpixmap: " << goodpixmap;
+		cout << "sim: " << sim << endl;
+		cout << "numGoodpixels: " << numGoodpixels << endl;
+	}
 	return sim;
 }
 
