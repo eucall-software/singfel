@@ -525,7 +525,8 @@ void CToolbox::extract_interp_linear3D(fcube *myValue, fmat *myPoints, uvec *pix
     
     fmat fxyz = pixRot - xyz;
     fmat cxyz = 1. - fxyz;
-    float x,y,z,fx,fy,fz,cx,cy,cz;
+    int x,y,z;
+    float fx,fy,fz,cx,cy,cz;
 	fcube& myIntensity = myIntensity1[0];
 	
 	uvec& goodpixmap = pixmap[0];
