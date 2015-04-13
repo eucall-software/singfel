@@ -353,13 +353,16 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			}
 
 			// Run prepHDF5
+			
+			int i = prepS2E(filename,outputName,configFile);
+			/*
 			string scriptName;
 			stringstream sstm2;
 			sstm2 << inputDir << "/prepHDF5.py";
 			scriptName = sstm2.str();
 			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
-			
+			*/
 			// Rotate single particle			
 			rot3D = CToolbox::quaternion2rot3D(quaternion);
 

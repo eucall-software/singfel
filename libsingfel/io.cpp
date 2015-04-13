@@ -697,6 +697,89 @@ double CIO::get_size(){
 	return size;
 }
 
+
+bool prepS2E(string filename,string outputName,string configFile){
+	H5File *file_in = new H5File( filename.c_str(),H5F_ACC_RDONLY);
+	H5File *file_out = new H5File( outputName.c_str(),H5F_ACC_TRUNC);
+	
+	Group* grp_hist = 				new Group( file_out->createGroup( "history" ));
+	Group* grp_hist_parent = 		new Group( file_out->createGroup( "history/parent" ));
+	Group* grp_hist_parent_detail = new Group( file_out->createGroup( "history/parent/detail" ));
+	int parent_name_size;
+	char* parent_name;
+	std::string::size_type tmpsa,tmpsb;
+	tmpsb=filename.rfind("/");
+	if (tmpsb==0){
+		tmpsa=0;
+		tmpsb=1;
+	}else{
+		tmpsa=filename.rfind("/",tmpsb-1);
+		tmpsa++;
+	}
+	//COPY PARENT NAME TO grp_hist_parent[name]
+	parent_name_size=tmpsb-tmpsa;
+	parent_name=new char[parent_name_size+3];
+	parent_name[0]='_';
+	memcpy(parent_name+1,filename.c_str()+tmpsa,parent_name_size);
+	parent_name[parent_name_size]='\0';
+	
+	StrType str_type(0, H5T_VARIABLE);
+	DataSpace att_space(H5S_SCALAR);
+	Attribute att = grp_hist_parent->createAttribute( "name", str_type, att_space );
+	att.write( str_type, parent_name);
+	
+	//COPY STUFF FROM "history/parent" to grp_hist_parent
+	//TBI
+	
+	//BROWSE objectname IN file_in OTHER THAN data OR history
+	////IF objectname IS DATASET: file_out["history/parent/detail/"+objectname]=group[objectname]
+	////IF objectname IS GROUP: COPY STUFF from "objectname" to file_out["history/parent/detail/" + objectname]
+	
+	//Create external link to parent's data
+    //file_out['history/parent/detail/data'] = h5py.ExternalLink(src,'/data')
+
+	//Create your own groups
+    Group* grp_data = new Group( file_out->createGroup( "data" ));
+    Group* grp_param = new Group( file_out->createGroup( "params" ));
+    grp_param = new Group( file_out->createGroup( "misc" ));
+    grp_param = new Group( file_out->createGroup( "info" ));
+    
+
+
+    //str_type = h5py.new_vlen(str)
+	// Interface version  
+    //dataset = file_out.create_dataset("version", (1,), dtype='f')
+    //dataset[...] = 0.1
+    //Populate /info
+    //dataset = file_out.create_dataset("info/package_version",(1,), dtype=str_type)
+    //data = ("SingFEL v0.1.0")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/contact",(2,), dtype=str_type)
+    //data = ("Name: Chunhong Yoon", "Email: chun.hong.yoon@desy.de")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/data_description",(1,), dtype=str_type)
+    //data = ("This dataset contains a diffraction pattern generated using SingFEL.")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/method_description",(1,), dtype=str_type)
+    //data = ("Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern. Finally, Poissonian noise is added to the diffraction pattern.")
+    //dataset[...] = data
+    //Populate /params
+    //dataset = file_out.create_dataset("params/info",(1,), dtype=str_type)
+    //data = open(config)
+    //dataset[...] = data.read()
+     
+    file_out->close();
+    file_in->close();
+	
+	
+    
+    delete grp_hist;
+    delete grp_hist;
+    delete grp_hist_parent;
+    delete grp_hist_parent_detail;
+	return true;
+}
+
 /*
 BOOST_PYTHON_MODULE(libio)
 {
