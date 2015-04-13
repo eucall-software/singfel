@@ -107,6 +107,7 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, \
                         uvec* goodSlicesInd);
 void saveBestCandidateProb(opt::variables_map vm, fvec* candidateProb, int iter);
 void loadCandidateProb(opt::variables_map vm, int iter, fvec* candidateProb);
+void loadInitVol(opt::variables_map vm, fcube* myIntensity);
 
 int main( int argc, char* argv[] ){
 
@@ -186,24 +187,6 @@ int main( int argc, char* argv[] ){
 	}
 	
   	return 0;
-}
-
-void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRot) {
-	assert(myRot);
-	fcube& _myRot = myRot[0];
-	
-	fmat myQuaternions;
-	fmat myR;
-	// Equal distribution of quaternions
-	if (rotationAxis == "y" || rotationAxis == "z") {
-		myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
-	} else {
-		myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
-	}
-	for (int i = 0; i < numSlicesNow; i++) {
-		myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
-		_myRot.slice(i) = myR;
-	}
 }
 
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
@@ -386,13 +369,8 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 			myIntensity->randu(volDim,volDim,volDim);
 		} else { // Load pre-existing diffraction volume
 			cout << "Loading diffraction volume..." << endl;
-			for (int i = 0; i < volDim; i++) {
-				std::stringstream sstm;
-				sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
-				string outputName = sstm.str();
-				myIntensity->slice(i) = load_asciiImage(outputName);
-			}
-		} // end of intial diffraction volume
+			loadInitVol(vm, myIntensity);
+		}
 	}
 	
 	// Slice diffraction volume and save to file
@@ -523,6 +501,24 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
 	// Normalize here
 	CToolbox::normalize(myIntensity, myWeight);
 	return 0;
+}
+
+void generateUniformRotations(string rotationAxis, int numSlicesNow, fcube* myRot) {
+	assert(myRot);
+	fcube& _myRot = myRot[0];
+	
+	fmat myQuaternions;
+	fmat myR;
+	// Equal distribution of quaternions
+	if (rotationAxis == "y" || rotationAxis == "z") {
+		myQuaternions = CToolbox::pointsOn1Sphere(numSlicesNow, rotationAxis);
+	} else {
+		myQuaternions = CToolbox::pointsOn4Sphere(numSlicesNow);
+	}
+	for (int i = 0; i < numSlicesNow; i++) {
+		myR = CToolbox::quaternion2rot3D(trans(myQuaternions.row(i)));
+		_myRot.slice(i) = myR;
+	}
 }
 
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd) {
@@ -834,6 +830,20 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, uvec* goodSlicesI
 	int numChosen = round(numElem * percentile/100.); //1000 * 0.8
 	uvec indices = sort_index(_candidateProb,"descend");
 	_goodSlicesInd = indices.subvec(0,numChosen-1);
+}
+
+void loadInitVol(opt::variables_map vm, fcube* myIntensity) {
+	string initialVolume = vm["initialVolume"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	
+	std::stringstream ss;
+	string filename;
+	for (int i = 0; i < volDim; i++) {
+		ss.str("");
+		ss << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myIntensity->slice(i) = load_asciiImage(filename);
+	}
 }
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
