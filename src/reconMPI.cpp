@@ -61,8 +61,8 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 static int expansion(opt::variables_map vm, arma::fcube* myRot, \
-                     arma::fcube* myIntensity, CDetector* det, int numSlices, \
-                     int iter);
+                     arma::fcube* myIntensity, fcube* myWeight, CDetector* det,\
+                     int numSlices, int iter);
 static int maximization(mpi::communicator* comm, opt::variables_map vm, \
                         CDetector* det, int numSlaves, int numProcesses, \
                         int numCandidates, int numImages, \
@@ -127,7 +127,6 @@ int main( int argc, char* argv[] ){
 	string geomFile = vm["geomFile"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	string format = vm["format"].as<string>();
-	string initialVolume = vm["initialVolume"].as<string>();
 	string rotationAxis = vm["rotationAxis"].as<string>();
 	int startIter = vm["startIter"].as<int>();
 	int numIterations = vm["numIterations"].as<int>();
@@ -161,25 +160,6 @@ int main( int argc, char* argv[] ){
 
 		// optionally display resolution
 		displayResolution(&det,&beam);
-	
-		// Only Master initializes intensity volume
-		myWeight.zeros(volDim,volDim,volDim);
-		myIntensity.zeros(volDim,volDim,volDim);
-
-		timerMaster.tic();
-	
-		if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
-			cout << "Random diffraction volume..." << endl;
-			myIntensity.randu(volDim,volDim,volDim);
-		} else { // Load pre-existing diffraction volume
-			cout << "Loading diffraction volume..." << endl;
-			for (int i = 0; i < volDim; i++) {
-				std::stringstream sstm;
-				sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
-				string outputName = sstm.str();
-				myIntensity.slice(i) = load_asciiImage(outputName);
-			}
-		} // end of intial diffraction volume
 	} // end of master
 
 	world.barrier();
@@ -248,7 +228,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	if (justDo == "EMC" || justDo == "E") {
 		cout << "Start expansion" << endl;
 		timerMaster.tic();
-		status = expansion(vm, myRot, myIntensity, det, numSlices, iter);
+		status = expansion(vm, myRot, myIntensity, myWeight, det, numSlices, iter);
 		assert(status==0);
 		cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -378,8 +358,17 @@ wall_clock timer;
 
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
 int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
-              CDetector* det, int numSlices, int iter) {
+              fcube* myWeight, CDetector* det, int numSlices, int iter) {
 	int volDim = vm["volDim"].as<int>();
+	string initialVolume;
+	if (vm.count("initialVolume")) {
+		initialVolume = vm["initialVolume"].as<string>();
+	}
+	int startIter = vm["startIter"].as<int>();
+	bool initVol = false;
+	if (startIter == iter) {
+		initVol = true;
+	}
 
 	int active = 1;
 	string interpolate = "linear";
@@ -387,6 +376,24 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 	myR.zeros(3,3);
 	fcube myDPnPixmap; 	// first slice: diffraction pattern
 						// second slice: good pixel map
+
+	if (initVol) {
+		myWeight->zeros(volDim,volDim,volDim);
+		myIntensity->zeros(volDim,volDim,volDim);
+	
+		if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
+			cout << "Random diffraction volume..." << endl;
+			myIntensity->randu(volDim,volDim,volDim);
+		} else { // Load pre-existing diffraction volume
+			cout << "Loading diffraction volume..." << endl;
+			for (int i = 0; i < volDim; i++) {
+				std::stringstream sstm;
+				sstm << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
+				string outputName = sstm.str();
+				myIntensity->slice(i) = load_asciiImage(outputName);
+			}
+		} // end of intial diffraction volume
+	}
 	
 	// Slice diffraction volume and save to file
 	for (int i = 0; i < numSlices; i++) {
