@@ -126,7 +126,6 @@ int main( int argc, char* argv[] ){
 	string input = vm["input"].as<string>();
 	string beamFile = vm["beamFile"].as<string>();
 	string geomFile = vm["geomFile"].as<string>();
-	int volDim = vm["volDim"].as<int>();
 	string format = vm["format"].as<string>();
 	string rotationAxis = vm["rotationAxis"].as<string>();
 	int startIter = vm["startIter"].as<int>();
@@ -201,7 +200,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 		boost::to_upper(justDo);
 	}
 
-  	int rank, numProcesses, numSlaves, status;
+  	int numProcesses, numSlaves, status;
   	fvec quaternion;
 
 	numProcesses = comm->size();
@@ -305,10 +304,7 @@ wall_clock timer;
 			  	} else if (format == "list") { // TODO: this needs testing
 				  	load_readNthLine(vm, i, &myDP);
 			  	} else {
-				  	std::stringstream sstm;
-			  		sstm << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << i+1 << ".dat";
-					string filename = sstm.str();
-					myDP = load_asciiImage(filename);
+				  	loadDP(vm, i+1, &myDP);
 				}
 
 				/////////////////////////////////////////////////////
@@ -719,17 +715,24 @@ void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* 
 
 void loadDP(opt::variables_map vm, int ind, fmat* myDP) {
 	string input = vm["input"].as<string>();
+	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	fmat& _myDP = myDP[0];
 	
 	_myDP.zeros(volDim,volDim);
+	string filename;
 	std::stringstream ss;
-	ss.str("");
-	ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
-	string filename = ss.str();
-	// Read in diffraction				
-	_myDP = hdf5readT<fmat>(filename,hdfField);
+	if (format == "S2E") {
+		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
+		filename = ss.str();
+		// Read in diffraction				
+		_myDP = hdf5readT<fmat>(filename,hdfField);
+	} else {
+		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".dat";
+		filename = ss.str();
+		_myDP = load_asciiImage(filename);
+	}
 }
 
 // Reads Nth line of a file containing names of diffraction patterns
