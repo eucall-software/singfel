@@ -110,9 +110,9 @@ uvec CDetector::get_badPixelMap(){
     return badpixmap;
 }
 
-void CDetector::set_pixelMap(string x){
+void CDetector::set_pixelMap(string badpixelmap){
 	fmat temp;
-	if (x.empty()) { // badpixelmap is not specified		
+	if (badpixelmap.empty()) { // badpixelmap is not specified		
 		if (py > 0 && px > 0) {
 			temp.zeros(py,px);
 		} else {
@@ -120,7 +120,7 @@ void CDetector::set_pixelMap(string x){
 			exit(0);
 		}
 	} else { // load badpixelmap
-		temp = load_asciiImage(x);
+		temp = load_asciiImage(badpixelmap);
 	}
 	badpixmap = find(temp == 1);
 	goodpixmap = find(temp == 0);
@@ -212,7 +212,7 @@ void CDetector::init_dp( beam::CBeam *beam ){
     float inc_res = (px-1)/(2*pixSpaceMax/sqrt(2));
     pixSpace = pixSpace * inc_res;
     pix_mod = sqrt(sum(pixSpace%pixSpace,1));		
-	pixSpaceMax = cx;
+	pixSpaceMax = cx; // FIXME: something fishy going on here 
 }
 
 void CDetector::set_param(Packet *x){
@@ -225,6 +225,46 @@ void CDetector::set_param(Packet *x){
 	px = x->px;
 	cx = ((double) px-1)/2;			// this can be user defined
 	cy = ((double) py-1)/2;			// this can be user defined
+}
+
+void CDetector::readGeomFile(string geomFile) {
+	/****** Detector ******/
+	// Parse the geom file
+	string line;
+	ifstream myGeomFile(geomFile.c_str());
+	while (getline(myGeomFile, line)) {
+		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
+			// line now contains a valid input  
+	        typedef boost::tokenizer<boost::char_separator<char> > Tok;
+	        boost::char_separator<char> sep(" ="); // default constructed
+	        Tok tok(line, sep);
+	        for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+	            if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
+	                string temp = *++tok_iter;
+	                d = atof(temp.c_str());
+	                break;
+	            } else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
+	                string temp = *++tok_iter;
+	                pix_width = atof(temp.c_str());
+	                pix_height = pix_width;
+	                break;
+	            } else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
+	                string temp = *++tok_iter;
+	                px = atof(temp.c_str());
+	                py = px;
+	                set_numPix(py,px);
+	                cx = ((double) px-1)/2;
+	                cy = ((double) py-1)/2;
+	                break;
+	            } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
+	                string temp = *++tok_iter;
+	                string badpixmap = temp;
+	                set_pixelMap(badpixmap);
+	                break;
+	            }
+	        }
+	    }
+	}	
 }
 
 #ifdef COMPILE_WITH_BOOST

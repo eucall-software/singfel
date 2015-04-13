@@ -144,6 +144,39 @@ void CBeam::set_param(Packet *pack){
 	update();
 }
 
+void CBeam::readBeamFile(string beamFile) {
+	assert(beamFile != "");
+	/****** Beam ******/
+	// Parse the beam file
+	string line;
+	ifstream myFile(beamFile.c_str());
+	while (getline(myFile, line)) {
+		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
+			// line now contains a valid input
+			cout << line << endl;
+			typedef boost::tokenizer<boost::char_separator<char> > Tok;
+			boost::char_separator<char> sep(" ="); // default constructed
+			Tok tok(line, sep);
+			for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
+			    if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
+			        string temp = *++tok_iter;
+			        photon_energy = atof(temp.c_str()); // photon energy to wavelength
+			        break;
+			    } else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
+			        string temp = *++tok_iter;
+			        n_phot = atof(temp.c_str()); // number of photons per pulse
+			        break;
+			    } else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
+			        string temp = *++tok_iter;
+			        double focus_xFWHM = atof(temp.c_str()); // focus radius
+			        break;
+			    }
+			}
+		}
+	}
+	update();
+}
+
 #ifdef COMPILE_WITH_BOOST
 	#include <boost/python.hpp>
 	using namespace boost::python;

@@ -53,15 +53,24 @@ public:
 	static arma::fmat pointsOn4Sphere(int numPts);
 	
 	static void extract_interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*);
-	static void extract_interp_linear3D(arma::fcube*, arma::fmat*, arma::uvec*, arma::fcube*);
+	static void extract_interp_linear3D(fcube *myValue, fmat *myPoints, \
+                                        uvec *pixmap, fcube *myIntensity, \
+                                        fcube *myWeight);
+	static bool isNullWeight(fcube* myWeight, int x, int y, int z);
 	static void slice3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, int active = 0, std::string interpolate="nearest");
-	static void slice3D(arma::fcube*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, int active = 0, std::string interpolate="nearest");
-		
+	static void slice3D(arma::fcube* DPnPixmap, arma::fmat* Rot, \
+	                    arma::fcube* volume, arma::fcube* weight, detector::CDetector* det, int active = 0, \
+	                    std::string interpolate="nearest");
 	static void interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void insert_slice(arma::fcube*, arma::fmat*, arma::fcube*, arma::fcube*);
 	static void interp_nearestNeighbor(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
-	static void merge3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, arma::fcube*, int active = 0, std::string interpolate="nearest");
-	static void merge3D(arma::fcube*, arma::fmat*, arma::fmat*, float, arma::fcube*, arma::fcube*, int active = 0, std::string interpolate="nearest");
+	static void merge3D(arma::fmat* DP, arma::fmat* R, arma::fcube* volume, \
+	                    arma::fcube* weights, detector::CDetector* det, \
+	                    int active = 0, std::string interpolate="nearest");
+	static void merge3D(arma::fcube* DPnPixmap, arma::fmat* R, \
+	                    arma::fcube* volume, arma::fcube* weights, \
+	                    detector::CDetector* det, int active = 0, \
+	                    std::string interpolate="nearest");
 		
 	static void normalize(arma::fcube*, arma::fcube*);
 	
