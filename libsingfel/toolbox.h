@@ -53,10 +53,13 @@ public:
 	static arma::fmat pointsOn4Sphere(int numPts);
 	
 	static void extract_interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*);
-	static void extract_interp_linear3D(arma::fcube*, arma::fmat*, arma::uvec*, arma::fcube*);
+	static void extract_interp_linear3D(fcube *myValue, fmat *myPoints, \
+                                        uvec *pixmap, fcube *myIntensity, \
+                                        fcube *myWeight);
+	static bool isNullWeight(fcube* myWeight, int x, int y, int z);
 	static void slice3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, int active = 0, std::string interpolate="nearest");
 	static void slice3D(arma::fcube* DPnPixmap, arma::fmat* Rot, \
-	                    arma::fcube* volume, detector::CDetector* det, int active = 0, \
+	                    arma::fcube* volume, arma::fcube* weight, detector::CDetector* det, int active = 0, \
 	                    std::string interpolate="nearest");
 	static void interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void insert_slice(arma::fcube*, arma::fmat*, arma::fcube*, arma::fcube*);

@@ -511,15 +511,18 @@ void CToolbox::extract_interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixm
 
 // Take an Ewald's slice from a diffraction volume
 // Rename: extract_slice
-void CToolbox::extract_interp_linear3D(fcube *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1) {
-    int mySize = myIntensity1->n_rows;
-    
-    fcube& myImage = myValue[0];
-    fmat mySlice = myImage.slice(0);
-    fmat myPixmap = myImage.slice(1);
-        
+void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
+                                       uvec *goodpixmap, fcube *myIntensity, \
+                                       fcube *myWeight) {      
     fmat& pixRot = myPoints[0];
+    uvec& _goodpixmap = goodpixmap[0]; // good detector pixels
+	fcube& _myIntensity = myIntensity[0];
+    fcube& _myDPnPixmap = myDPnPixmap[0]; 
     
+    int volDim = _myIntensity.n_rows;
+    fmat mySlice, myPixmap;
+    mySlice.zeros(volDim,volDim);
+    myPixmap.zeros(volDim,volDim);
     imat xyz;
 	xyz = conv_to<imat>::from(floor(pixRot));
     
@@ -527,23 +530,32 @@ void CToolbox::extract_interp_linear3D(fcube *myValue, fmat *myPoints, uvec *pix
     fmat cxyz = 1. - fxyz;
     int x,y,z;
     float fx,fy,fz,cx,cy,cz;
-	fcube& myIntensity = myIntensity1[0];
 	
-	uvec& goodpixmap = pixmap[0];
-	uvec::iterator a = goodpixmap.begin();
-    uvec::iterator b = goodpixmap.end();
+	// Check outliers
+	uvec::iterator a = _goodpixmap.begin();
+    uvec::iterator b = _goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+    	x = xyz(1,*p);
+		y = xyz(0,*p);
+		z = xyz(2,*p);
+		if (x < 0 || y < 0 || z < 0 || \
+		    x >= volDim-1 || y >= volDim-1 || z >= volDim-1)
+		    continue;
+		if (isNullWeight(myWeight,x,y,z)) continue;
+		// record which pixels have values
+		myPixmap(*p) = 1;
+		_myDPnPixmap.slice(1) = myPixmap;
+    }
+    // Calculate slice at valid photon count positions
+    uvec photonCountPos = find(myPixmap == 1);
+    a = photonCountPos.begin();
+    b = photonCountPos.end();
     for(uvec::iterator p=a; p!=b; ++p) {
 
 		x = xyz(1,*p);
 		y = xyz(0,*p);
 		z = xyz(2,*p);
 
-		if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
-		    continue;
-					
-		if (x < 0 || y < 0 || z < 0)
-			continue;	
-				
 		fx = fxyz(1,*p);
 		fy = fxyz(0,*p);
 		fz = fxyz(2,*p);
@@ -551,13 +563,24 @@ void CToolbox::extract_interp_linear3D(fcube *myValue, fmat *myPoints, uvec *pix
 		cy = cxyz(0,*p);
 		cz = cxyz(2,*p);
 
-		mySlice(*p) = cx*(cy*(cz*myIntensity(y,x,z) + fz*myIntensity(y,x,z+1)) + fy*(cz*myIntensity(y+1,x,z) + fz*myIntensity(y+1,x,z+1))) + fx*(cy*(cz*myIntensity(y,x+1,z) + fz*myIntensity(y,x+1,z+1)) + fy*(cz*myIntensity(y+1,x+1,z) + fz*myIntensity(y+1,x+1,z+1)));
+		mySlice(*p) = cx*(cy*(cz*_myIntensity(y,x,z) + fz*_myIntensity(y,x,z+1)) + fy*(cz*_myIntensity(y+1,x,z) + fz*_myIntensity(y+1,x,z+1))) + fx*(cy*(cz*_myIntensity(y,x+1,z) + fz*_myIntensity(y,x+1,z+1)) + fy*(cz*_myIntensity(y+1,x+1,z) + fz*_myIntensity(y+1,x+1,z+1)));
 
-		// record which pixels have values
-		myPixmap(*p) = 1;
-		myImage.slice(0) = mySlice;
-		myImage.slice(1) = myPixmap;
+		_myDPnPixmap.slice(0) = mySlice;
 	}
+}
+
+bool CToolbox::isNullWeight(fcube* myWeight, int x, int y, int z) {
+	fcube& _myWeight = myWeight[0];
+
+	bool result = false;
+	float val = 0;
+	val = _myWeight(y,x,z) * _myWeight(y,x,z+1) * _myWeight(y+1,x,z) \
+	     * _myWeight(y+1,x,z+1) * _myWeight(y,x+1,z) * _myWeight(y,x+1,z+1) \
+	     * _myWeight(y+1,x+1,z) * _myWeight(y+1,x+1,z+1);
+	if (val < datum::eps) {
+		result = true;
+	}
+	return result;
 }
 
 // Insert a Ewald's slice into a diffraction volume
@@ -856,7 +879,8 @@ void CToolbox::slice3D(fmat *myValue, fmat *myPoints, uvec *goodpix, \
 // active = 1: active rotation
 // interpolate = 1: trilinear
 void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
-                       CDetector* det, int active, string interpolate ) {
+                       fcube *myWeight, CDetector* det, int active, \
+                       string interpolate ) {
     fmat& myR = myRot[0];
     
     fmat pix = det->pixSpace;					// pixel reciprocal space
@@ -873,7 +897,7 @@ void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
     }
     //pixRot.print("pixRot: ");
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        extract_interp_linear3D(myValue,&pixRot,&goodpix,myIntensity);
+        extract_interp_linear3D(myValue,&pixRot,&goodpix,myIntensity,myWeight);
     }
 }
 

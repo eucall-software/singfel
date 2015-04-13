@@ -107,7 +107,7 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, \
                         uvec* goodSlicesInd);
 void saveBestCandidateProb(opt::variables_map vm, fvec* candidateProb, int iter);
 void loadCandidateProb(opt::variables_map vm, int iter, fvec* candidateProb);
-void loadInitVol(opt::variables_map vm, fcube* myIntensity);
+void loadInitVol(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
 
 int main( int argc, char* argv[] ){
 
@@ -245,9 +245,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm) {
 wall_clock timer;
 
-	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
-	int useFileList = vm["useFileList"].as<int>();
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
@@ -361,15 +359,13 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 						// second slice: good pixel map
 
 	if (initVol) {
-		myWeight->zeros(volDim,volDim,volDim);
-		myIntensity->zeros(volDim,volDim,volDim);
-	
 		if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
 			cout << "Random diffraction volume..." << endl;
 			myIntensity->randu(volDim,volDim,volDim);
+			myWeight->ones(volDim,volDim,volDim);
 		} else { // Load pre-existing diffraction volume
 			cout << "Loading diffraction volume..." << endl;
-			loadInitVol(vm, myIntensity);
+			loadInitVol(vm, myIntensity, myWeight);
 		}
 	}
 	
@@ -378,7 +374,7 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 		myDPnPixmap.zeros(volDim,volDim,2);
 		// Get rotation matrix
 		myR = myRot->slice(i);
-		CToolbox::slice3D(&myDPnPixmap, &myR, myIntensity, det, active, interpolate);
+		CToolbox::slice3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
 		// Save expansion slice to disk
 		saveExpansionSlice(vm, &myDPnPixmap, iter, i);
 	}
@@ -832,10 +828,12 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, uvec* goodSlicesI
 	_goodSlicesInd = indices.subvec(0,numChosen-1);
 }
 
-void loadInitVol(opt::variables_map vm, fcube* myIntensity) {
+void loadInitVol(opt::variables_map vm, fcube* myIntensity, fcube* myWeight) {
 	string initialVolume = vm["initialVolume"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	
+	myIntensity->zeros(volDim,volDim,volDim);
+	myWeight->zeros(volDim,volDim,volDim);
 	std::stringstream ss;
 	string filename;
 	for (int i = 0; i < volDim; i++) {
@@ -843,6 +841,10 @@ void loadInitVol(opt::variables_map vm, fcube* myIntensity) {
 		ss << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 		filename = ss.str();
 		myIntensity->slice(i) = load_asciiImage(filename);
+		ss.str("");
+		ss << initialVolume << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myWeight->slice(i) = load_asciiImage(filename);
 	}
 }
 
