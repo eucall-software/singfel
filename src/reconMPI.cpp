@@ -52,7 +52,7 @@ const int lenDPTAG = 4;
 #define GOODPIXTAG 6 // goodpixelmap
 #define DONETAG 7 // done signal
 
-#define CHUNKTAG 8
+#define CHUNKTAG 8 // TODO: Clean up unused TAGs
 #define PROBTAG 9
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
                          fcube* myRot, CDetector* det, fcube* myIntensity, \
