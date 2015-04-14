@@ -78,7 +78,7 @@ int main( int argc, char* argv[] ){
 
 	int active = 0;
 	string interpolate = "linear";
-	int lastPercentDone = 0;
+	float lastPercentDone = 0;
   	// ########### Save diffraction volume ##############
   	cout << "Merging diffraction volume..." << endl;
   	for (int i = 0; i < numImages; i++) {

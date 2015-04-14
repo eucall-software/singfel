@@ -32,7 +32,7 @@ public:
 		mNumber = n;
 	}
 
-	static void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
+	static void displayStatusBar(int numDone, int totalJobs, float* lastPercentDone);
 	static arma::mat mag(arma::cube);
 	static arma::fmat mag(arma::fcube);
 	//static arma::umat convert_to_poisson(arma::fmat);

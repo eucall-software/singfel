@@ -28,8 +28,9 @@ using namespace toolbox;
 using namespace detector;
 
 // Display status bar in the terminal
-void CToolbox::displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
-	int percentDone = round(numDone*100./totalJobs);
+void CToolbox::displayStatusBar(int numDone, int totalJobs, float* lastPercentDone) {
+	float percentDone = round(numDone*100./totalJobs);
+	// Check if percentDone increased by at least 1 percent since last time
 	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
 		*lastPercentDone = percentDone;
 		for (int i = 0; i < 100; i++) {

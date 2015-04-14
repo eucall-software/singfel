@@ -407,7 +407,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 	
-	int lastPercentDone = 0;
+	float lastPercentDone = 0;
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
 		// For each slice, each worker get a subset of measured data
