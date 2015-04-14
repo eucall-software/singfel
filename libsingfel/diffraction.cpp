@@ -12,9 +12,21 @@ fcube CDiffraction::f_hkl_list;
 CDiffraction::CDiffraction() {
 }
 
+void CDiffraction::displayResolution(detector::CDetector* det, beam::CBeam* beam) {
+	double d = det->get_detector_dist();
+	double pix_height = det->get_pix_height();
+	int py = det->get_numPix_y();
+	
+	double theta = atan((py/2*pix_height)/d);
+	double qmax = 2/beam->get_wavelength()*sin(theta/2);
+	double dmin = 1/(2*qmax);
+	cout << "max q to the edge: " << qmax*1e-10 << " A^-1" << endl;
+	cout << "Half period resolution: " << dmin*1e10 << " A" << endl;
+}
+
 double CDiffraction::calculate_Thomson(double ang) {
 // Should fix this to accept angles mu and theta
-	double re = 2.81793870e-15;			// classical electron radius (m)
+	const double re = 2.81793870e-15;			// classical electron radius (m)
 	double P = (1 + cos(ang))/2;
 	return pow(re,2) * P;	// Thomson scattering (m^2)
 }

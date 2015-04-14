@@ -804,6 +804,7 @@ void calculateWeightedImage(float weight, fcube* updatedSlice_Pixmap, fcube* myD
 	}
 }
 
+// Added to diffraction.cpp
 void displayResolution(CDetector* det, CBeam* beam) {
 	double d = det->get_detector_dist();
 	double pix_height = det->get_pix_height();
