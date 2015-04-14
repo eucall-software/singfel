@@ -670,7 +670,7 @@ void CToolbox::insert_slice(fcube *myDPnPixmap, fmat *pixRot, fcube *myIntensity
 	fcube& _myIntensity = myIntensity[0];
 	fcube& _myWeight = myWeight[0];
 	fmat myPhotons = myDPnPixmap->slice(0);
-	fmat myPixmap = myDPnPixmap->slice(1); // good detector pixels
+	fmat myPixmap = myDPnPixmap->slice(1); // photon count pixmap
 	
     int volDim = myPhotons.n_rows;
     
@@ -959,11 +959,17 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measu
 	fmat mySlice = _modelDPnPixmap.slice(0);
 	fmat photonCountPixmap = _modelDPnPixmap.slice(1); // photon count indices
 	fmat myDP = _measuredDPnPixmap.slice(0);
-	fmat detectorPixmap = _measuredDPnPixmap.slice(1); // good detector pixels
+	//fmat detectorPixmap = _measuredDPnPixmap.slice(1); // good detector pixels
 	double sim = 0.; // measure of similarity
 	int numGoodpixels;
+
+	//uvec phCmap = find(photonCountPixmap == 1);
+	//cout << "phCmap: " << phCmap.n_elem << endl;
+	//uvec dpmap = find(myDP > 0);
+	//cout << "dpmap: " << dpmap.n_elem << endl;
 	
-	uvec photonInd = find(photonCountPixmap == 1 && detectorPixmap == 1);
+	uvec photonInd = find(myDP > 0);
+	//cout << "photonInd: " << photonInd.n_elem << " " << photonInd << endl;
 	uvec::iterator a = photonInd.begin();
     uvec::iterator b = photonInd.end();
     for(uvec::iterator p=a; p!=b; ++p) {
@@ -973,10 +979,11 @@ double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measu
 	sim = exp(sim);
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
+	//cout << "sim: " << sim << endl;
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
-		cout << "myDP: " << myDP;
-		cout << "mySlice: " << mySlice;
+		//cout << "myDP: " << myDP;
+		//cout << "mySlice: " << mySlice;
 		cout << "photonInd: " << photonInd;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;

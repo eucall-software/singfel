@@ -75,8 +75,8 @@ static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, \
 uvec numJobsPerSlave(int numImages, int numSlaves);
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, \
                        uvec* candidatesInd);
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, \
-                          CDetector* det, fvec* normCondProb, \
+void updateExpansionSlice(opt::variables_map vm, fcube* updatedSlice_Pixmap, \
+                          fvec* normCondProb, \
                           uvec* candidatesInd);
 void sendJobsToSlaves(boost::mpi::communicator* comm, int numProcesses, \
                       uvec* numJobsForEachSlave, int expansionInd, int iter);
@@ -86,7 +86,7 @@ void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, \
                        fvec* myProb);
 void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, \
                         int ind);
-void saveExpansionUpdate(opt::variables_map vm, fmat* updatedSlice, int iter, \
+void saveExpansionUpdate(opt::variables_map vm, fcube* updatedSlice_Pixmap, int iter, \
                          int expansionInd);
 void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, \
                         fcube* myDPnPixmap);
@@ -94,7 +94,7 @@ void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, \
                           fcube* myDPnPixmap);
 void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap);
 void load_readNthLine(opt::variables_map vm, int N, fmat* img);
-void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, \
+void calculateWeightedImage(float weight, fcube* updatedSlice, \
                             fcube* myDPnPixmap);
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
 void displayResolution(CDetector* det, CBeam* beam);
@@ -289,14 +289,12 @@ wall_clock timer;
 	    	//////////////////////////
 			// Get expansion image
 			loadExpansionSlice(vm, iter, expansionInd, &modelDPnPixmap);
-					   
+
 			//TODO: Time reading of data
 	    	///////////////
 	    	// Read in data
 	    	///////////////
-			string line;
 			int counter = 0;
-			
 	    	for (int i = startInd; i <= endInd; i++) {
 				//Read in measured diffraction data
 				if (format == "S2E") {
@@ -306,7 +304,12 @@ wall_clock timer;
 			  	} else {
 				  	loadDPnPixmap(vm, i+1, &myDPnPixmap);
 				}
-
+/*if (expansionInd == 99 && i == endInd){
+cout << "imgInd: " << i+1 << endl;
+cout << "DPval: " << myDPnPixmap.slice(0) << endl;
+uvec mm = find(myDPnPixmap.slice(0)>0);
+cout << "myDP: " << mm.n_elem << " " << mm << endl;
+}*/
 				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
@@ -400,7 +403,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	fvec myProb(numImages);
 	fvec normCondProb;
 	uvec candidatesInd;
-	fmat updatedSlice;
+	fcube updatedSlice_Pixmap;
 	fvec candidateProb(numSlices);
 	
 	// Calculate number jobs for each slave
@@ -430,10 +433,10 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 		getBestCandidateProb(&normCondProb, &candidateProb, expansionInd);
 
 		// Update expansion slice
-		updateExpansionSlice(vm, &updatedSlice, det, &normCondProb, &candidatesInd);
+		updateExpansionSlice(vm, &updatedSlice_Pixmap, &normCondProb, &candidatesInd);
 		
 		// Save updated expansion slice
-		saveExpansionUpdate(vm, &updatedSlice, iter, expansionInd);
+		saveExpansionUpdate(vm, &updatedSlice_Pixmap, iter, expansionInd);
 		
 		// Display status
 		displayStatusBar(expansionInd+1,numSlices,&lastPercentDone);
@@ -554,17 +557,17 @@ uvec numJobsPerSlave(int numImages, int numSlaves) {
 	return numJobsForEachSlave;
 }
 
-void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, CDetector* det, fvec* normCondProb, uvec* candidatesInd) {
+void updateExpansionSlice(opt::variables_map vm, fcube* updatedSlice_Pixmap, fvec* normCondProb, uvec* candidatesInd) {
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	
 	uvec& _candidatesInd = candidatesInd[0];
-	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
+	//uvec goodpix = det->get_goodPixelMap();		// good detector pixels
 	
 	int numCandidates = _candidatesInd.n_elem;
-	updatedSlice->zeros(volDim,volDim);
+	updatedSlice_Pixmap->zeros(volDim,volDim,2);
 	fcube myDPnPixmap;
 	// Load measured diffraction pattern from file
 	if (format == "S2E") {
@@ -572,7 +575,7 @@ void updateExpansionSlice(opt::variables_map vm, fmat* updatedSlice, CDetector* 
 			// load measured diffraction pattern
 			loadDPnPixmap(vm, _candidatesInd(i)+1, &myDPnPixmap);
 			// calculate weighted image and add to updatedSlice
-			calculateWeightedImage(&goodpix, normCondProb->at(i), updatedSlice, &myDPnPixmap);
+			calculateWeightedImage(normCondProb->at(i), updatedSlice_Pixmap, &myDPnPixmap);
 		}
 	} else if (format == "list") { //TODO: this needs testing
 		for (int i = 0; i < numCandidates; i++) {
@@ -667,15 +670,20 @@ void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, int
 	myDPnPixmap->slice(1).save(filename,raw_ascii);
 }
 
-void saveExpansionUpdate(opt::variables_map vm, fmat* updatedSlice, int iter, int expansionInd) {
+void saveExpansionUpdate(opt::variables_map vm, fcube* updatedSlice_Pixmap, int iter, int expansionInd) {
 	string output = vm["output"].as<string>();
-		
+	fcube& _updatedSlice_Pixmap = updatedSlice_Pixmap[0];
+
 	string filename;
 	// Save updated expansion slices
 	std::stringstream sstm;
 	sstm << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << expansionInd << ".dat";
 	filename = sstm.str();
-	updatedSlice->save(filename,raw_ascii);
+	_updatedSlice_Pixmap.slice(0).save(filename,raw_ascii);
+	sstm.str("");
+	sstm << output << "/expansion/iter" << iter << "/expansionUpdatePixmap_" << setfill('0') << setw(7) << expansionInd << ".dat";
+	filename = sstm.str();
+	_updatedSlice_Pixmap.slice(1).save(filename,raw_ascii);
 }
 
 void loadExpansionSlice(opt::variables_map vm, int iter, int sliceInd, fcube* modelDPnPixmap) {		
@@ -701,15 +709,15 @@ void loadUpdatedExpansion(opt::variables_map vm, int iter, int sliceInd, fcube* 
 		
 	// Get image
 	std::stringstream ss;
+	string filename;
 	ss << output << "/expansion/iter" << iter << "/expansionUpdate_" << setfill('0') << setw(7) << sliceInd << ".dat";
-	string filename = ss.str();
-	myDPnPixmap->slice(0) = load_asciiImage(filename);
-	// Get goodpixmap
-	ss.str("");
-	ss << output << "/badpixelmap.dat";
 	filename = ss.str();
-	fmat pixmap = load_asciiImage(filename); // load badpixmap
-	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+	myDPnPixmap->slice(0) = load_asciiImage(filename);
+	// Get photon count pixmap
+	ss.str("");
+	ss << output << "/expansion/iter" << iter << "/expansionUpdatePixmap_" << setfill('0') << setw(7) << sliceInd << ".dat";
+	filename = ss.str();
+	myDPnPixmap->slice(1) = load_asciiImage(filename);
 }
 
 void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
@@ -781,16 +789,18 @@ void load_readNthLine(opt::variables_map vm, int N, fmat* img) {
 
 }
 
-void calculateWeightedImage(uvec* goodpix, float weight, fmat* updatedSlice, fcube* myDPnPixmap) {
-	fmat& _updatedSlice = updatedSlice[0];
+void calculateWeightedImage(float weight, fcube* updatedSlice_Pixmap, fcube* myDPnPixmap) {
+	fcube& _updatedSlice_Pixmap = updatedSlice_Pixmap[0];
 	
 	fmat myDP = myDPnPixmap->slice(0);
+	uvec photonCountPixmap = find(myDP > 0);
 	// Setup goodpixmap
-	uvec::iterator goodBegin = goodpix->begin();
-	uvec::iterator goodEnd = goodpix->end();
+	uvec::iterator goodBegin = photonCountPixmap.begin();
+	uvec::iterator goodEnd = photonCountPixmap.end();
 	
 	for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
-		_updatedSlice(*p) += weight * myDP(*p);
+		_updatedSlice_Pixmap.slice(0)(*p) += weight * myDP(*p);
+		_updatedSlice_Pixmap.slice(1)(*p) = 1;
 	}
 }
 
