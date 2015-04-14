@@ -37,6 +37,7 @@ using namespace toolbox;
 opt::variables_map parse_input(int argc, char* argv[]);
 void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap);
 void loadQuaternion(opt::variables_map vm, int ind, fvec* quat);
+void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
 
 int main( int argc, char* argv[] ){
 
@@ -77,61 +78,22 @@ int main( int argc, char* argv[] ){
 
 	int active = 0;
 	string interpolate = "linear";
-
-  	for (int r = 0; r < numImages; r++) {
-  		loadDPnPixmap(vm, r+1, &myDPnPixmap);
-  		loadQuaternion(vm, r+1, &quat);
+	int lastPercentDone = 0;
+  	// ########### Save diffraction volume ##############
+  	cout << "Merging diffraction volume..." << endl;
+  	for (int i = 0; i < numImages; i++) {
+  		loadDPnPixmap(vm, i+1, &myDPnPixmap);
+  		loadQuaternion(vm, i+1, &quat);
   		myR = CToolbox::quaternion2rot3D(quat);
-  		/*
-		if (format == "S2E") {
-			// Get image from hdf
-			ss.str("");
-			ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
-			filename = sstm.str();
-			// Read in diffraction				
-			myDP = hdf5readT<fmat>(filename,hdfField);
-			// Read angle
-			fvec quat = hdf5readT<fvec>(filename,"/data/angle");
-			myR = CToolbox::quaternion2rot3D(quat);
-		}*//* else {
-			// Get image from dat file
-	  		std::stringstream sstm;
-			sstm << input << "/diffr_out_" << setfill('0') << setw(7) << r << ".dat"; // This is broken now
-			filename = sstm.str();
-			myDP = load_asciiImage(filename);
-			// Get badpixelmap from dat file
-	  		std::stringstream sstm2;
-			sstm2 << input << "/BadPixels_" << setfill('0') << setw(7) << r << ".dat";
-			badpixmap = sstm2.str();
-			det.set_pixelMap(badpixmap);
-			goodpix = det.get_goodPixelMap();
-		    // Get rotation matrix from dat file
-			std::stringstream sstm1;
-			sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
-			string rotationName = sstm1.str();
-			fvec euler = load_asciiEuler(rotationName);
-			psi = euler(0);
-			theta = euler(1);
-			phi = euler(2);
-			myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
-		}*/
        	CToolbox::merge3D(&myDPnPixmap, &myR, &myIntensity, &myWeight, &det, active, interpolate);
+       	// Display status
+		CToolbox::displayStatusBar(i+1,numImages,&lastPercentDone);
   	}
-  	// Normalize here
   	CToolbox::normalize(&myIntensity,&myWeight);
   		
   	// ########### Save diffraction volume ##############
   	cout << "Saving diffraction volume..." << endl;
-	for (int i = 0; i < volDim; i++) {
-		ss.str("");
-		ss << output << "/vol/vol_" << setfill('0') << setw(7) << i << ".dat";
-		filename = ss.str();
-		myIntensity.slice(i).save(filename,raw_ascii);
-		ss.str("");
-		ss << output << "/vol/volWeight_" << setfill('0') << setw(7) << i << ".dat";
-		filename = ss.str();
-		myWeight.slice(i).save(filename,raw_ascii);
-	}
+  	saveDiffractionVolume(vm, &myIntensity, &myWeight);
 
   	return 0;
 }
@@ -179,6 +141,23 @@ void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
 }
 
+void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight) {
+	string output = vm["output"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	
+	string filename;
+	std::stringstream ss;
+	for (int i = 0; i < volDim; i++) {
+		ss.str("");
+		ss << output << "/vol/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myIntensity->slice(i).save(filename,raw_ascii);
+		ss.str("");
+		ss << output << "/vol/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myWeight->slice(i).save(filename,raw_ascii);
+	}
+}
 opt::variables_map parse_input( int argc, char* argv[] ) {
 
     // Constructing an options describing variable and giving it a

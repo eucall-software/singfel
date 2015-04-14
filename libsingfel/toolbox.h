@@ -31,7 +31,8 @@ public:
 			n = -1;
 		mNumber = n;
 	}
-    
+
+	static void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
 	static arma::mat mag(arma::cube);
 	static arma::fmat mag(arma::fcube);
 	//static arma::umat convert_to_poisson(arma::fmat);

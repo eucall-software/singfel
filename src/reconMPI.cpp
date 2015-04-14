@@ -99,7 +99,6 @@ void calculateWeightedImage(float weight, fcube* updatedSlice, \
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
 void generateUniformRotations(string rotationAxis, int numSlicesNow, \
                               fcube* myRot);
-void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
 void getBestCandidateProb(fvec* normCondProb, fvec* candidateProb, \
                            int expansionInd);
 void getGoodSlicesIndex(fvec* candidateProb, float percentile, \
@@ -438,7 +437,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 		saveExpansionUpdate(vm, &updatedSlice_Pixmap, iter, expansionInd);
 		
 		// Display status
-		displayStatusBar(expansionInd+1,numSlices,&lastPercentDone);
+		CToolbox::displayStatusBar(expansionInd+1,numSlices,&lastPercentDone);
 	}
 	// save best candidate probabilities for all expansion slices
 	saveBestCandidateProb(vm, &candidateProb, iter);
@@ -800,21 +799,6 @@ void calculateWeightedImage(float weight, fcube* updatedSlice_Pixmap, fcube* myD
 	for(uvec::iterator p=goodBegin; p!=goodEnd; ++p) {
 		_updatedSlice_Pixmap.slice(0)(*p) += weight * myDP(*p);
 		_updatedSlice_Pixmap.slice(1)(*p) = 1;
-	}
-}
-
-void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
-	int percentDone = round(numDone*100./totalJobs);
-	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
-		*lastPercentDone = percentDone;
-		for (int i = 0; i < 100; i++) {
-			if (i <= percentDone) {
-				cout << "*";
-			} else {
-				cout << "-";
-			}
-		}
-		cout << '\r';
 	}
 }
 

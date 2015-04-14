@@ -27,6 +27,22 @@ using namespace arma;
 using namespace toolbox;
 using namespace detector;
 
+// Display status bar in the terminal
+void CToolbox::displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
+	int percentDone = round(numDone*100./totalJobs);
+	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
+		*lastPercentDone = percentDone;
+		for (int i = 0; i < 100; i++) {
+			if (i <= percentDone) {
+				cout << "*";
+			} else {
+				cout << "-";
+			}
+		}
+		cout << '\r';
+	}
+}
+
 // Calculate magnitude of x,y,z
 mat CToolbox::mag(cube x){
 	x = pow(x,2);
