@@ -97,7 +97,6 @@ void load_readNthLine(opt::variables_map vm, int N, fmat* img);
 void calculateWeightedImage(float weight, fcube* updatedSlice, \
                             fcube* myDPnPixmap);
 void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd);
-void displayResolution(CDetector* det, CBeam* beam);
 void generateUniformRotations(string rotationAxis, int numSlicesNow, \
                               fcube* myRot);
 void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone);
@@ -159,7 +158,7 @@ int main( int argc, char* argv[] ){
 		det.init_dp(&beam);
 	
 		// optionally display resolution
-		displayResolution(&det,&beam);
+		CDiffraction::displayResolution(&det,&beam);
 	} // end of master
 
 	world.barrier();
@@ -802,19 +801,6 @@ void calculateWeightedImage(float weight, fcube* updatedSlice_Pixmap, fcube* myD
 		_updatedSlice_Pixmap.slice(0)(*p) += weight * myDP(*p);
 		_updatedSlice_Pixmap.slice(1)(*p) = 1;
 	}
-}
-
-// Added to diffraction.cpp
-void displayResolution(CDetector* det, CBeam* beam) {
-	double d = det->get_detector_dist();
-	double pix_height = det->get_pix_height();
-	int py = det->get_numPix_y();
-	
-	double theta = atan((py/2*pix_height)/d);
-	double qmax = 2/beam->get_wavelength()*sin(theta/2);
-	double dmin = 1/(2*qmax);
-	cout << "max q to the edge: " << qmax*1e-10 << " A^-1" << endl;
-	cout << "Half period resolution: " << dmin*1e10 << " A" << endl;
 }
 
 void displayStatusBar(int numDone, int totalJobs, int* lastPercentDone) {
