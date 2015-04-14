@@ -900,8 +900,8 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
     // of that option, wrapped in value<> class. Third parameter
     // must be a short description of that option
     desc.add_options()
-        ("input", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
-        ("output", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
+        ("input,i", opt::value<std::string>(), "Input directory for finding /pmi and /diffr")
+        ("output,o", opt::value<string>(), "Output directory for saving /expansion, /maximization, /compression")
         ("useFileList", opt::value<int>()->default_value(0), "Input a list containing filenames of diffraction patterns")
         ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
         ("geomFile", opt::value<string>(), "Geometry file defining diffraction geometry")
