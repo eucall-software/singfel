@@ -157,6 +157,7 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	q_xyz.zeros(py,px,3);
 	float rx, ry, r, twotheta, az;
 	float pixDist, alpha;
+	float ss;
 	solidAngle.zeros(py,px);
 	fmat twoTheta(py,px);
 	for (int ind_x = 0; ind_x < px; ind_x++) {
@@ -164,17 +165,20 @@ void CDetector::init_dp( beam::CBeam *beam ){
 			rx = (ind_x - cx) * pix_width; // equivalent to dividing by pixel resolution
 			ry = (ind_y - cy) * pix_width;
 			r = sqrt(pow(rx,2)+pow(ry,2));
+			pixDist = sqrt(pow(r,2) + pow(d,2)); // distance from interaction to pixel center in real space
 			twotheta = atan2(r,d);
 			twoTheta(ind_y,ind_x) = twotheta;
-			az = atan2(ry,rx);
-			q_xyz(ind_y,ind_x,0) = beam->get_wavenumber() * sin(twotheta)*cos(az);
-			q_xyz(ind_y,ind_x,1) = beam->get_wavenumber() * sin(twotheta)*sin(az);
-			q_xyz(ind_y,ind_x,2) = beam->get_wavenumber() * (cos(twotheta) - 1.0);
-			
+			//az = atan2(ry,rx);
+			//q_xyz(ind_y,ind_x,0) = beam->get_wavenumber() * sin(twotheta)*cos(az);
+			q_xyz(ind_y,ind_x,0) = beam->get_wavenumber() * rx/pixDist;
+			//q_xyz(ind_y,ind_x,1) = beam->get_wavenumber() * sin(twotheta)*sin(az);
+			q_xyz(ind_y,ind_x,1) = beam->get_wavenumber() * ry/pixDist;
+			//q_xyz(ind_y,ind_x,2) = beam->get_wavenumber() * (cos(twotheta) - 1.0);
+			q_xyz(ind_y,ind_x,2) = beam->get_wavenumber() * ((d - pixDist)/pixDist);
 			// Analytical formula of solid angle (Zaluzec2014)
-			pixDist = sqrt(pow(rx,2) + pow(ry,2) + pow(d,2)); // distance from interaction to pixel center in real space
-			alpha = atan(pix_width/(2*pixDist));
-			solidAngle(ind_y,ind_x) = 4 * asin( pow(sin(alpha),2) );
+			ss = pix_width*pix_width/(4*pixDist*pixDist + pix_width*pix_width);
+			solidAngle(ind_y,ind_x) = 4*asin(ss);
+			
 		}
 	}
 	q_mod = CToolbox::mag(q_xyz);
