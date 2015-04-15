@@ -19,8 +19,8 @@ IF(CUDA_FOUND)
   
   CUDA_ADD_EXECUTABLE(radiationDamageMPI radiationDamageMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   TARGET_LINK_LIBRARIES(radiationDamageMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})
-  CUDA_ADD_EXECUTABLE(radiationDamageSPI radiationDamageSPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationDamageSPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${Boost_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(radiationDamage radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationDamage ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${Boost_LIBRARIES})
   
   #gprof switches
   #set_target_properties(radiationDamageMPI PROPERTIES  COMPILE_FLAGS "-pg")

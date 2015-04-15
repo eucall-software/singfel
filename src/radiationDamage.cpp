@@ -17,7 +17,6 @@
 // Boost library
 #include <boost/tokenizer.hpp>
 #include <boost/algorithm/string.hpp>
-//#include <boost/mpi.hpp>
 #include <boost/serialization/string.hpp>
 #include <boost/program_options.hpp>
 // HDF5 library
@@ -32,7 +31,6 @@
 #include "diffraction.cuh"
 #include "io.h"
 
-//namespace mpi = boost::mpi;
 namespace opt = boost::program_options;
 using namespace std;
 using namespace arma;
