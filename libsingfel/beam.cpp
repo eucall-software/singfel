@@ -15,15 +15,15 @@ double CBeam::n_phot;							// number of photons per pulse
 double CBeam::phi_in;  							// number of photon per pulse per area (m^-2)
 
 CBeam::CBeam (){
-    lambda = 0;
-	photon_energy = 0;
-	k = 0;
-	focus_xFWHM = 0;
-	focus_yFWHM = 0;
+    lambda = 0.;
+	photon_energy = 0.;
+	k = 0.;
+	focus_xFWHM = 0.;
+	focus_yFWHM = 0.;
 	focus_shape = "circle";
-	focus_area = 0;
-	n_phot = 0;
-	phi_in = 0;
+	focus_area = 0.;
+	n_phot = 0.;
+	phi_in = 0.;
 }
 
 void CBeam::update(){
@@ -168,7 +168,7 @@ void CBeam::readBeamFile(string beamFile) {
 			        break;
 			    } else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
 			        string temp = *++tok_iter;
-			        double focus_xFWHM = atof(temp.c_str()); // focus radius
+			        focus_xFWHM = atof(temp.c_str()); // focus radius
 			        break;
 			    }
 			}

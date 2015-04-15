@@ -55,6 +55,13 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 void loadParticle(const opt::variables_map vm, const string filename, const int timeSlice, CParticle* particle);
 void setTimeSliceInterval(const int numSlices, int* sliceInterval, int* timeSlice, int* done);
+void rotateParticle(fvec* quaternion, CParticle* particle);
+void setFluenceFromFile(const string filename, const int timeSlice, const int sliceInterval, CBeam* beam);
+void setEnergyFromFile(const string filename, CBeam* beam);
+void setFocusFromFile(const string filename, CBeam* beam);
+void getComptonScattering(const opt::variables_map vm, CParticle* particle, CDetector* det, fmat* Compton);
+void savePhotonField(const string filename, const int isFirstSlice, const int timeSlice, fmat* photon_field);
+void saveAsDiffrOutFile(const string outputName, umat* detector_counts, fmat* detector_intensity, fvec* quaternion, CDetector* det, CBeam* beam, double total_phot);
 
 int main( int argc, char* argv[] ){
 
@@ -216,7 +223,6 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	string beamFile = vm["beamFile"].as<string>();
 	string geomFile = vm["geomFile"].as<string>();
 	int numSlices = vm["numSlices"].as<int>();
-	bool calculateCompton = vm["calculateCompton"].as<bool>();
 	int saveSlices = vm["saveSlices"].as<int>();
 	
 	wall_clock timer;
@@ -244,7 +250,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int px = det.get_numPix_x();
 	int py = px;
 	float msg[msgLength];
-	fmat rot3D(3,3);
+	
 	fvec quaternion(4);
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
@@ -298,9 +304,15 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			int i = system(myCommand.c_str());
 			assert(i == 0);
 			
-			// Rotate particle			
-			rot3D = CToolbox::quaternion2rot3D(quaternion);
-
+			// Set up diffraction geometry
+			if (givenPhotonEnergy == false) {
+				setEnergyFromFile(filename, &beam);
+			}
+			if (givenFocusRadius == false) {
+				setFocusFromFile(filename, &beam);
+			}
+			det.init_dp(&beam);
+			
 			double total_phot = 0;
 			photon_field.zeros(py,px);
 			detector_intensity.zeros(py,px);
@@ -314,53 +326,25 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				// Particle //
 				CParticle particle = CParticle();
 				loadParticle(vm, filename, timeSlice, &particle);
-				
-				// Rotate atom positions
-				myPos = particle.get_atomPos();
-				myPos = myPos * trans(rot3D); // rotate atoms
-				particle.set_atomPos(&myPos);
+				// Apply random rotation to particle
+				rotateParticle(&quaternion, &particle);
 
 				// Beam // FIXME: Check that these fields exist
 				if (givenFluence == false) {
-					int n_phot = 0;
-					for (int i = 0; i < sliceInterval; i++) {
-						string datasetname;
-						stringstream sstm0;
-						sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
-						datasetname = sstm0.str(); 					
-						vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
-						beam.set_photonsPerPulse(myNph[0]);
-						n_phot += beam.get_photonsPerPulse();	// number of photons per pulse
-					}
-					total_phot += n_phot;
-					beam.set_photonsPerPulse(n_phot);
+					setFluenceFromFile(filename, timeSlice, sliceInterval, &beam);
 				}
+				total_phot += beam.get_photonsPerPulse();
+				cout << "total_phot: " << total_phot << endl;
 				
-				if (givenPhotonEnergy == false) {
-					// Read in photon energy
-					double photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
-					beam.set_photon_energy(photon_energy);
-				}
-	
-				if (givenFocusRadius == false) {
-					// Read in focus size
-					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
-					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
-					beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
-				}
-				////////////////////////
-
-				det.init_dp(&beam);
+				// Coherent contribution
 				CDiffraction::calculate_atomicFactor(&particle, &det); // get f_hkl
-				Compton.zeros(py,px);
-				if (calculateCompton) {
-					Compton = CDiffraction::calculate_compton(&particle, &det); // get S_hkl
-				}
+				// Incoherent contribution
+				getComptonScattering(vm, &particle, &det, &Compton);
 
 				#ifdef COMPILE_WITH_CUDA
 				if (!USE_CHUNK) {
 
-					CDiffraction::get_atomicFormFactorList(&particle,&det);		
+					CDiffraction::get_atomicFormFactorList(&particle,&det);
 	
 				 	float* F_mem = F_hkl_sq.memptr();
 					float* f_mem = CDiffraction::f_hkl_list.memptr();
@@ -420,23 +404,15 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 					detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				}
-				#else
-				CDiffraction::get_atomicFormFactorList(&particle, &det);
-				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
-				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-				detector_intensity += photon_field;
+				#else // compute using CPU
+					CDiffraction::get_atomicFormFactorList(&particle, &det);
+					F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
+					photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+					detector_intensity += photon_field;
 				#endif
+				
 				if (saveSlices) {
-					int createSubgroup;
-					if (isFirstSlice == 1) {
-						createSubgroup = 1;
-					} else {
-						createSubgroup = 0;
-					}
-					std::stringstream sstm0;
-		  			sstm0 << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
-					string fieldName = sstm0.str();
-					int success = hdf5writeVector(outputName, "misc", "/misc/photonField", fieldName, photon_field, createSubgroup);
+					savePhotonField(outputName, isFirstSlice, timeSlice, &photon_field);
 				}
 				isFirstSlice = 0;
 			}// end timeSlice
@@ -447,42 +423,10 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 			
 			// Save to HDF5
-			int createSubgroup = 0;
-			int success = hdf5writeVector(outputName,"data","","/data/data", detector_counts, createSubgroup); // FIXME: groupname and subgroupname are redundant
-			success = hdf5writeVector(outputName,"data","","/data/diffr", detector_intensity, createSubgroup);
-			createSubgroup = 0;
-			fvec angle = quaternion;
-			success = hdf5writeVector(outputName,"data","","/data/angle", angle,createSubgroup);
-			createSubgroup = 1;
-			double dist = det.get_detector_dist();
-			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/detectorDist", dist,createSubgroup);
-			createSubgroup = 0;
-			double pixelWidth = det.get_pix_width();
-			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
-			double pixelHeight = det.get_pix_height();
-			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
-			fmat mask = ones<fmat>(px,px);
-			success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);
-			createSubgroup = 1;
-			double photonEnergy = beam.get_photon_energy();
-			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,createSubgroup);
-			createSubgroup = 0;
-			double photons = total_phot;
-			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photons", photons,createSubgroup);			
-			createSubgroup = 0;
-			double focusArea = beam.get_focus_area();
-			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
+			saveAsDiffrOutFile(outputName, &detector_counts, &detector_intensity, &quaternion, &det, &beam, total_phot);
 
 			if (comm->rank() == 1) {
-				double pix_height = det.get_pix_height();
-				double d = det.get_detector_dist();
-				double thetaMax = atan((px/2*pix_height)/d);
-				double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
-				double dmin = 1/(2*qmax);
-				cout << "px, pix_height, d, thetaMax: " << px << "," << pix_height << "," << d << "," << thetaMax << endl;
-				cout << "wavelength: " << beam.get_wavelength() << endl;
-				cout << "max q to the edge: " << qmax * 1e-10 << " A^-1" << endl;
-				cout << "Half period resolution: " << dmin * 1e10 << " Angstroms" << endl;
+				CDiffraction::displayResolution(&det, &beam);
 			}
 
     		comm->send(master, DONETAG, 1);
@@ -523,6 +467,95 @@ void loadParticle(const opt::variables_map vm, const string filename, const int 
 		particle->load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
 		particle->load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
 	}
+}
+
+void rotateParticle(fvec* quaternion, CParticle* particle) {
+	fvec& _quat = quaternion[0];
+	
+	// Rotate particle
+	fmat rot3D = CToolbox::quaternion2rot3D(_quat);
+	fmat myPos = particle->get_atomPos();
+	myPos = myPos * trans(rot3D); // rotate atoms
+	particle->set_atomPos(&myPos);
+}
+
+void setFluenceFromFile(const string filename, const int timeSlice, const int sliceInterval, CBeam* beam) {
+	double n_phot = 0;
+	for (int i = 0; i < sliceInterval; i++) {
+		string datasetname;
+		stringstream ss;
+		ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
+		datasetname = ss.str(); 					
+		vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
+		beam->set_photonsPerPulse(myNph[0]);
+		n_phot += beam->get_photonsPerPulse();	// number of photons per pulse
+	}
+	beam->set_photonsPerPulse(n_phot);
+}
+
+void setEnergyFromFile(const string filename, CBeam* beam) {
+	// Read in photon energy
+	double photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
+	beam->set_photon_energy(photon_energy);
+}
+
+void setFocusFromFile(const string filename, CBeam* beam) {
+	// Read in focus size
+	double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
+	double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
+	beam->set_focus(focus_xFWHM, focus_yFWHM, "ellipse");
+}
+
+void getComptonScattering(const opt::variables_map vm, CParticle* particle, CDetector* det, fmat* Compton) {
+	bool calculateCompton = vm["calculateCompton"].as<bool>();
+	
+	if (calculateCompton) {
+		CDiffraction::calculate_compton(particle, det, Compton); // get S_hkl
+	} else {
+		Compton->zeros(det->py,det->px);
+	}
+}
+
+void savePhotonField(const string filename, const int isFirstSlice, const int timeSlice, fmat* photon_field) {
+	fmat& _photon_field = photon_field[0];
+	
+	int createSubgroup;
+	if (isFirstSlice == 1) {
+		createSubgroup = 1;
+	} else {
+		createSubgroup = 0;
+	}
+	std::stringstream ss;
+	ss << "/misc/photonField/photonField_" << setfill('0') << setw(7) << timeSlice;
+	string fieldName = ss.str();
+	int success = hdf5writeVector(filename, "misc", "/misc/photonField", fieldName, _photon_field, createSubgroup);
+	assert(success == 0);
+}
+
+void saveAsDiffrOutFile(const string outputName, umat* detector_counts, fmat* detector_intensity, fvec* quaternion, CDetector* det, CBeam* beam, double total_phot) {
+			int createSubgroup = 0;
+			int success = hdf5writeVector(outputName,"data","","/data/data", *detector_counts, createSubgroup); // FIXME: groupname and subgroupname are redundant
+			success = hdf5writeVector(outputName,"data","","/data/diffr", *detector_intensity, createSubgroup);
+			createSubgroup = 0;
+			success = hdf5writeVector(outputName,"data","","/data/angle", *quaternion, createSubgroup);
+			createSubgroup = 1;
+			double dist = det->get_detector_dist();
+			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/detectorDist", dist,createSubgroup);
+			createSubgroup = 0;
+			double pixelWidth = det->get_pix_width();
+			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
+			double pixelHeight = det->get_pix_height();
+			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
+			fmat mask = ones<fmat>(det->py,det->px); // FIXME: why is this needed?
+			success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);
+			createSubgroup = 1;
+			double photonEnergy = beam->get_photon_energy();
+			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photonEnergy", photonEnergy,createSubgroup);
+			createSubgroup = 0;
+			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/photons", total_phot,createSubgroup);			
+			createSubgroup = 0;
+			double focusArea = beam->get_focus_area();
+			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
 }
 
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {

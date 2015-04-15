@@ -110,11 +110,11 @@ fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::
 }
 
 // Calculate static structure factor S(q) and number of free electrons N_free(q)
-fmat CDiffraction::calculate_compton(particle::CParticle *particle, detector::CDetector *detector) {
-	fmat Compton;
+void CDiffraction::calculate_compton(particle::CParticle *particle, detector::CDetector *detector, fmat* Compton) {
+	fmat& _Compton = Compton[0];
 	fmat S_bound;
 	float N_free;
-	Compton.zeros(detector->py,detector->px);
+	_Compton.zeros(detector->py,detector->px);
 	S_bound.zeros(detector->py,detector->px);
 	N_free = particle->nFree(0);
 
@@ -144,6 +144,5 @@ fmat CDiffraction::calculate_compton(particle::CParticle *particle, detector::CD
 	gsl_spline_free (spline);
 	gsl_interp_accel_free (acc);
 	
-	Compton = S_bound + N_free;
-	return Compton;
+	_Compton = S_bound + N_free;
 }
