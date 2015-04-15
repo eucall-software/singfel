@@ -6,6 +6,7 @@
 #include <armadillo>
 #include "particle.h"
 #include "detector.h"
+#include "beam.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -28,6 +29,7 @@ public:
 	static arma::cube get_FourierMap(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::fmat calculate_intensity(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::fmat calculate_compton(particle::CParticle *particle, detector::CDetector *detector);	
+	static void displayResolution(detector::CDetector *detector, beam::CBeam *beam);
 double cuda_func(double);
 
 protected:

@@ -31,7 +31,8 @@ public:
 			n = -1;
 		mNumber = n;
 	}
-    
+
+	static void displayStatusBar(int numDone, int totalJobs, float* lastPercentDone);
 	static arma::mat mag(arma::cube);
 	static arma::fmat mag(arma::fcube);
 	//static arma::umat convert_to_poisson(arma::fmat);
@@ -80,7 +81,7 @@ public:
 	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
 	
 	static double calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type);
-	static double calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* dataSlice, float stdDev);
+	static double calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap, float stdDev);
 
 private:
 	double mNumber;

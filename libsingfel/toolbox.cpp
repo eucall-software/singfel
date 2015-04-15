@@ -27,6 +27,23 @@ using namespace arma;
 using namespace toolbox;
 using namespace detector;
 
+// Display status bar in the terminal
+void CToolbox::displayStatusBar(int numDone, int totalJobs, float* lastPercentDone) {
+	float percentDone = round(numDone*100./totalJobs);
+	// Check if percentDone increased by at least 1 percent since last time
+	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
+		*lastPercentDone = percentDone;
+		for (int i = 0; i < 100; i++) {
+			if (i <= percentDone) {
+				cout << "*";
+			} else {
+				cout << "-";
+			}
+		}
+		cout << '\r';
+	}
+}
+
 // Calculate magnitude of x,y,z
 mat CToolbox::mag(cube x){
 	x = pow(x,2);
@@ -665,85 +682,79 @@ void CToolbox::interp_linear3D(fmat *myValue, fmat *myPoints, uvec *pixmap, fcub
 }
 
 // Insert a Ewald's slice into a diffraction volume
-void CToolbox::insert_slice(fcube *myValue, fmat *myPoints, fcube *myIntensity1, fcube *myWeight1) {
-    int mySize = myIntensity1->n_rows;
+void CToolbox::insert_slice(fcube *myDPnPixmap, fmat *pixRot, fcube *myIntensity, fcube *myWeight) {
+    fmat& _pixRot = pixRot[0];
+	fcube& _myIntensity = myIntensity[0];
+	fcube& _myWeight = myWeight[0];
+	fmat myPhotons = myDPnPixmap->slice(0);
+	fmat myPixmap = myDPnPixmap->slice(1); // photon count pixmap
+	
+    int volDim = myPhotons.n_rows;
     
-    fmat& pixRot = myPoints[0];
-    
-    //imat& xyz = myGridPoints[0];
     imat xyz;
-	xyz = conv_to<imat>::from(floor(pixRot));
+	xyz = conv_to<imat>::from(floor(_pixRot));
     
-    fmat fxyz = pixRot - xyz;
+    fmat fxyz = _pixRot - xyz;
     fmat cxyz = 1. - fxyz;
-    float x,y,z,fx,fy,fz,cx,cy,cz;
+    int x,y,z;
+    float fx,fy,fz,cx,cy,cz;
     float weight;
 	float photons;
-	fcube& myImage = myValue[0];
-	fmat myPhotons = myImage.slice(0);
-	fmat myPixmap = myImage.slice(1);
-	
-	fcube& myIntensity = myIntensity1[0];
-	fcube& myWeight = myWeight1[0];
-	
-    int dim = myPixmap.n_rows;
-    int p;
-	for(int i = 0; i < dim; i++) {
-	for(int j = 0; j < dim; j++) {
-		if (myPixmap(i,j) == 1) {
-			p = i*dim + j;
-		    photons = myPhotons(p);
 
-			x = xyz(1,p);
-			y = xyz(0,p);
-			z = xyz(2,p);
+	// Check outliers
+	uvec goodpixmap = find(myPixmap == 1);
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+		photons = myPhotons(*p);
 
-			if (x >= mySize-1 || y >= mySize-1 || z >= mySize-1)
-				continue;
-			
-			if (x < 0 || y < 0 || z < 0)
-				continue;	
-				
-			fx = fxyz(1,p);
-			fy = fxyz(0,p);
-			fz = fxyz(2,p);
-			cx = cxyz(1,p);
-			cy = cxyz(0,p);
-			cz = cxyz(2,p);
-				
-			weight = cx*cy*cz;
-			myWeight(y,x,z) += weight;
-			myIntensity(y,x,z) += weight * photons;
+		x = xyz(1,*p);
+		y = xyz(0,*p);
+		z = xyz(2,*p);
 
-			weight = cx*cy*fz;
-			myWeight(y,x,z+1) += weight;
-			myIntensity(y,x,z+1) += weight * photons; 
-
-			weight = cx*fy*cz;
-			myWeight(y+1,x,z) += weight;
-			myIntensity(y+1,x,z) += weight * photons; 
-
-			weight = cx*fy*fz;
-			myWeight(y+1,x,z+1) += weight;
-			myIntensity(y+1,x,z+1) += weight * photons;         		        
-				
-			weight = fx*cy*cz;
-			myWeight(y,x+1,z) += weight;
-			myIntensity(y,x+1,z) += weight * photons; 		       		 
-
-			weight = fx*cy*fz;
-			myWeight(y,x+1,z+1) += weight;
-			myIntensity(y,x+1,z+1) += weight * photons; 
-
-			weight = fx*fy*cz;
-			myWeight(y+1,x+1,z) += weight;
-			myIntensity(y+1,x+1,z) += weight * photons;
-
-			weight = fx*fy*fz;
-			myWeight(y+1,x+1,z+1) += weight;
-			myIntensity(y+1,x+1,z+1) += weight * photons;
+		if (x < 0 || y < 0 || z < 0 || \
+		    x >= volDim-1 || y >= volDim-1 || z >= volDim-1) {
+		   	continue;
 		}
-	}
+			
+		fx = fxyz(1,*p);
+		fy = fxyz(0,*p);
+		fz = fxyz(2,*p);
+		cx = cxyz(1,*p);
+		cy = cxyz(0,*p);
+		cz = cxyz(2,*p);
+				
+		weight = cx*cy*cz;
+		_myWeight(y,x,z) += weight;
+		_myIntensity(y,x,z) += weight * photons;
+
+		weight = cx*cy*fz;
+		_myWeight(y,x,z+1) += weight;
+		_myIntensity(y,x,z+1) += weight * photons; 
+
+		weight = cx*fy*cz;
+		_myWeight(y+1,x,z) += weight;
+		_myIntensity(y+1,x,z) += weight * photons; 
+
+		weight = cx*fy*fz;
+		_myWeight(y+1,x,z+1) += weight;
+		_myIntensity(y+1,x,z+1) += weight * photons;         		        
+				
+		weight = fx*cy*cz;
+		_myWeight(y,x+1,z) += weight;
+		_myIntensity(y,x+1,z) += weight * photons; 		       		 
+
+		weight = fx*cy*fz;
+		_myWeight(y,x+1,z+1) += weight;
+		_myIntensity(y,x+1,z+1) += weight * photons; 
+
+		weight = fx*fy*cz;
+		_myWeight(y+1,x+1,z) += weight;
+		_myIntensity(y+1,x+1,z) += weight * photons;
+
+		weight = fx*fy*fz;
+		_myWeight(y+1,x+1,z+1) += weight;
+		_myIntensity(y+1,x+1,z+1) += weight * photons;
 	}
 }
 
@@ -828,7 +839,7 @@ void CToolbox::merge3D(fmat *myValue, fmat *myRot, fcube *myIntensity, fcube *my
 // Insert a Ewald's slice into a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::merge3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
+void CToolbox::merge3D(fcube *myDPnPixmap, fmat *myRot, fcube *myIntensity, \
                        fcube *myWeight, CDetector* det, int active, \
                        string interpolate ) {
     fmat& myR = myRot[0];
@@ -845,7 +856,7 @@ void CToolbox::merge3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
         pixRot = trans(pixRot);  
     }
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        insert_slice(myValue,&pixRot,myIntensity,myWeight);
+        insert_slice(myDPnPixmap,&pixRot,myIntensity,myWeight);
     }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
     //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
     //}
@@ -958,33 +969,39 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 }
 
 // Calculates Gaussian log-likelihood
-double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fmat* myDP, float stdDev) {
+double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap, float stdDev) {
 	fcube& _modelDPnPixmap = modelDPnPixmap[0];
-	fmat& _myDP = myDP[0];
+	fcube& _measuredDPnPixmap = measuredDPnPixmap[0];
 
 	fmat mySlice = _modelDPnPixmap.slice(0);
-	fmat goodpixmap = _modelDPnPixmap.slice(1);
-	int dim = _myDP.n_rows;
-	int p;
+	fmat photonCountPixmap = _modelDPnPixmap.slice(1); // photon count indices
+	fmat myDP = _measuredDPnPixmap.slice(0);
+	//fmat detectorPixmap = _measuredDPnPixmap.slice(1); // good detector pixels
 	double sim = 0.; // measure of similarity
-	int numGoodpixels = 0;
-			
-	for(int a = 0; a < dim; a++) {
-	for(int b = 0; b < dim; b++) {
-		if (goodpixmap(b,a) == 1) {
-			p = a*dim + b;
-			sim -= pow(_myDP(p)-mySlice(p),2) / (2*pow(stdDev,2));
-			numGoodpixels++;
-		}
+	int numGoodpixels;
+
+	//uvec phCmap = find(photonCountPixmap == 1);
+	//cout << "phCmap: " << phCmap.n_elem << endl;
+	//uvec dpmap = find(myDP > 0);
+	//cout << "dpmap: " << dpmap.n_elem << endl;
+	
+	uvec photonInd = find(myDP > 0);
+	//cout << "photonInd: " << photonInd.n_elem << " " << photonInd << endl;
+	uvec::iterator a = photonInd.begin();
+    uvec::iterator b = photonInd.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+		sim -= pow(myDP(*p)-mySlice(*p),2) / (2*pow(stdDev,2));
 	}
-	}
+	numGoodpixels = photonInd.n_elem;
 	sim = exp(sim);
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
-	if (numGoodpixels == 0 || sim == std::numeric_limits<double>::infinity()) {
-		cout << "myDP: " << myDP;
-		cout << "mySlice: " << mySlice;
-		cout << "googpixmap: " << goodpixmap;
+	//cout << "sim: " << sim << endl;
+	// debug message
+	if (numGoodpixels == 0 || sim > 1) {
+		//cout << "myDP: " << myDP;
+		//cout << "mySlice: " << mySlice;
+		cout << "photonInd: " << photonInd;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;
 		sim = 0.;

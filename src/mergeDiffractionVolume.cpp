@@ -10,20 +10,21 @@
 #include <gsl/gsl_spline.h>
 #include <gsl/gsl_errno.h>
 #include <algorithm>
+#include <fstream>
+#include <string>
+// Armadillo library
+#include <armadillo>
+// Boost library
+#include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
+#include <boost/program_options.hpp>
+// SingFEL library
 #include "detector.h"
 #include "beam.h"
 #include "particle.h"
 #include "diffraction.h"
 #include "toolbox.h"
-#include "diffraction.cuh"
 #include "io.h"
-#include <fstream>
-#include <string>
-
-#include <armadillo>
-
-#include <boost/tokenizer.hpp>
-#include <boost/algorithm/string.hpp>
 
 using namespace std;
 using namespace arma;
@@ -33,212 +34,179 @@ using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
 
-#define USE_CUDA 0
+opt::variables_map parse_input(int argc, char* argv[]);
+void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap);
+void loadQuaternion(opt::variables_map vm, int ind, fvec* quat);
+void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
 
 int main( int argc, char* argv[] ){
 
-    string imageList;
-    string eulerList;
-    string quaternionList;
-    string rotationList;
-    string beamFile;
-    string geomFile;
-    int numImages = 0;
-    int mySize = 0;
-    string output;
-    string format;
-    // Let's parse input
-    for (int n = 1; n < argc; n++) {
-    cout << argv [ n ] << endl; 
-        if(boost::algorithm::iequals(argv[ n ], "-i")) {
-            imageList = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-e")) {
-            eulerList = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-q")) {
-		    quaternionList = argv[ n+1 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "-r")) {
-		    rotationList = argv[ n+1 ];
-		} else if (boost::algorithm::iequals(argv[ n ], "-b")) {
-            beamFile = argv[ n+1 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "-g")) {
-            geomFile = argv[ n+1 ];   
-        } else if (boost::algorithm::iequals(argv[ n ], "--num_images")) {
-            numImages = atoi(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--vol_dim")) {
-            mySize = atof(argv[ n+2 ]);
-        } else if (boost::algorithm::iequals(argv[ n ], "--output_name")) {
-            output = argv[ n+2 ];
-        } else if (boost::algorithm::iequals(argv[ n ], "--format")) {
-            format = argv[ n+2 ];
-        }
-    }
-    //cout << numImages << endl;
-    //cout << inc_res << endl;
     // image.lst and euler.lst are not neccessarily in the same order! So can not use like this. Perhaps use hdf5 to combine the two.
-
-	/****** Beam ******/
-	// Let's read in our beam file
-	double photon_energy = 0;
-	string line;
-	ifstream myFile(beamFile.c_str());
-	while (getline(myFile, line)) {
-        if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-            // line now contains a valid input
-            cout << line << endl;
-            typedef boost::tokenizer<boost::char_separator<char> > Tok;
-            boost::char_separator<char> sep(" ="); // default constructed
-            Tok tok(line, sep);
-            for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-                if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
-                    string temp = *++tok_iter;
-                    photon_energy = atof(temp.c_str()); // photon energy to wavelength
-                    break;
-                }
-            }
-        }
-    }
-	CBeam beam = CBeam();
-	beam.set_photon_energy(photon_energy);
-
-	/****** Detector ******/
-    double d = 0;					// (m) detector distance
-	double pix_width = 0;			// (m)
-	int px_in = 0;                  // number of pixel along x
-	string badpixmap = ""; // this information should go into the detector class
-	// Parse the geom file
-	ifstream myGeomFile(geomFile.c_str());
-	while (getline(myGeomFile, line)) {
-        if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-            // line now contains a valid input 
-            cout << line << endl; 
-            typedef boost::tokenizer<boost::char_separator<char> > Tok;
-            boost::char_separator<char> sep(" ="); // default constructed
-            Tok tok(line, sep);
-            for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-                if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
-                    string temp = *++tok_iter;
-                    d = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
-                    string temp = *++tok_iter;
-                    pix_width = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
-                    string temp = *++tok_iter;
-                    px_in = atof(temp.c_str());
-                    break;
-                } else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
-                    string temp = *++tok_iter;
-                    cout << temp << endl;
-                    badpixmap = temp;
-                    break;
-                }
-            }
-        }
-    }
-	double pix_height = pix_width;		// (m)
-	const int px = px_in;				// number of pixels in x
-	const int py = px;					// number of pixels in y
-	double cx = ((double) px-1)/2;		// this can be user defined
-	double cy = ((double) py-1)/2;		// this can be user defined
-
+    
+    opt::variables_map vm = parse_input(argc, argv);
+	string input = vm["input"].as<string>();
+	string output = vm["output"].as<string>();
+	string beamFile = vm["beamFile"].as<string>();
+	string geomFile = vm["geomFile"].as<string>();
+	string format = vm["format"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+	int numImages = vm["numImages"].as<int>();
+	int volDim = vm["volDim"].as<int>();
+	
+	// Set up diffraction geometry
 	CDetector det = CDetector();
-	det.set_detector_dist(d);	
-	det.set_pix_width(pix_width);	
-	det.set_pix_height(pix_height);
-	det.set_numPix(py,px);
-	det.set_center_x(cx);
-	det.set_center_y(cy);
-	det.set_pixelMap(badpixmap);
+	CBeam beam = CBeam();
+	beam.readBeamFile(beamFile);
+	det.readGeomFile(geomFile);
 	det.init_dp(&beam);
-	fmat pix = det.pixSpace;
-	float pix_max = det.pixSpaceMax;
 
-    uvec goodpix;
-    goodpix = det.get_goodPixelMap();
+	// Optionally display resolution
+	CDiffraction::displayResolution(&det, &beam);
 
-	double theta = atan((px/2*pix_height)/d);
-	double qmax = 2/beam.get_wavelength()*sin(theta/2);
-	double dmin = 1/(2*qmax);
-	cout << "max q to the edge: " << qmax << " m^-1" << endl;
-	cout << "Half period resolution: " << dmin << " m" << endl;
-
-	if(!USE_CUDA) {
-
-  		string filename;
+	std::stringstream ss;
+  	string filename;
   		
-  		fmat myDP;
-  		fmat myR;
-  		myR.zeros(3,3);
-  		float psi,theta,phi;
+  	fcube myDPnPixmap;
+  	fvec quat(4);
+  	fmat myR;
+  	myR.zeros(3,3);
+  	//float psi,theta,phi;
 
-		fcube myWeight;
-		myWeight.zeros(px,px,px);
-		fcube myIntensity;
-		myIntensity.zeros(px,px,px);
-		
-		cout << "Start" << endl;
-		
-		int active = 1;
-		string interpolate = "linear";// "nearest";
-		
-		cout << format << endl;
-  		for (int r = 0; r < numImages; r++) {
-			if (format == "S2E") {
-				// Get image from hdf
-				stringstream sstm;
-				sstm << imageList << "/diffr_out_" << setfill('0') << setw(7) << r+1 << ".h5";
-				string inputName;
-				inputName = sstm.str();
-				// Read in diffraction				
-				myDP = hdf5readT<fmat>(inputName,"/data/data");
-				// Read angle
-				fvec quat = hdf5readT<fvec>(inputName,"/data/angle");
-				myR = CToolbox::quaternion2rot3D(quat);
-				myR = trans(myR);
-			} else {
-				// Get image from dat file
-		  		std::stringstream sstm;
-	  			sstm << imageList << setfill('0') << setw(7) << r << ".dat";
-				filename = sstm.str();
-				myDP = load_asciiImage(filename);
-				// Get badpixelmap from dat file
-		  		std::stringstream sstm2;
-	  			sstm2 << imageList << "BadPixels_" << setfill('0') << setw(7) << r << ".dat";
-				badpixmap = sstm2.str();
-				det.set_pixelMap(badpixmap);
-				goodpix = det.get_goodPixelMap();
-			    // Get rotation matrix from dat file
-	  			std::stringstream sstm1;
-				sstm1 << rotationList << setfill('0') << setw(7) << r << ".dat";
-				string rotationName = sstm1.str();
-				fvec euler = load_asciiEuler(rotationName);
-				psi = euler(0);
-				theta = euler(1);
-				phi = euler(2);
-				myR = CToolbox::euler2rot3D(psi,theta,phi); // WARNING: euler2rot3D changed sign 24/7/14
-			}
-        	CToolbox::merge3D(&myDP, &pix, &goodpix, &myR, pix_max, &myIntensity, &myWeight, active, interpolate);
-  		}
-  		// Normalize here
-  		CToolbox::normalize(&myIntensity,&myWeight);
+	fcube myIntensity, myWeight;
+	myIntensity.zeros(volDim,volDim,volDim);
+	myWeight.zeros(volDim,volDim,volDim);
+
+	int active = 0;
+	string interpolate = "linear";
+	float lastPercentDone = 0;
+  	// ########### Save diffraction volume ##############
+  	cout << "Merging diffraction volume..." << endl;
+  	for (int i = 0; i < numImages; i++) {
+  		loadDPnPixmap(vm, i+1, &myDPnPixmap);
+  		loadQuaternion(vm, i+1, &quat);
+  		myR = CToolbox::quaternion2rot3D(quat);
+       	CToolbox::merge3D(&myDPnPixmap, &myR, &myIntensity, &myWeight, &det, active, interpolate);
+       	// Display status
+		CToolbox::displayStatusBar(i+1,numImages,&lastPercentDone);
+  	}
+  	CToolbox::normalize(&myIntensity,&myWeight);
   		
-  		// ########### Save diffraction volume ##############
-  		cout << "Saving diffraction volume..." << endl;
-		for (int i = 0; i < px; i++) {
-			std::stringstream sstm;
-			sstm << output << "vol_" << setfill('0') << setw(7) << i << ".dat";
-			string outputName = sstm.str();
-			myIntensity.slice(i).save(outputName,raw_ascii);
-			// empty voxels
-			std::stringstream sstm1;
-			sstm1 << output << "volGoodVoxels_" << setfill('0') << setw(7) << i << ".dat";
-			string outputName1 = sstm1.str();
-			fmat goodVoxels = sign(myWeight.slice(i));
-			goodVoxels.save(outputName1,raw_ascii);
-		}
-		
-    }
+  	// ########### Save diffraction volume ##############
+  	cout << "Saving diffraction volume..." << endl;
+  	saveDiffractionVolume(vm, &myIntensity, &myWeight);
+
   	return 0;
 }
 
+void loadQuaternion(opt::variables_map vm, int ind, fvec* quat) {
+	string input = vm["input"].as<string>();
+	string format = vm["format"].as<string>();
+	fvec& _quat = quat[0];
+	
+	string filename;
+	std::stringstream ss;
+	if (format == "S2E") {
+		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
+		filename = ss.str();
+		_quat = hdf5readT<fvec>(filename,"/data/angle");
+	} else {
+		// TODO: Add default behaviour
+	}
+}
+
+void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
+	string input = vm["input"].as<string>();
+	string output = vm["output"].as<string>();
+	string format = vm["format"].as<string>();
+	string hdfField = vm["hdfField"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	
+	myDPnPixmap->zeros(volDim,volDim,2);
+	string filename;
+	std::stringstream ss;
+	if (format == "S2E") {
+		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
+		filename = ss.str();
+		// Read in diffraction			
+		myDPnPixmap->slice(0) = hdf5readT<fmat>(filename,hdfField);
+	} else {
+		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".dat";
+		filename = ss.str();
+		myDPnPixmap->slice(0) = load_asciiImage(filename);
+	}
+	ss.str("");
+	ss << output << "/badpixelmap.dat";
+	filename = ss.str();
+	fmat pixmap = load_asciiImage(filename); // load badpixmap
+	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
+}
+
+void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight) {
+	string output = vm["output"].as<string>();
+	int volDim = vm["volDim"].as<int>();
+	
+	string filename;
+	std::stringstream ss;
+	for (int i = 0; i < volDim; i++) {
+		ss.str("");
+		ss << output << "/vol/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myIntensity->slice(i).save(filename,raw_ascii);
+		ss.str("");
+		ss << output << "/vol/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		myWeight->slice(i).save(filename,raw_ascii);
+	}
+}
+opt::variables_map parse_input( int argc, char* argv[] ) {
+
+    // Constructing an options describing variable and giving it a
+    // textual description "All options"
+    opt::options_description desc("All options");
+
+    // When we are adding options, first parameter is a name
+    // to be used in command line. Second parameter is a type
+    // of that option, wrapped in value<> class. Third parameter
+    // must be a short description of that option
+    desc.add_options()
+        ("input,i", opt::value<std::string>(), "Input directory for finding /diffr")
+        ("eulerList", opt::value<std::string>(), "Input directory for finding list of Euler angles")
+        ("quaternionList", opt::value<std::string>(), "Input directory for finding list of quaternions")
+        ("rotationList", opt::value<std::string>(), "Input directory for finding list of rotation matrices")
+        ("beamFile,b", opt::value<string>(), "Beam file defining X-ray beam")
+        ("geomFile,g", opt::value<string>(), "Geometry file defining diffraction geometry")
+        ("numImages", opt::value<int>(), "Number of measured diffraction patterns")
+        ("volDim", opt::value<int>(), "Number of pixel along one dimension")
+        ("output,o", opt::value<string>(), "Output directory for saving /vol")
+        ("format", opt::value<string>(), "Defines file format to use")
+        ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
+        ("help", "produce help message")
+    ;
+
+    // Variable to store our command line arguments
+    opt::variables_map vm;
+
+    // Parsing and storing arguments
+    opt::store(opt::parse_command_line(argc, argv, desc), vm);
+	opt::notify(vm);
+
+	// Print input arguments
+    if (vm.count("help")) {
+        std::cout << desc << "\n";
+        exit(0);
+    }
+
+	if (!vm.count("input")) { //TODO: print all parameters
+    	cout << "NOTICE: input field is required" << endl;
+    	exit(0);
+    }
+	if (!vm.count("beamFile")) {
+    	cout << "NOTICE: beamFile field is required" << endl;
+    	exit(0);
+    }
+    if (!vm.count("geomFile")) {
+    	cout << "NOTICE: geomFile field is required" << endl;
+    	exit(0);
+    }
+	return vm;
+} // end of parse_input
