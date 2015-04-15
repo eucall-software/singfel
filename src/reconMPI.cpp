@@ -400,7 +400,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	
 	bool useExistingProb = false;
 	if (vm.count("useExistingProb")) {
-		useExistingProb = true;
+		useExistingProb = vm["useExistingProb"].as<bool>();
 	}
 	
 	uvec numJobsForEachSlave(numSlaves);
