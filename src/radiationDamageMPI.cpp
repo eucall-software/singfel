@@ -53,6 +53,8 @@ const int msgLength = 4; // MPI message length
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
+void loadParticle(const opt::variables_map vm, const string filename, const int timeSlice, CParticle* particle);
+void setTimeSliceInterval(const int numSlices, int* sliceInterval, int* timeSlice, int* done);
 
 int main( int argc, char* argv[] ){
 
@@ -214,22 +216,31 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	string beamFile = vm["beamFile"].as<string>();
 	string geomFile = vm["geomFile"].as<string>();
 	int numSlices = vm["numSlices"].as<int>();
-	int calculateCompton = vm["calculateCompton"].as<int>();
+	bool calculateCompton = vm["calculateCompton"].as<bool>();
 	int saveSlices = vm["saveSlices"].as<int>();
 	
 	wall_clock timer;
 	boost::mpi::status status;
 
+	// Set up beam and detector from file
 	CDetector det = CDetector();
 	CBeam beam = CBeam();
 	beam.readBeamFile(beamFile);
 	det.readGeomFile(geomFile);
 	
 	bool givenFluence = false;
+	if (beam.get_photonsPerPulse() > 0) {
+		givenFluence = true;
+	}	
 	bool givenPhotonEnergy = false;
+	if (beam.get_photon_energy() > 0) {
+		givenPhotonEnergy = true;
+	}
 	bool givenFocusRadius = false;
-	float photon_energy, focus_radius;
-	int n_phot = 0;
+	if (beam.get_focus() > 0) {
+		givenFocusRadius = true;
+	}
+
 	int px = det.get_numPix_x();
 	int py = px;
 	float msg[msgLength];
@@ -258,14 +269,16 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
     		int pmiID = (int) msg[0];
     		int diffrID = (int) msg[1];
     		int sliceInterval = (int) msg[2];
-    		
-    		//TO DO: Check pmiID exists in the workflow
-		
+
 			// input file
 			string filename;
 			stringstream sstm;
 			sstm << inputDir << "/pmi/pmi_out_" << setfill('0') << setw(7) << pmiID << ".h5";
 			filename = sstm.str();
+			if ( !boost::filesystem::exists( filename ) ) {
+				cout << filename << " does not exist!" << endl;
+				exit(0);
+			}
 
 			// output file
 			stringstream sstm3;
@@ -283,8 +296,9 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			scriptName = sstm2.str();
 			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
-cout << "**i** " << i << endl;
-			// Rotate single particle			
+			assert(i == 0);
+			
+			// Rotate particle			
 			rot3D = CToolbox::quaternion2rot3D(quaternion);
 
 			double total_phot = 0;
@@ -295,40 +309,20 @@ cout << "**i** " << i << endl;
 			int timeSlice = 0;
 			int isFirstSlice = 1;
 			while(!done) {	// sum up time slices
-				if (timeSlice+sliceInterval >= numSlices) {
-					sliceInterval = numSlices - timeSlice;
-					done = 1;
-				}
-				timeSlice += sliceInterval;
+				setTimeSliceInterval(numSlices, &sliceInterval, &timeSlice, &done);
 
-				string datasetname;
-				stringstream sstm0;
-				sstm0 << "/data/snp_" << setfill('0') << setw(7) << timeSlice;
-				datasetname = sstm0.str();
-		
 				// Particle //
 				CParticle particle = CParticle();
-				particle.load_atomType(filename,datasetname+"/T"); 	// rowvec atomType
-				particle.load_atomPos(filename,datasetname+"/r");		// mat pos
-				particle.load_ionList(filename,datasetname+"/xyz");		// rowvec ion list
-				particle.load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
-				particle.load_qSample(filename,datasetname+"/halfQ");	// rowvec q vector sin(theta)/lambda
-				// Particle's inelastic properties
-				if (calculateCompton) {
-					particle.load_compton_qSample(filename,datasetname+"/Sq_halfQ");	// rowvec q vector sin(theta)/lambda
-					particle.load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
-					particle.load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
-				}
+				loadParticle(vm, filename, timeSlice, &particle);
+				
 				// Rotate atom positions
-				int numAtoms = particle.get_numAtoms();
-				myPos.zeros(numAtoms,3);
 				myPos = particle.get_atomPos();
 				myPos = myPos * trans(rot3D); // rotate atoms
 				particle.set_atomPos(&myPos);
 
 				// Beam // FIXME: Check that these fields exist
-				if (givenFluence == 0) {
-					n_phot = 0;
+				if (givenFluence == false) {
+					int n_phot = 0;
 					for (int i = 0; i < sliceInterval; i++) {
 						string datasetname;
 						stringstream sstm0;
@@ -340,26 +334,19 @@ cout << "**i** " << i << endl;
 					}
 					total_phot += n_phot;
 					beam.set_photonsPerPulse(n_phot);
-				} else {
-					total_phot = n_phot;
-					beam.set_photonsPerPulse(n_phot);
 				}
 				
-				if (givenPhotonEnergy == 0) {
+				if (givenPhotonEnergy == false) {
 					// Read in photon energy
-					photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
-					beam.set_photon_energy(photon_energy);
-				} else {
+					double photon_energy = double(hdf5readScalar<float>(filename,"/history/parent/detail/params/photonEnergy"));
 					beam.set_photon_energy(photon_energy);
 				}
 	
-				if (givenFocusRadius == 0) {
+				if (givenFocusRadius == false) {
 					// Read in focus size
 					double focus_xFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/xFWHM"));
 					double focus_yFWHM = double(hdf5readScalar<float>(filename,"/history/parent/detail/misc/yFWHM"));
 					beam.set_focus(focus_xFWHM,focus_yFWHM,"ellipse");
-				} else {
-					beam.set_focus(focus_radius*2);
 				}
 				////////////////////////
 
@@ -509,6 +496,35 @@ cout << "**i** " << i << endl;
 	} // end of while
 }// end of slave_diffract
 
+void setTimeSliceInterval(const int numSlices, int* sliceInterval, int* timeSlice, int* done) {
+	if (*timeSlice + *sliceInterval >= numSlices) {
+		*sliceInterval = numSlices - *timeSlice;
+		*done = 1;
+	}
+	*timeSlice += *sliceInterval;
+}
+
+void loadParticle(const opt::variables_map vm, const string filename, const int timeSlice, CParticle* particle) {
+	bool calculateCompton = vm["calculateCompton"].as<bool>();
+
+	string datasetname;
+	stringstream ss;
+	ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice;
+	datasetname = ss.str();
+
+	particle->load_atomType(filename,datasetname+"/T"); 	// rowvec atomType
+	particle->load_atomPos(filename,datasetname+"/r");		// mat pos
+	particle->load_ionList(filename,datasetname+"/xyz");		// rowvec ion list
+	particle->load_ffTable(filename,datasetname+"/ff");	// mat ffTable (atomType x qSample)
+	particle->load_qSample(filename,datasetname+"/halfQ");	// rowvec q vector sin(theta)/lambda
+	// Particle's inelastic properties
+	if (calculateCompton) {
+		particle->load_compton_qSample(filename,datasetname+"/Sq_halfQ");	// rowvec q vector sin(theta)/lambda
+		particle->load_compton_sBound(filename,datasetname+"/Sq_bound");	// rowvec static structure factor
+		particle->load_compton_nFree(filename,datasetname+"/Sq_free");	// rowvec Number of free electrons
+	}
+}
+
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
     // Constructing an options describing variable and giving it a
@@ -531,7 +547,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("pmiStartID", opt::value<int>()->default_value(1), "First Photon Matter Interaction (PMI) file ID to use")
         ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
         ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
-        ("calculateCompton", opt::value<int>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
+        ("calculateCompton", opt::value<bool>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
         ("uniformRotation", opt::value<int>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
         ("saveSlices", opt::value<int>()->default_value(0), "If 1, saves time-slices of the photon field in hdf5 under /misc/photonField")
         ("gpu", opt::value<int>()->default_value(0), "If 1, uses NVIDIA CUDA for faster calculation")
@@ -575,7 +591,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
 		if (vm.count("numDP"))
     		cout << "numDP: " << vm["numDP"].as<int>() << endl;
 		if (vm.count("calculateCompton"))
-    		cout << "calculateCompton: " << vm["calculateCompton"].as<int>() << endl;
+    		cout << "calculateCompton: " << vm["calculateCompton"].as<bool>() << endl;
 		if (vm.count("uniformRotation"))
     		cout << "uniformRotation: " << vm["uniformRotation"].as<int>() << endl;
 		if (vm.count("saveSlices"))
