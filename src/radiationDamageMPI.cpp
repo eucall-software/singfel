@@ -302,6 +302,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			}
 
 			// Run prepHDF5
+			
 			string scriptName;
 			sstm.str("");
 			sstm << inputDir << "/prepHDF5.py";

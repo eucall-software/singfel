@@ -1425,6 +1425,7 @@ struct Packet {
 
 void calculate_dp(Packet*);
 int write_HDF5(char *);
+bool prepS2E(string filename,string outputName,string configFile);
 
 class CIO{
 	//int b;
