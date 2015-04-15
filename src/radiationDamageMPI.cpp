@@ -53,15 +53,25 @@ const int msgLength = 4; // MPI message length
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
-void loadParticle(const opt::variables_map vm, const string filename, const int timeSlice, CParticle* particle);
-void setTimeSliceInterval(const int numSlices, int* sliceInterval, int* timeSlice, int* done);
+void generateRotations(const bool uniformRotation, \
+                       const string rotationAxis, const int numQuaternions, \
+                       fmat* myQuaternions);
+void loadParticle(const opt::variables_map vm, const string filename, \
+                  const int timeSlice, CParticle* particle);
+void setTimeSliceInterval(const int numSlices, int* sliceInterval, \
+                          int* timeSlice, int* done);
 void rotateParticle(fvec* quaternion, CParticle* particle);
-void setFluenceFromFile(const string filename, const int timeSlice, const int sliceInterval, CBeam* beam);
+void setFluenceFromFile(const string filename, const int timeSlice, \
+                        const int sliceInterval, CBeam* beam);
 void setEnergyFromFile(const string filename, CBeam* beam);
 void setFocusFromFile(const string filename, CBeam* beam);
-void getComptonScattering(const opt::variables_map vm, CParticle* particle, CDetector* det, fmat* Compton);
-void savePhotonField(const string filename, const int isFirstSlice, const int timeSlice, fmat* photon_field);
-void saveAsDiffrOutFile(const string outputName, umat* detector_counts, fmat* detector_intensity, fvec* quaternion, CDetector* det, CBeam* beam, double total_phot);
+void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
+                          CDetector* det, fmat* Compton);
+void savePhotonField(const string filename, const int isFirstSlice, \
+                     const int timeSlice, fmat* photon_field);
+void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
+                        fmat* detector_intensity, fvec* quaternion, \
+                        CDetector* det, CBeam* beam, double total_phot);
 
 int main( int argc, char* argv[] ){
 
@@ -103,7 +113,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int numDP = vm["numDP"].as<int>();
 	int sliceInterval = vm["sliceInterval"].as<int>();
 	string rotationAxis = vm["rotationAxis"].as<string>();
-	int uniformRotation = vm["uniformRotation"].as<int>();
+	bool uniformRotation = vm["uniformRotation"].as<bool>();
 
   	int ntasks, rank, numProcesses, numSlaves;
   	int numTasksDone = 0;
@@ -134,21 +144,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	
 	// Setup rotations
 	fmat myQuaternions;
-	myQuaternions.zeros(ntasks,4);
-	if (uniformRotation) { // uniform rotations
-		if (rotationAxis == "y" || rotationAxis == "z") {
-			myQuaternions = CToolbox::pointsOn1Sphere(ntasks, rotationAxis);		
-		} else if (rotationAxis == "xyz") {
-			myQuaternions = CToolbox::pointsOn4Sphere(ntasks);
-		}
-	} else { // random rotations
-		for (int i = 0; i < ntasks; i++) {
-			myQuaternions.row(i) = trans(CToolbox::getRandomRotation(rotationAxis));
-		}
-	}
+	generateRotations(uniformRotation, rotationAxis, ntasks, \
+	                  &myQuaternions);
 
 	int counter = 0;
 	int done = 0;
+	float lastPercentDone = 0.;
 	for (rank = 1; rank < numProcesses; ++rank) {
 		if (pmiID > pmiEndID) {
 			cout << "Error!!" << endl;
@@ -201,6 +202,8 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		if (numTasksDone >= ntasks) {
 			done = 1;
 		}
+		// Display status
+		CToolbox::displayStatusBar(numTasksDone,ntasks,&lastPercentDone);
 	}
 	
   	// Wait for status update of slaves.
@@ -334,7 +337,6 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					setFluenceFromFile(filename, timeSlice, sliceInterval, &beam);
 				}
 				total_phot += beam.get_photonsPerPulse();
-				cout << "total_phot: " << total_phot << endl;
 				
 				// Coherent contribution
 				CDiffraction::calculate_atomicFactor(&particle, &det); // get f_hkl
@@ -425,20 +427,35 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			// Save to HDF5
 			saveAsDiffrOutFile(outputName, &detector_counts, &detector_intensity, &quaternion, &det, &beam, total_phot);
 
-			if (comm->rank() == 1) {
-				CDiffraction::displayResolution(&det, &beam);
-			}
-
     		comm->send(master, DONETAG, 1);
-    		
-			cout << "DP took: " << timer.toc() <<" seconds."<<endl;
     	}
 		
 		if (status.tag() == DIETAG) {
 			return;
 		}
 	} // end of while
+
+	if (comm->rank() == 1) {
+		CDiffraction::displayResolution(&det, &beam);
+	}	
 }// end of slave_diffract
+
+void generateRotations(const bool uniformRotation, const string rotationAxis, const int numQuaternions, fmat* myQuaternions) {
+	fmat& _myQuaternions = myQuaternions[0];
+	
+	_myQuaternions.zeros(numQuaternions,4);
+	if (uniformRotation) { // uniform rotations
+		if (rotationAxis == "y" || rotationAxis == "z") {
+			_myQuaternions = CToolbox::pointsOn1Sphere(numQuaternions, rotationAxis);		
+		} else if (rotationAxis == "xyz") {
+			_myQuaternions = CToolbox::pointsOn4Sphere(numQuaternions);
+		}
+	} else { // random rotations
+		for (int i = 0; i < numQuaternions; i++) {
+			_myQuaternions.row(i) = trans(CToolbox::getRandomRotation(rotationAxis));
+		}
+	}
+}
 
 void setTimeSliceInterval(const int numSlices, int* sliceInterval, int* timeSlice, int* done) {
 	if (*timeSlice + *sliceInterval >= numSlices) {
@@ -581,7 +598,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("pmiEndID", opt::value<int>()->default_value(1), "Last Photon Matter Interaction (PMI) file ID to use")
         ("numDP", opt::value<int>()->default_value(1), "Number of diffraction patterns per PMI file")
         ("calculateCompton", opt::value<bool>()->default_value(0), "If 1, includes Compton scattering in the diffraction pattern")
-        ("uniformRotation", opt::value<int>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
+        ("uniformRotation", opt::value<bool>()->default_value(0), "If 1, rotates the sample uniformly in SO(3)")
         ("saveSlices", opt::value<int>()->default_value(0), "If 1, saves time-slices of the photon field in hdf5 under /misc/photonField")
         ("gpu", opt::value<int>()->default_value(0), "If 1, uses NVIDIA CUDA for faster calculation")
         ("help", "produce help message")
@@ -626,7 +643,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
 		if (vm.count("calculateCompton"))
     		cout << "calculateCompton: " << vm["calculateCompton"].as<bool>() << endl;
 		if (vm.count("uniformRotation"))
-    		cout << "uniformRotation: " << vm["uniformRotation"].as<int>() << endl;
+    		cout << "uniformRotation: " << vm["uniformRotation"].as<bool>() << endl;
 		if (vm.count("saveSlices"))
     		cout << "saveSlices: " << vm["saveSlices"].as<int>() << endl;
 		if (vm.count("gpu"))
