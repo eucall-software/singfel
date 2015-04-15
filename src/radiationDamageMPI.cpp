@@ -220,94 +220,18 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	wall_clock timer;
 	boost::mpi::status status;
 
-	/****** Beam ******/
-	// Let's read in our beam file
-	double photon_energy = 0;
-	double n_phot = 0;
-	double focus_radius = 0;
-	int givenPhotonEnergy = 0;
-	int givenFluence = 0;
-	int givenFocusRadius = 0;
-	string line;
-	ifstream myFile(beamFile.c_str());
-	while (getline(myFile, line)) {
-		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-			// line now contains a valid input
-			typedef boost::tokenizer<boost::char_separator<char> > Tok;
-			boost::char_separator<char> sep(" ="); // default constructed
-			Tok tok(line, sep);
-			for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-				if ( boost::algorithm::iequals(*tok_iter,"beam/photon_energy") ) {            
-					string temp = *++tok_iter;
-					photon_energy = atof(temp.c_str()); // photon energy to wavelength
-					givenPhotonEnergy = 1;
-					break;
-				} else if ( boost::algorithm::iequals(*tok_iter,"beam/fluence") ) {            
-					string temp = *++tok_iter;
-					n_phot = atof(temp.c_str()); // number of photons per pulse
-					givenFluence = 1;
-					break;
-				} else if ( boost::algorithm::iequals(*tok_iter,"beam/radius") ) {            
-					string temp = *++tok_iter;
-					focus_radius = atof(temp.c_str()); // focus radius
-					givenFocusRadius = 1;
-					break;
-				}
-			}
-		}
-	}
-	CBeam beam = CBeam();
-
-	/****** Detector ******/
-	double d = 0;					// (m) detector distance
-	double pix_width = 0;			// (m)
-	int px_in = 0;                  // number of pixel along x
-	string badpixmap = ""; // this information should go into the detector class
-	// Parse the geom file
-	ifstream myGeomFile(geomFile.c_str());
-	while (getline(myGeomFile, line)) {
-		if (line.compare(0,1,"#") && line.compare(0,1,";") && line.length() > 0) {
-			// line now contains a valid input 
-			typedef boost::tokenizer<boost::char_separator<char> > Tok;
-			boost::char_separator<char> sep(" ="); // default constructed
-			Tok tok(line, sep);
-			for(Tok::iterator tok_iter = tok.begin(); tok_iter != tok.end(); ++tok_iter){
-				if ( boost::algorithm::iequals(*tok_iter,"geom/d") ) {            
-					string temp = *++tok_iter;
-					d = atof(temp.c_str());
-					break;
-				} else if ( boost::algorithm::iequals(*tok_iter,"geom/pix_width") ) {            
-					string temp = *++tok_iter;
-					pix_width = atof(temp.c_str());
-					break;
-				} else if ( boost::algorithm::iequals(*tok_iter,"geom/px") ) {            
-					string temp = *++tok_iter;
-					px_in = atof(temp.c_str());
-					break;
-				} else if ( boost::algorithm::iequals(*tok_iter,"geom/badpixmap") ) {            
-					string temp = *++tok_iter;
-					badpixmap = temp;
-					break;
- 				}
-			}
-		}
-	}
-	double pix_height = pix_width;		// (m)
-	const int px = px_in;				// number of pixels in x
-	const int py = px;					// number of pixels in y	
-	double cx = ((double) px-1)/2;		// this can be user defined
-	double cy = ((double) py-1)/2;		// this can be user defined
-
 	CDetector det = CDetector();
-	det.set_detector_dist(d);	
-	det.set_pix_width(pix_width);	
-	det.set_pix_height(pix_height);
-	det.set_numPix(py,px);
-	det.set_center_x(cx);
-	det.set_center_y(cy);
-	det.set_pixelMap(badpixmap);
-	uvec goodpix = det.get_goodPixelMap();
+	CBeam beam = CBeam();
+	beam.readBeamFile(beamFile);
+	det.readGeomFile(geomFile);
 	
+	bool givenFluence = false;
+	bool givenPhotonEnergy = false;
+	bool givenFocusRadius = false;
+	float photon_energy, focus_radius;
+	int n_phot = 0;
+	int px = det.get_numPix_x();
+	int py = px;
 	float msg[msgLength];
 	fmat rot3D(3,3);
 	fvec quaternion(4);
@@ -359,7 +283,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			scriptName = sstm2.str();
 			string myCommand = string("python ") + scriptName + " " + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
-			
+cout << "**i** " << i << endl;
 			// Rotate single particle			
 			rot3D = CToolbox::quaternion2rot3D(quaternion);
 
@@ -550,7 +474,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelWidth", pixelWidth,createSubgroup);
 			double pixelHeight = det.get_pix_height();
 			success = hdf5writeScalar(outputName,"params","params/geom","/params/geom/pixelHeight", pixelHeight,createSubgroup);
-			fmat mask = ones<fmat>(px_in,px_in);
+			fmat mask = ones<fmat>(px,px);
 			success = hdf5writeVector(outputName,"params","params/geom","/params/geom/mask", mask,createSubgroup);
 			createSubgroup = 1;
 			double photonEnergy = beam.get_photon_energy();
@@ -563,6 +487,8 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			success = hdf5writeScalar(outputName,"params","params/beam","/params/beam/focusArea", focusArea,createSubgroup);
 
 			if (comm->rank() == 1) {
+				double pix_height = det.get_pix_height();
+				double d = det.get_detector_dist();
 				double thetaMax = atan((px/2*pix_height)/d);
 				double qmax = 2*sin(thetaMax/2)/beam.get_wavelength();
 				double dmin = 1/(2*qmax);
