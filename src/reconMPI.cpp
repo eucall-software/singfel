@@ -84,6 +84,7 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, \
                             uvec* numJobsForEachSlave, fvec* condProb);
 void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, \
                        fvec* myProb);
+void loadCondProb(opt::variables_map vm, int iter, int expansionInd, fvec* myProb);
 void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, \
                         int ind);
 void saveExpansionUpdate(opt::variables_map vm, fcube* updatedSlice_Pixmap, int iter, \
@@ -397,6 +398,11 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 		saveCondProb = vm["saveCondProb"].as<bool>();
 	}
 	
+	bool useExistingProb = false;
+	if (vm.count("useExistingProb")) {
+		useExistingProb = true;
+	}
+	
 	uvec numJobsForEachSlave(numSlaves);
 	fvec myProb(numImages);
 	fvec normCondProb;
@@ -410,15 +416,19 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	float lastPercentDone = 0;
 	// Loop through all expansion slices and compare all measured data
 	for (int expansionInd = 0; expansionInd < numSlices; expansionInd++) {
-		// For each slice, each worker get a subset of measured data
-		sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, \
-		                 expansionInd, iter);
+		if ( !useExistingProb ) {
+			// For each slice, each worker get a subset of measured data
+			sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, \
+				             expansionInd, iter);
 
-		// Accumulate conditional probabilities for each expansion slice
-		receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, &myProb);
+			// Accumulate conditional probabilities for each expansion slice
+			receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, &myProb);
 		
-		if (saveCondProb) {
-			saveCondProb2File(vm, iter, expansionInd, &myProb);
+			if (saveCondProb) {
+				saveCondProb2File(vm, iter, expansionInd, &myProb);
+			}
+		} else {
+			loadCondProb(vm, iter, expansionInd, &myProb);
 		}
 		
 		if (useGaussianProb) {
@@ -647,11 +657,21 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uv
 void saveCondProb2File(opt::variables_map vm, int iter, int expansionInd, fvec* myProb) {
 	string output = vm["output"].as<string>();
 
-	string outputName;
+	string filename;
 	stringstream sstm;
 	sstm << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
-	outputName = sstm.str();
-	myProb->save(outputName,raw_ascii);
+	filename = sstm.str();
+	myProb->save(filename,raw_ascii);
+}
+
+void loadCondProb(opt::variables_map vm, int iter, int expansionInd, fvec* myProb) {
+	string output = vm["output"].as<string>();
+
+	string filename;
+	stringstream sstm;
+	sstm << output << "/maximization/iter" << iter << "/similarity_" << setfill('0') << setw(7) << expansionInd << ".dat";
+	filename = sstm.str();
+	myProb->load(filename,raw_ascii);
 }
 
 void saveExpansionSlice(opt::variables_map vm, fcube* myDPnPixmap, int iter, int ind) {
@@ -890,6 +910,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("saveCondProb", opt::value<bool>(), "Optionally save conditional probabilities")
         ("justDo", opt::value<string>(), "Choose which E,M,C step to perform")
         ("percentile", opt::value<string>(), "Top percentile expansion slices to use for compression (Comma separated list)")
+        ("useExistingProb", opt::value<bool>(), "Use the conditional probabilities that have already been computed")
         ("help", "produce help message")
     ;
 
