@@ -247,14 +247,20 @@ wall_clock timer;
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
+	string useProbType = vm["useProbType"].as<string>();
+	boost::to_upper(useProbType);
 	
 	fvec gaussianStdDev;
-	bool useGaussianProb = false;
-	if (vm.count("gaussianStdDev")) {
-		useGaussianProb = true;
-		string gaussianStdDevStr = vm["gaussianStdDev"].as<string>();
-		gaussianStdDev = str2fvec(gaussianStdDevStr);
+	if (useProbType == "GAUSSIAN") {
+		if (vm.count("gaussianStdDev")) {
+			string gaussianStdDevStr = vm["gaussianStdDev"].as<string>();
+			gaussianStdDev = str2fvec(gaussianStdDevStr);
+		} else {
+			cout << "gaussianStdDev is missing" << endl;
+			exit(0);
+		}
 	}
+	
 	int numChunkData = 0;
 	boost::mpi::status status;
 	float msg[lenDPTAG];
@@ -308,7 +314,9 @@ wall_clock timer;
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
 				double val = 0.0;
-				if (useGaussianProb) {
+				if (useProbType == "POISSON") {
+					val = CToolbox::calculatePoissonianSimilarity(&modelDPnPixmap, &myDPnPixmap);
+				} else {
 					val = CToolbox::calculateGaussianSimilarity(&modelDPnPixmap, &myDPnPixmap, gaussianStdDev(iter));
 				}
 				
@@ -902,6 +910,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("format", opt::value<string>(), "Defines file format to use")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
         ("gaussianStdDev", opt::value<string>(), "Use Gaussian likelihood for maximization with the following standard deviations (Comma separated list)")
+        ("useProbType", opt::value<string>()->default_value("POISSON"), "Use Poisson or Gaussian likelihood for maximization")
         ("saveCondProb", opt::value<bool>(), "Optionally save conditional probabilities")
         ("justDo", opt::value<string>(), "Choose which E,M,C step to perform")
         ("percentile", opt::value<string>(), "Top percentile expansion slices to use for compression (Comma separated list)")
