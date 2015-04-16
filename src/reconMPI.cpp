@@ -216,7 +216,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// ########### MAXIMIZATION ##############
 	if (justDo == "EMC" || justDo == "M") {
 		cout << "Start maximization" << endl;
-		timerMaster.tic();
+		timerMaster.tic();		
 		status = maximization(comm, vm, det, numSlaves, numProcesses, \
 		                      numCandidates(iter), numImages, \
 		                      numSlices, iter);
@@ -247,14 +247,20 @@ wall_clock timer;
 	string input = vm["input"].as<string>();
 	string format = vm["format"].as<string>();
 	string hdfField = vm["hdfField"].as<string>();
+	string useProbType = vm["useProbType"].as<string>();
+	boost::to_upper(useProbType);
 	
 	fvec gaussianStdDev;
-	bool useGaussianProb = false;
-	if (vm.count("gaussianStdDev")) {
-		useGaussianProb = true;
-		string gaussianStdDevStr = vm["gaussianStdDev"].as<string>();
-		gaussianStdDev = str2fvec(gaussianStdDevStr);
+	if (useProbType == "GAUSSIAN") {
+		if (vm.count("gaussianStdDev")) {
+			string gaussianStdDevStr = vm["gaussianStdDev"].as<string>();
+			gaussianStdDev = str2fvec(gaussianStdDevStr);
+		} else {
+			cout << "gaussianStdDev is missing" << endl;
+			exit(0);
+		}
 	}
+	
 	int numChunkData = 0;
 	boost::mpi::status status;
 	float msg[lenDPTAG];
@@ -303,17 +309,14 @@ wall_clock timer;
 			  	} else {
 				  	loadDPnPixmap(vm, i+1, &myDPnPixmap);
 				}
-/*if (expansionInd == 99 && i == endInd){
-cout << "imgInd: " << i+1 << endl;
-cout << "DPval: " << myDPnPixmap.slice(0) << endl;
-uvec mm = find(myDPnPixmap.slice(0)>0);
-cout << "myDP: " << mm.n_elem << " " << mm << endl;
-}*/
+
 				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
 				double val = 0.0;
-				if (useGaussianProb) {
+				if (useProbType == "POISSON") {
+					val = CToolbox::calculatePoissonianSimilarity(&modelDPnPixmap, &myDPnPixmap);
+				} else {
 					val = CToolbox::calculateGaussianSimilarity(&modelDPnPixmap, &myDPnPixmap, gaussianStdDev(iter));
 				}
 				
@@ -400,9 +403,9 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	
 	bool useExistingProb = false;
 	if (vm.count("useExistingProb")) {
-		useExistingProb = true;
+		useExistingProb = vm["useExistingProb"].as<bool>();
 	}
-	
+
 	uvec numJobsForEachSlave(numSlaves);
 	fvec myProb(numImages);
 	fvec normCondProb;
@@ -907,6 +910,7 @@ opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm 
         ("format", opt::value<string>(), "Defines file format to use")
         ("hdfField", opt::value<string>()->default_value("/data/data"), "Data field to use for reconstruction")
         ("gaussianStdDev", opt::value<string>(), "Use Gaussian likelihood for maximization with the following standard deviations (Comma separated list)")
+        ("useProbType", opt::value<string>()->default_value("POISSON"), "Use Poisson or Gaussian likelihood for maximization")
         ("saveCondProb", opt::value<bool>(), "Optionally save conditional probabilities")
         ("justDo", opt::value<string>(), "Choose which E,M,C step to perform")
         ("percentile", opt::value<string>(), "Top percentile expansion slices to use for compression (Comma separated list)")
