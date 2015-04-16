@@ -10,16 +10,13 @@ int CDiffrVol::volDim;
 
 CDiffrVol::CDiffrVol() {
 	volDim = 1;
-	intensity(volDim,volDim,volDim);
-	weight(volDim,volDim,volDim);
+	intensity.zeros(volDim,volDim,volDim);
+	weight.zeros(volDim,volDim,volDim);
 }
 
 CDiffrVol::CDiffrVol(int px) {
-cout << "got here" << endl;
 	volDim = px;
-cout << "got here1" << endl;
 	intensity.zeros(volDim,volDim,volDim);
-cout << "got here2" << endl;
 	weight.zeros(volDim,volDim,volDim);
 }
 
