@@ -5,12 +5,15 @@
 #include <sstream>
 #include <iostream>
 #include "detector.h"
+#include "diffractionVolume.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/mpi.hpp>
 #include <boost/program_options.hpp>
 
 namespace opt = boost::program_options;
 namespace mpi = boost::mpi;
+
+using namespace diffractionVolume;
 
 #ifdef __cplusplus
 extern "C" {
@@ -57,13 +60,20 @@ public:
 	static void extract_interp_linear3D(fcube *myValue, fmat *myPoints, \
                                         uvec *pixmap, fcube *myIntensity, \
                                         fcube *myWeight);
+	static void extract_interp_linear3D(fcube *myValue, fmat *myPoints, \
+                                        uvec *pixmap, CDiffrVol* diffrVol);
 	static bool isNullWeight(fcube* myWeight, int x, int y, int z);
+	static bool isNullWeight(CDiffrVol* diffrVol, int x, int y, int z);
 	static void slice3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fmat*, float, arma::fcube*, int active = 0, std::string interpolate="nearest");
 	static void slice3D(arma::fcube* DPnPixmap, arma::fmat* Rot, \
 	                    arma::fcube* volume, arma::fcube* weight, detector::CDetector* det, int active = 0, \
 	                    std::string interpolate="nearest");
+	static void slice3D(arma::fcube* DPnPixmap, arma::fmat* Rot, \
+	                    CDiffrVol* diffrVol, detector::CDetector* det, \
+	                    int active = 0, std::string interpolate="nearest");	                 
 	static void interp_linear3D(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void insert_slice(arma::fcube*, arma::fmat*, arma::fcube*, arma::fcube*);
+	static void insert_slice(arma::fcube*, arma::fmat*, CDiffrVol* diffrVol);
 	static void interp_nearestNeighbor(arma::fmat*, arma::fmat*, arma::uvec*, arma::fcube*, arma::fcube*);
 	static void merge3D(arma::fmat* DP, arma::fmat* R, arma::fcube* volume, \
 	                    arma::fcube* weights, detector::CDetector* det, \
@@ -72,8 +82,12 @@ public:
 	                    arma::fcube* volume, arma::fcube* weights, \
 	                    detector::CDetector* det, int active = 0, \
 	                    std::string interpolate="nearest");
-		
-	static void normalize(arma::fcube*, arma::fcube*);
+	static void merge3D(arma::fcube* DPnPixmap, arma::fmat* R, \
+	                    CDiffrVol* diffrVol, \
+	                    detector::CDetector* det, int active = 0, \
+	                    std::string interpolate="nearest");
+	                    		
+	//static void normalize(arma::fcube*, arma::fcube*);
 	
 	static void cart2polar(fcube *samplePoints, int detectorWidth, float rhoMin, float rhoMax);
 	static void interp_linear2D(fmat* newDP, fcube* samplePoints, fmat* cartDP);
@@ -81,6 +95,7 @@ public:
 	static arma::fmat badpixmap2goodpixmap(arma::fmat badpixmap);
 	
 	static double calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type);
+	static double calculatePoissonianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap);
 	static double calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap, float stdDev);
 
 private:

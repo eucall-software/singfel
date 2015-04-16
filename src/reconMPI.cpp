@@ -30,6 +30,8 @@
 #include "toolbox.h"
 #include "diffraction.cuh"
 #include "io.h"
+#include "diffractionVolume.h"
+#include "diffractionPattern.h"
 
 namespace mpi = boost::mpi;
 namespace opt = boost::program_options;
@@ -40,6 +42,8 @@ using namespace beam;
 using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
+using namespace diffractionVolume;
+using namespace diffractionPattern;
 
 const int master = 0;
 const int lenDPTAG = 4;
@@ -55,23 +59,22 @@ const int lenDPTAG = 4;
 #define CHUNKTAG 8 // TODO: Clean up unused TAGs
 #define PROBTAG 9
 static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
-                         fcube* myRot, CDetector* det, fcube* myIntensity, \
-                         fcube* myWeight, int numImages, int numSlices, \
-                         int iter);
+                         fcube* myRot, CDetector* det, CDiffrVol* diffrVol, \
+                         int numImages, int numSlices, int iter);
 static void slave_recon(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
 static int expansion(opt::variables_map vm, arma::fcube* myRot, \
-                     arma::fcube* myIntensity, fcube* myWeight, CDetector* det,\
+                     CDiffrVol* diffrVol, CDetector* det,\
                      int numSlices, int iter);
 static int maximization(mpi::communicator* comm, opt::variables_map vm, \
                         CDetector* det, int numSlaves, int numProcesses, \
                         int numCandidates, int numImages, \
                         int numSlices, int iter);
-static int compression(opt::variables_map vm, fcube* myIntensity, \
-                       fcube* myWeight, CDetector* det, fcube* myRot,\
+static int compression(opt::variables_map vm, CDiffrVol* diffrVol, \
+                       CDetector* det, fcube* myRot,\
                        int numSlices, int iter);
-static int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, \
-                                 fcube* myWeight, int iter);
+static int saveDiffractionVolume(opt::variables_map vm, CDiffrVol* diffrVol, \
+                                 int iter);
 uvec numJobsPerSlave(int numImages, int numSlaves);
 void normalizeCondProb(fvec* condProb, int numCandidates, fvec* normCondProb, \
                        uvec* candidatesInd);
@@ -106,7 +109,7 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, \
                         uvec* goodSlicesInd);
 void saveBestCandidateProb(opt::variables_map vm, fvec* candidateProb, int iter);
 void loadCandidateProb(opt::variables_map vm, int iter, fvec* candidateProb);
-void loadInitVol(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
+//void loadInitVol(opt::variables_map vm, CDiffrVol* diffrVol);
 
 int main( int argc, char* argv[] ){
 
@@ -134,6 +137,7 @@ int main( int argc, char* argv[] ){
 	string numSlicesStr = vm["numSlices"].as<string>();
 	ivec numSlices = str2ivec(numSlicesStr);
 	string hdfField = vm["hdfField"].as<string>();
+	int volDim = vm["volDim"].as<int>();
 
 	// Check the input makes sense
 	int numSlaves = comm->size()-1;
@@ -146,7 +150,6 @@ int main( int argc, char* argv[] ){
 	//TODO: check startIter is less than length numImages
 	//TODO: check startIter+numIterations is less than length numImages
 
-	fcube myIntensity, myWeight;
 	CDetector det = CDetector();
 	
 	if (world.rank() == master) {	
@@ -164,13 +167,14 @@ int main( int argc, char* argv[] ){
 	world.barrier();
 	// Main iteration
 	if (world.rank() == master) {
+		CDiffrVol diffrVol = CDiffrVol(volDim);
 		for (int iter = startIter; iter < startIter+numIterations; iter++) {
 			int numImagesNow = numImages[iter];
 			int numSlicesNow = numSlices[iter];
 			fcube myRot(3,3,numSlicesNow);
 			cout << "***** ITER " << iter << " *****" << endl;
 			generateUniformRotations(rotationAxis, numSlicesNow, &myRot);
-			master_recon(comm, vm, &myRot, &det, &myIntensity, &myWeight, numImagesNow, numSlicesNow, iter);
+			master_recon(comm, vm, &myRot, &det, &diffrVol, numImagesNow, numSlicesNow, iter);
 		}
 	} else {
 		slave_recon(comm, vm); // slaves keep on running
@@ -187,7 +191,9 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* myRot, CDetector* det, fcube* myIntensity, fcube* myWeight, int numImages, int numSlices, int iter){
+static void master_recon(mpi::communicator* comm, opt::variables_map vm, \
+                         fcube* myRot, CDetector* det, CDiffrVol* diffrVol, \
+                         int numImages, int numSlices, int iter){
 
 	wall_clock timerMaster;
 
@@ -209,7 +215,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	if (justDo == "EMC" || justDo == "E") {
 		cout << "Start expansion" << endl;
 		timerMaster.tic();
-		status = expansion(vm, myRot, myIntensity, myWeight, det, numSlices, iter);
+		status = expansion(vm, myRot, diffrVol, det, numSlices, iter);
 		assert(status==0);
 		cout << "Expansion time: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -227,13 +233,13 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	if (justDo == "EMC" || justDo == "C") {
 		cout << "Start compression" << endl;
 		timerMaster.tic();
-		status = compression(vm, myIntensity, myWeight, det, myRot, numSlices, \
+		status = compression(vm, diffrVol, det, myRot, numSlices, \
 			                 iter);
 		assert(status==0);
 		cout << "Compression time: " << timerMaster.toc() <<" seconds."<<endl;
 		// ########### Save diffraction volume ##############
 		cout << "Saving diffraction volume..." << endl;
-		status = saveDiffractionVolume(vm, myIntensity, myWeight, iter);
+		status = saveDiffractionVolume(vm, diffrVol, iter);
 		assert(status==0);
 		}
 
@@ -339,8 +345,8 @@ wall_clock timer;
 } // end of slave_recon
 
 // Given a diffraction volume (myIntensity) and save 2D slices (numSlices)
-int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
-              fcube* myWeight, CDetector* det, int numSlices, int iter) {
+int expansion(opt::variables_map vm, fcube* myRot, CDiffrVol* diffrVol, \
+              CDetector* det, int numSlices, int iter) {
 	int volDim = vm["volDim"].as<int>();
 	string initialVolume;
 	if (vm.count("initialVolume")) {
@@ -362,11 +368,10 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 	if (initVol) {
 		if ( strcmp(initialVolume.c_str(),"randomStart")==0 ) {
 			cout << "Random diffraction volume..." << endl;
-			myIntensity->randu(volDim,volDim,volDim);
-			myWeight->ones(volDim,volDim,volDim);
+			diffrVol->randVol();
 		} else { // Load pre-existing diffraction volume
 			cout << "Loading diffraction volume..." << endl;
-			loadInitVol(vm, myIntensity, myWeight);
+			diffrVol->loadInitVol(vm);//loadInitVol(vm, diffrVol);
 		}
 	}
 	
@@ -375,7 +380,7 @@ int expansion(opt::variables_map vm, fcube* myRot, fcube* myIntensity, \
 		myDPnPixmap.zeros(volDim,volDim,2);
 		// Get rotation matrix
 		myR = myRot->slice(i);
-		CToolbox::slice3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+		CToolbox::slice3D(&myDPnPixmap, &myR, diffrVol, det, active, interpolate);
 		// Save expansion slice to disk
 		saveExpansionSlice(vm, &myDPnPixmap, iter, i);
 	}
@@ -459,11 +464,10 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 }
 
 // Compression
-int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
+int compression(opt::variables_map vm, CDiffrVol* diffrVol, \
                 CDetector* det, fcube* myRot, int numSlices, \
                 int iter) {
 
-	int volDim = vm["volDim"].as<int>();
 	bool usePercentile = false;
 	fvec percentile;
 	if (vm.count("percentile")) {
@@ -472,8 +476,8 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
 		percentile = str2fvec(percentileStr);
 	}
 	
-	myWeight->zeros(volDim,volDim,volDim);
-	myIntensity->zeros(volDim,volDim,volDim);
+	diffrVol->initVol();//intensity.zeros(volDim,volDim,volDim);
+	//diffrVol->weight.zeros(volDim,volDim,volDim);
 	int active = 1;
 	string interpolate = "linear";
 	fcube myDPnPixmap; 	// first slice: diffraction pattern
@@ -492,7 +496,7 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
 			// Get rotation matrix
 			getRotationMatrix(&myR, myRot, *sliceInd);
 			// Merge into 3D diffraction volume
-			CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+			CToolbox::merge3D(&myDPnPixmap, &myR, diffrVol, det, active, interpolate);
 		}
 	} else {
 		for (int sliceInd = 0; sliceInd < numSlices; sliceInd++) {
@@ -501,11 +505,11 @@ int compression(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, \
 			// Get rotation matrix
 			getRotationMatrix(&myR, myRot, sliceInd);
 			// Merge into 3D diffraction volume
-			CToolbox::merge3D(&myDPnPixmap, &myR, myIntensity, myWeight, det, active, interpolate);
+			CToolbox::merge3D(&myDPnPixmap, &myR, diffrVol, det, active, interpolate);
 		}
 	}
 	// Normalize here
-	CToolbox::normalize(myIntensity, myWeight);
+	diffrVol->normalize();
 	return 0;
 }
 
@@ -533,7 +537,7 @@ void getRotationMatrix(fmat* myR, fcube* myRot, int sliceInd) {
 	_myR = myRot->slice(sliceInd);
 }
 
-int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight, int iter) {
+int saveDiffractionVolume(opt::variables_map vm, CDiffrVol* diffrVol, int iter) {
 	int volDim = vm["volDim"].as<int>();
 	string output = vm["output"].as<string>();
 
@@ -544,12 +548,12 @@ int saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWe
 		ss.str("");
 		ss << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 		filename = ss.str();
-		myIntensity->slice(i).save(filename,raw_ascii);
+		diffrVol->intensity.slice(i).save(filename,raw_ascii);
 		// save volume weights
 		ss.str("");
 		ss << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
 		filename = ss.str();
-		myWeight->slice(i).save(filename,raw_ascii);
+		diffrVol->weight.slice(i).save(filename,raw_ascii);
 	}
 	return 0;
 }
@@ -768,29 +772,7 @@ void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 	fmat pixmap = load_asciiImage(filename); // load badpixmap
 	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
 }
-/*
-void loadDP(opt::variables_map vm, int ind, fmat* myDP) {
-	string input = vm["input"].as<string>();
-	string format = vm["format"].as<string>();
-	string hdfField = vm["hdfField"].as<string>();
-	int volDim = vm["volDim"].as<int>();
-	fmat& _myDP = myDP[0];
-	
-	_myDP.zeros(volDim,volDim);
-	string filename;
-	std::stringstream ss;
-	if (format == "S2E") {
-		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
-		filename = ss.str();
-		// Read in diffraction				
-		_myDP = hdf5readT<fmat>(filename,hdfField);
-	} else {
-		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".dat";
-		filename = ss.str();
-		_myDP = load_asciiImage(filename);
-	}
-}
-*/
+
 // Reads Nth line of a file containing names of diffraction patterns
 // TODO: check
 void load_readNthLine(opt::variables_map vm, int N, fmat* img) {
@@ -862,27 +844,26 @@ void getGoodSlicesIndex(fvec* candidateProb, float percentile, uvec* goodSlicesI
 	uvec indices = sort_index(_candidateProb,"descend");
 	_goodSlicesInd = indices.subvec(0,numChosen-1);
 }
-
-void loadInitVol(opt::variables_map vm, fcube* myIntensity, fcube* myWeight) {
+/*
+void loadInitVol(opt::variables_map vm, CDiffrVol* diffrVol) {
 	string initialVolume = vm["initialVolume"].as<string>();
 	int volDim = vm["volDim"].as<int>();
 	
-	myIntensity->zeros(volDim,volDim,volDim);
-	myWeight->zeros(volDim,volDim,volDim);
+	diffrVol->initVol(volDim);
 	std::stringstream ss;
 	string filename;
 	for (int i = 0; i < volDim; i++) {
 		ss.str("");
 		ss << initialVolume << "/vol_" << setfill('0') << setw(7) << i << ".dat";
 		filename = ss.str();
-		myIntensity->slice(i) = load_asciiImage(filename);
+		diffrVol->intensity.slice(i) = load_asciiImage(filename);
 		ss.str("");
 		ss << initialVolume << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
 		filename = ss.str();
-		myWeight->slice(i) = load_asciiImage(filename);
+		diffrVol->weight.slice(i) = load_asciiImage(filename);
 	}
 }
-
+*/
 opt::variables_map parse_input( int argc, char* argv[], mpi::communicator* comm ) {
 
     // Constructing an options describing variable and giving it a
