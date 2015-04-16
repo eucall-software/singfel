@@ -216,7 +216,7 @@ static void master_recon(mpi::communicator* comm, opt::variables_map vm, fcube* 
 	// ########### MAXIMIZATION ##############
 	if (justDo == "EMC" || justDo == "M") {
 		cout << "Start maximization" << endl;
-		timerMaster.tic();
+		timerMaster.tic();		
 		status = maximization(comm, vm, det, numSlaves, numProcesses, \
 		                      numCandidates(iter), numImages, \
 		                      numSlices, iter);
@@ -303,12 +303,7 @@ wall_clock timer;
 			  	} else {
 				  	loadDPnPixmap(vm, i+1, &myDPnPixmap);
 				}
-/*if (expansionInd == 99 && i == endInd){
-cout << "imgInd: " << i+1 << endl;
-cout << "DPval: " << myDPnPixmap.slice(0) << endl;
-uvec mm = find(myDPnPixmap.slice(0)>0);
-cout << "myDP: " << mm.n_elem << " " << mm << endl;
-}*/
+
 				/////////////////////////////////////////////////////
 				// Compare measured diffraction with expansion slices
 				/////////////////////////////////////////////////////
@@ -402,7 +397,7 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	if (vm.count("useExistingProb")) {
 		useExistingProb = vm["useExistingProb"].as<bool>();
 	}
-	
+
 	uvec numJobsForEachSlave(numSlaves);
 	fvec myProb(numImages);
 	fvec normCondProb;
