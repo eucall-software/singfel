@@ -760,7 +760,7 @@ double CToolbox::calculateEuclideanSimilarity(fmat* modelSlice, fmat* dataSlice,
 	return sim;
 }
 
-// Calculates Gaussian log-likelihood
+// Calculates Poissonian log-likelihood
 double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP) {
 	double sim = 0.; // measure of similarity
 	int numGoodpixels = myDP->photonpixmap.n_elem;

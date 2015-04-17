@@ -310,8 +310,8 @@ wall_clock timer;
 				//Read in measured diffraction data
 				if (format == "S2E") {
 					myDP.loadPhotonCount(vm, i+1); //loadDPnPixmap(vm, i+1, &myDP);
-			  	} else if (format == "list") { // TODO: this needs testing
-				  	//load_readNthLine(vm, i, &myDP); // Wrong
+			  	} else if (format == "list") { // FIXME
+				  	//load_readNthLine(vm, i, &myDP);
 			  	}
 
 				/////////////////////////////////////////////////////
