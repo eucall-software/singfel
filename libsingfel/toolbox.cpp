@@ -763,23 +763,16 @@ double CToolbox::calculateEuclideanSimilarity(fmat* modelSlice, fmat* dataSlice,
 // Calculates Gaussian log-likelihood
 double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP) {
 	double sim = 0.; // measure of similarity
-	int numGoodpixels;
-	
-	uvec photonInd = myDP->photonpixmap; //find(myDP > 0);
-	numGoodpixels = photonInd.n_elem;
-	uvec::iterator a = photonInd.begin();
-    uvec::iterator b = photonInd.end();
-    for(uvec::iterator p=a; p!=b; ++p) { // TODO: vectorize
-		sim += myDP->photonCount(*p) * log(mySlice->photonCount(*p)) - mySlice->photonCount(*p);
-	}
+	int numGoodpixels = myDP->photonpixmap.n_elem;
+	sim = sum( myDP->photonCount(myDP->photonpixmap) \
+	      % log(mySlice->photonCount(myDP->photonpixmap)) \
+	      - mySlice->photonCount(myDP->photonpixmap) );
 	sim = exp(sim);
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
-		//cout << "myDP: " << myDP;
-		//cout << "mySlice: " << mySlice;
-		cout << "photonInd: " << photonInd;
+		cout << "photonInd: " << myDP->photonpixmap;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;
 		sim = 0.;
@@ -789,8 +782,8 @@ double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* my
 
 // Calculates Gaussian log-likelihood
 double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP, float stdDev) {
-	int numGoodpixels = myDP->photonpixmap.n_elem;
 	double sim = 0.; // measure of similarity
+	int numGoodpixels = myDP->photonpixmap.n_elem;
 	sim = sum( pow(myDP->photonCount(myDP->photonpixmap) \
 	      - mySlice->photonCount(myDP->photonpixmap),2) );
 	sim = exp( -sim / (2*pow(stdDev,2)) );
@@ -798,8 +791,6 @@ double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP
 	sim /= numGoodpixels; // normalize by number of pixels compared
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
-		//cout << "myDP: " << myDP;
-		//cout << "mySlice: " << mySlice;
 		cout << "photonInd: " << myDP->photonpixmap;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;
