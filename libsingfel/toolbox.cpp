@@ -791,12 +791,9 @@ double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* my
 double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP, float stdDev) {
 	int numGoodpixels = myDP->photonpixmap.n_elem;
 	double sim = 0.; // measure of similarity
-	uvec::iterator a = myDP->photonpixmap.begin();
-    uvec::iterator b = myDP->photonpixmap.end();
-    for(uvec::iterator p=a; p!=b; ++p) {
-		sim -= pow(myDP->photonCount(*p)-mySlice->photonCount(*p),2);
-	}
-	sim = exp( sim / (2*pow(stdDev,2)) );
+	sim = sum( pow(myDP->photonCount(myDP->photonpixmap) \
+	      - mySlice->photonCount(myDP->photonpixmap),2) );
+	sim = exp( -sim / (2*pow(stdDev,2)) );
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
 	// debug message
