@@ -307,7 +307,6 @@ wall_clock timer;
 	    	///////////////
 			int counter = 0;
 	    	for (int i = startInd; i <= endInd; i++) {
-	    		if (expansionInd==6){ cout << "freshA: " << mySlice.photonCount(6) << endl; }
 				//Read in measured diffraction data
 				if (format == "S2E") {
 					myDP.loadPhotonCount(vm, i+1); //loadDPnPixmap(vm, i+1, &myDP);
@@ -377,11 +376,9 @@ int expansion(opt::variables_map vm, fcube* myRot, CDiffrVol* diffrVol, \
 	// Get a slice of the diffraction volume and save to file
 	for (int i = 0; i < numSlices; i++) {		
 		myDP.init(volDim);
-//cout << "done init" << endl;
 		// Get rotation matrix
 		myR = myRot->slice(i);
 		CToolbox::slice3D(&myDP, &myR, diffrVol, det, active, interpolate);
-//cout << "done slice3D" << endl;
 		// Save expansion slice to disk
 		myDP.saveExpansionSlice(vm, iter, i);
 	}
@@ -426,7 +423,8 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 				             expansionInd, iter);
 
 			// Accumulate conditional probabilities for each expansion slice
-			receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, &myProb);
+			receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, \
+			                       &myProb);
 		
 			if (saveCondProb) {
 				saveCondProb2File(vm, iter, expansionInd, &myProb);
@@ -436,7 +434,8 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 		}
 		
 		// normalize conditional probabilities
-		normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
+		normalizeCondProb(&myProb, numCandidates, &normCondProb, \
+		                  &candidatesInd);
 
 		// get best candidate probability for each expansion slice
 		getBestCandidateProb(&normCondProb, &candidateProb, expansionInd);
