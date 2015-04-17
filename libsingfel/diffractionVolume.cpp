@@ -63,4 +63,23 @@ void CDiffrVol::randVol() {
 	weight.ones(volDim,volDim,volDim);
 }
 
+int CDiffrVol::saveDiffractionVolume(opt::variables_map vm, int iter) {
+	int volDim = vm["volDim"].as<int>();
+	string output = vm["output"].as<string>();
 
+	std::stringstream ss;
+	string filename;
+	for (int i = 0; i < volDim; i++) {
+		// save volume intensity
+		ss.str("");
+		ss << output << "/compression/iter" << iter << "/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		intensity.slice(i).save(filename,raw_ascii);
+		// save volume weights
+		ss.str("");
+		ss << output << "/compression/iter" << iter << "/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		weight.slice(i).save(filename,raw_ascii);
+	}
+	return 0;
+}

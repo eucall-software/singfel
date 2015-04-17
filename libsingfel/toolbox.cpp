@@ -588,17 +588,16 @@ void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
 
 // Take an Ewald's slice from a diffraction volume
 // Rename: extract_slice
-void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
+void CToolbox::extract_interp_linear3D(CDiffrPat* mySlice, fmat *myPoints, \
                                        uvec *goodpixmap, CDiffrVol* diffrVol) {      
-    fcube& _myDPnPixmap = myDPnPixmap[0];
     fmat& pixRot = myPoints[0];
     uvec& _goodpixmap = goodpixmap[0]; // good detector pixels
 	CDiffrVol& _diffrVol = diffrVol[0];
     
     int volDim = _diffrVol.volDim;
-    fmat mySlice, myPixmap;
-    mySlice.zeros(volDim,volDim);
-    myPixmap.zeros(volDim,volDim);
+//cout << "volDim " << volDim << endl;
+    mySlice->init(volDim);
+//cout << "done slice init" << endl;
     imat xyz;
 	xyz = conv_to<imat>::from(floor(pixRot));
     
@@ -608,8 +607,11 @@ void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
     float fx,fy,fz,cx,cy,cz;
 	
 	// Check outliers
+	int counter = 0;
 	uvec::iterator a = _goodpixmap.begin();
     uvec::iterator b = _goodpixmap.end();
+    fmat pixmap2D;
+    pixmap2D.zeros(volDim,volDim);
     for(uvec::iterator p=a; p!=b; ++p) {
     	x = xyz(1,*p);
 		y = xyz(0,*p);
@@ -619,13 +621,16 @@ void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
 		    continue;
 		if (isNullWeight(diffrVol,x,y,z)) continue;
 		// record which pixels have values
-		myPixmap(*p) = 1;
-		_myDPnPixmap.slice(1) = myPixmap;
+		//mySlice->photonpixmap(counter) = *p; // = 1;
+		pixmap2D(*p) = 1;
+		counter++;
     }
+    mySlice->photonpixmap = find(pixmap2D > 0);
+//cout << "photonpixmap: " << mySlice->photonpixmap << endl;
     // Calculate slice at valid photon count positions
-    uvec photonCountPos = find(myPixmap == 1);
-    a = photonCountPos.begin();
-    b = photonCountPos.end();
+    //uvec photonCountPos = mySlice->photonpixmap;
+    a = mySlice->photonpixmap.begin(); //photonCountPos.begin();
+    b = mySlice->photonpixmap.end(); //photonCountPos.end();
     for(uvec::iterator p=a; p!=b; ++p) {
 
 		x = xyz(1,*p);
@@ -639,9 +644,9 @@ void CToolbox::extract_interp_linear3D(fcube *myDPnPixmap, fmat *myPoints, \
 		cy = cxyz(0,*p);
 		cz = cxyz(2,*p);
 
-		mySlice(*p) = cx*(cy*(cz*_diffrVol.intensity(y,x,z) + fz*_diffrVol.intensity(y,x,z+1)) + fy*(cz*_diffrVol.intensity(y+1,x,z) + fz*_diffrVol.intensity(y+1,x,z+1))) + fx*(cy*(cz*_diffrVol.intensity(y,x+1,z) + fz*_diffrVol.intensity(y,x+1,z+1)) + fy*(cz*_diffrVol.intensity(y+1,x+1,z) + fz*_diffrVol.intensity(y+1,x+1,z+1)));
+		mySlice->photonCount(*p) = cx*(cy*(cz*_diffrVol.intensity(y,x,z) + fz*_diffrVol.intensity(y,x,z+1)) + fy*(cz*_diffrVol.intensity(y+1,x,z) + fz*_diffrVol.intensity(y+1,x,z+1))) + fx*(cy*(cz*_diffrVol.intensity(y,x+1,z) + fz*_diffrVol.intensity(y,x+1,z+1)) + fy*(cz*_diffrVol.intensity(y+1,x+1,z) + fz*_diffrVol.intensity(y+1,x+1,z+1)));
 
-		_myDPnPixmap.slice(0) = mySlice;
+		//_myDPnPixmap.slice(0) = mySlice;
 	}
 }
 
@@ -906,6 +911,84 @@ void CToolbox::insert_slice(fcube *myDPnPixmap, fmat *pixRot, CDiffrVol* diffrVo
 }
 
 // Insert a Ewald's slice into a diffraction volume
+void CToolbox::insert_slice(CDiffrPat* mySlice, fmat *pixRot, CDiffrVol* diffrVol) {
+    fmat& _pixRot = pixRot[0];
+	CDiffrVol& _diffrVol = diffrVol[0];
+
+	//fmat myPhotons = mySlice.photonCount;//myDPnPixmap->slice(0);
+
+	//fmat myPixmap = myDPnPixmap->slice(1); // photon count pixmap
+	
+    int volDim = diffrVol->volDim; //myPhotons.n_rows;
+    
+    imat xyz;
+	xyz = conv_to<imat>::from(floor(_pixRot));
+    
+    fmat fxyz = _pixRot - xyz;
+    fmat cxyz = 1. - fxyz;
+    int x,y,z;
+    float fx,fy,fz,cx,cy,cz;
+    float weight;
+	float photons;
+
+	// Check outliers
+	uvec goodpixmap = mySlice->photonpixmap; //find(myPixmap == 1);
+	uvec::iterator a = goodpixmap.begin();
+    uvec::iterator b = goodpixmap.end();
+    for(uvec::iterator p=a; p!=b; ++p) {
+		photons = mySlice->photonCount(*p);//myPhotons(*p);
+
+		x = xyz(1,*p);
+		y = xyz(0,*p);
+		z = xyz(2,*p);
+
+		if (x < 0 || y < 0 || z < 0 || \
+		    x >= volDim-1 || y >= volDim-1 || z >= volDim-1) {
+		   	continue;
+		}
+			
+		fx = fxyz(1,*p);
+		fy = fxyz(0,*p);
+		fz = fxyz(2,*p);
+		cx = cxyz(1,*p);
+		cy = cxyz(0,*p);
+		cz = cxyz(2,*p);
+				
+		weight = cx*cy*cz;
+		_diffrVol.weight(y,x,z) += weight;
+		_diffrVol.intensity(y,x,z) += weight * photons;
+
+		weight = cx*cy*fz;
+		_diffrVol.weight(y,x,z+1) += weight;
+		_diffrVol.intensity(y,x,z+1) += weight * photons; 
+
+		weight = cx*fy*cz;
+		_diffrVol.weight(y+1,x,z) += weight;
+		_diffrVol.intensity(y+1,x,z) += weight * photons; 
+
+		weight = cx*fy*fz;
+		_diffrVol.weight(y+1,x,z+1) += weight;
+		_diffrVol.intensity(y+1,x,z+1) += weight * photons;         		        
+				
+		weight = fx*cy*cz;
+		_diffrVol.weight(y,x+1,z) += weight;
+		_diffrVol.intensity(y,x+1,z) += weight * photons; 		       		 
+
+		weight = fx*cy*fz;
+		_diffrVol.weight(y,x+1,z+1) += weight;
+		_diffrVol.intensity(y,x+1,z+1) += weight * photons; 
+
+		weight = fx*fy*cz;
+		_diffrVol.weight(y+1,x+1,z) += weight;
+		_diffrVol.intensity(y+1,x+1,z) += weight * photons;
+
+		weight = fx*fy*fz;
+		_diffrVol.weight(y+1,x+1,z+1) += weight;
+		_diffrVol.intensity(y+1,x+1,z+1) += weight * photons;
+	}
+}
+
+// Insert a Ewald's slice into a diffraction volume
 void CToolbox::interp_nearestNeighbor(fmat *myValue, fmat *myPoints, uvec *pixmap, fcube *myIntensity1, fcube *myWeight1) {
     int mySize = myIntensity1->n_rows;
     //cout << xyz[0] << endl;
@@ -1036,6 +1119,31 @@ void CToolbox::merge3D(fcube *myDPnPixmap, fmat *myRot, CDiffrVol* diffrVol, \
     //}
 }
 
+// Insert a Ewald's slice into a diffraction volume
+// active = 1: active rotation
+// interpolate = 1: trilinear
+void CToolbox::merge3D(CDiffrPat* myUpdatedSlice, fmat *myRot, CDiffrVol* diffrVol, \
+                       CDetector* det, int active, string interpolate ) {
+    fmat& myR = myRot[0];
+
+	fmat pix = det->pixSpace;					// pixel reciprocal space
+	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
+    fmat pixRot;
+	pixRot.zeros(pix.n_elem,3);
+	if (active == 1) {
+        pixRot = pix*conv_to<fmat>::from(trans(myR)) + pix_max; // this is active rotation
+        pixRot = trans(pixRot);
+    } else {
+        pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
+        pixRot = trans(pixRot);  
+    }
+    if ( boost::algorithm::iequals(interpolate,"linear") ) {
+        insert_slice(myUpdatedSlice, &pixRot, diffrVol);
+    }// else if ( boost::algorithm::iequals(interpolate,"nearest") ) {
+    //    interp_nearestNeighbor(myValue,&pixRot,goodpix,myIntensity,myWeight);
+    //}
+}
+
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
@@ -1089,10 +1197,10 @@ void CToolbox::slice3D(fcube *myValue, fmat *myRot, fcube *myIntensity, \
 // Extract an Ewald's slice from a diffraction volume
 // active = 1: active rotation
 // interpolate = 1: trilinear
-void CToolbox::slice3D(fcube *myValue, fmat *myRot, CDiffrVol* diffrVol, \
+void CToolbox::slice3D(CDiffrPat *mySlice, fmat *myRot, CDiffrVol* diffrVol, \
                        CDetector* det, int active, string interpolate ) {
     fmat& myR = myRot[0];
-    
+  
     fmat pix = det->pixSpace;					// pixel reciprocal space
 	float pix_max = det->pixSpaceMax;			// max pixel reciprocal space
 	uvec goodpix = det->get_goodPixelMap();		// good detector pixels
@@ -1105,12 +1213,10 @@ void CToolbox::slice3D(fcube *myValue, fmat *myRot, CDiffrVol* diffrVol, \
         pixRot = pix*conv_to<fmat>::from(myR) + pix_max; // this is passive rotation
         pixRot = trans(pixRot);  
     }
-    //pixRot.print("pixRot: ");
     if ( boost::algorithm::iequals(interpolate,"linear") ) {
-        extract_interp_linear3D(myValue, &pixRot, &goodpix, diffrVol);
+        extract_interp_linear3D(mySlice, &pixRot, &goodpix, diffrVol);
     }
 }
-
 
 fmat CToolbox::badpixmap2goodpixmap(fmat badpixmap) {
 	fmat goodpixmap = -1*badpixmap + 1;
@@ -1169,21 +1275,21 @@ double CToolbox::calculateSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pi
 }
 
 // Calculates Gaussian log-likelihood
-double CToolbox::calculatePoissonianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap) {
-	fcube& _modelDPnPixmap = modelDPnPixmap[0];
-	fcube& _measuredDPnPixmap = measuredDPnPixmap[0];
+double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP) {
+	//fcube& _modelDPnPixmap = modelDPnPixmap[0];
+	//fcube& _measuredDPnPixmap = measuredDPnPixmap[0];
 
-	fmat mySlice = _modelDPnPixmap.slice(0);
-	fmat myDP = _measuredDPnPixmap.slice(0);
+	//fmat mySlice = _modelDPnPixmap.slice(0);
+	//fmat myDP = _measuredDPnPixmap.slice(0);
 	double sim = 0.; // measure of similarity
 	int numGoodpixels;
 	
-	uvec photonInd = find(myDP > 0);
+	uvec photonInd = myDP->photonpixmap; //find(myDP > 0);
 	numGoodpixels = photonInd.n_elem;
 	uvec::iterator a = photonInd.begin();
     uvec::iterator b = photonInd.end();
     for(uvec::iterator p=a; p!=b; ++p) { // TODO: vectorize
-		sim += myDP(*p) * log(mySlice(*p)) - mySlice(*p);
+		sim += myDP->photonCount(*p) * log(mySlice->photonCount(*p)) - mySlice->photonCount(*p);
 	}
 	sim = exp(sim);
 	assert(numGoodpixels != 0);
@@ -1201,31 +1307,22 @@ double CToolbox::calculatePoissonianSimilarity(fcube* modelDPnPixmap, fcube* mea
 }
 
 // Calculates Gaussian log-likelihood
-double CToolbox::calculateGaussianSimilarity(fcube* modelDPnPixmap, fcube* measuredDPnPixmap, float stdDev) {
-	fcube& _modelDPnPixmap = modelDPnPixmap[0];
-	fcube& _measuredDPnPixmap = measuredDPnPixmap[0];
-
-	fmat mySlice = _modelDPnPixmap.slice(0);
-	fmat myDP = _measuredDPnPixmap.slice(0);
-	
-	uvec photonInd = find(myDP > 0);
-	int numGoodpixels = photonInd.n_elem;
-	
+double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP, float stdDev) {
+	int numGoodpixels = myDP->photonpixmap.n_elem;
 	double sim = 0.; // measure of similarity
-	uvec::iterator a = photonInd.begin();
-    uvec::iterator b = photonInd.end();
+	uvec::iterator a = myDP->photonpixmap.begin();
+    uvec::iterator b = myDP->photonpixmap.end();
     for(uvec::iterator p=a; p!=b; ++p) {
-		sim -= pow(myDP(*p)-mySlice(*p),2);
+		sim -= pow(myDP->photonCount(*p)-mySlice->photonCount(*p),2);
 	}
 	sim = exp( sim / (2*pow(stdDev,2)) );
 	assert(numGoodpixels != 0);
 	sim /= numGoodpixels; // normalize by number of pixels compared
-
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
 		//cout << "myDP: " << myDP;
 		//cout << "mySlice: " << mySlice;
-		cout << "photonInd: " << photonInd;
+		cout << "photonInd: " << myDP->photonpixmap;
 		cout << "sim: " << sim << endl;
 		cout << "numGoodpixels: " << numGoodpixels << endl;
 		sim = 0.;
