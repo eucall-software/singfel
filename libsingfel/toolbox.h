@@ -82,6 +82,7 @@ public:
 	static double calculateEuclideanSimilarity(fmat* modelSlice, fmat* dataSlice, fmat* pixmap, string type); // FIXME
 	static double calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP);
 	static double calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP, float stdDev);
+	static fvec calculateGaussianSimilarityBlock(fmat* sliceBlock, fmat* dataBlock, float stdDev);
 
 private:
 	double mNumber;

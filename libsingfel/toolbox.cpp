@@ -28,10 +28,11 @@ using namespace toolbox;
 using namespace detector;
 
 // Display status bar in the terminal
-void CToolbox::displayStatusBar(int numDone, int totalJobs, float* lastPercentDone) {
+void CToolbox::displayStatusBar(int numDone, int totalJobs, \
+                                float* lastPercentDone) {
 	float percentDone = round(numDone*100./totalJobs);
 	// Check if percentDone increased by at least 1 percent since last time
-	if (percentDone == 100 || percentDone > *lastPercentDone+1) {
+	if (percentDone > *lastPercentDone+1) {
 		*lastPercentDone = percentDone;
 		for (int i = 0; i < 100; i++) {
 			if (i <= percentDone) {
@@ -41,6 +42,9 @@ void CToolbox::displayStatusBar(int numDone, int totalJobs, float* lastPercentDo
 			}
 		}
 		cout << '\r';
+	}
+	if (percentDone == 100) {
+		cout << endl;
 	}
 }
 
@@ -796,6 +800,16 @@ double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP
 		cout << "numGoodpixels: " << numGoodpixels << endl;
 		sim = 0.;
 	}
+	return sim;
+}
+
+// Calculates Gaussian log-likelihood
+fvec CToolbox::calculateGaussianSimilarityBlock(fmat* sliceBlock, fmat* dataBlock, float stdDev) {
+	fvec sim; // measure of similarity
+	// sliceBlock (numChunkData x maxElement)
+	// dataBlock (numChunkData x maxElement)
+	sim = sum( pow(*sliceBlock-*dataBlock,2), 1);	// row-wise sum
+	sim = exp( -sim / (2*pow(stdDev,2)) ); // sim (numChunkData x 1)
 	return sim;
 }
 

@@ -33,7 +33,9 @@ make
 make install DESTDIR=/path/to/armadillo/directory
 Note: If you want to use svd(), uncomment #define ARMA_USE_LAPACK in 
 /path/to/armadillo/directory/include/armadillo_bits/config.hpp
-You don't need to recompile armadillo
+Also, uncomment #define ARMA_64BI_WORD to use large matrices 
+(>4 billion elements).
+You don't need to recompile armadillo.
 
 HDF5
 ./configure --prefix=/path/to/hdf/directory --enable-cxx

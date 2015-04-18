@@ -53,6 +53,7 @@ void CParticle::set_atomType(irowvec x, int n){
 	numAtomTypes = n;
 }
 */
+/*
 void CParticle::set_atomType(Packet *x){ // load from Packet structure
 	//cout << "n: " << x->T << endl;
 	irowvec temp(x->atomType, x->T);
@@ -60,7 +61,7 @@ void CParticle::set_atomType(Packet *x){ // load from Packet structure
 	//CParticle::atomType.print("set_atomType: ");
 	numAtomTypes = x->T;
 }
-
+*/
 void CParticle::load_atomPos(string filename, string datasetname){ // load from hdf5
 	atomPos = hdf5readT<fmat>(filename,datasetname);
 	//atomPos = hdf5readVector<fmat>(filename,datasetname);
@@ -119,13 +120,13 @@ void CParticle::load_xyzInd(string x){
 	xyzInd.load(x,raw_ascii);
 	//CParticle::xyzInd.print("set_xyzInd: ");
 }
-
+/*
 void CParticle::set_xyzInd(Packet *x){
 	irowvec temp(x->xyzInd, x->N);
 	xyzInd = temp;
 //	CParticle::xyzInd.print("set_xyzInd: ");
 }
-
+*/
 void CParticle::set_xyzInd(irowvec *ionList){
 	int numAtoms = ionList->n_elem;
 	//cout << numAtoms << endl;
@@ -190,7 +191,7 @@ void CParticle::set_qSample(Packet *x){
 	qSample = temp;
 //	CParticle::qSample.print("set_qSample: ");
 }
-
+/*
 void CParticle::set_param(Packet *x){
 	set_atomType(x);
 	set_atomPos(x);
@@ -198,7 +199,7 @@ void CParticle::set_param(Packet *x){
 	set_ffTable(x);
 	set_qSample(x);
 }
-
+*/
 int CParticle::get_numComptonQSamples(){
 	return numComptonQSamples;
 }
