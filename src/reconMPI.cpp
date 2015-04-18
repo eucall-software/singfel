@@ -426,20 +426,24 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	}
 
 	// Initialize
+	cout << "Initializing... ";
 	uvec numJobsForEachSlave(numSlaves);
 	fmat myProb(numImages,numSlices);
 	fmat normCondProb(numCandidates,numSlices);
 	umat candidatesInd(numCandidates,numSlices);
 	fvec candidateProb(numSlices);
 	CDiffrPat updatedSlice;
+	cout << "Done" << endl;
 	// Calculate number jobs for each slave
 	numJobsForEachSlave = numJobsPerSlave(numImages, numSlaves);
 
 	// Each slave get a set of data to compare against all slices
 	if ( !useExistingProb ) {
 		// For each slice, each worker get a subset of measured data
+		cout << "Assigning jobs to slaves... ";
 		sendJobsToSlaves(comm, numProcesses, &numJobsForEachSlave, \
 			             numSlices, iter);
+		cout << "Done" << endl;
 		// Accumulate conditional probabilities for each expansion slice
 		receiveProbsFromSlaves(comm, numProcesses, &numJobsForEachSlave, \
 		                       &myProb, numSlices);
@@ -456,9 +460,6 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 	cout << "Normalizing conditional probabilities... ";
 	normalizeCondProb(&myProb, numCandidates, &normCondProb, &candidatesInd);
 	cout << "Done" << endl;
-//myProb.print("myProb");
-//normCondProb.print("normCond");
-//candidatesInd.print("ind");
 	
 	// update all expansion slices
 	fvec myWeights(numCandidates);
@@ -573,9 +574,7 @@ void normalizeCondProb(fmat* condProb, int numCandidates, fmat* normCondProb, um
 	fmat& _condProb = condProb[0];
 	fmat& _normCondProb = normCondProb[0];
 	umat& _candidatesInd = candidatesInd[0];
-	
-//_condProb.print("condProb");
-	
+
 	int numImages = _condProb.n_rows;
 	int numSlices = _condProb.n_cols;
 	_normCondProb.zeros(numCandidates,numSlices);
@@ -632,19 +631,12 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uv
 	uvec& _numJobsForEachSlave = numJobsForEachSlave[0];
 	fmat& _masterCondProb = masterCondProb[0];
 
-//_numJobsForEachSlave.print("each");
-//cout << "receive" << endl;
 	int counter, numChunkData, prevChunkData;
-//cout << "receive1: " << max(_numJobsForEachSlave)*numSlices << endl;
-	float* msgProb = new float[max(_numJobsForEachSlave)*numSlices];//std::vector<float> msgProb[max(_numJobsForEachSlave)*numSlices];//float msgProb[max(_numJobsForEachSlave)*numSlices];
+	float* msgProb = new float[max(_numJobsForEachSlave)*numSlices];
 	prevChunkData = 0;
-//cout << "receive2" << endl;
 	float lastPercentDone = 0.;
 	for (int rank = 1; rank < numProcesses; ++rank) {
-//cout << "receive3: " << rank << endl;
 		numChunkData = _numJobsForEachSlave(rank-1);
-		//cout << "numChunkData:"<<numChunkData<<endl;
-		//cout << "numSlices:"<<numSlices<<endl;
 		///////////////////////////////////////////////////////
 		comm->recv(rank, PROBTAG, msgProb, numChunkData*numSlices); // receive from slave
 		///////////////////////////////////////////////////////
@@ -652,16 +644,13 @@ void receiveProbsFromSlaves(boost::mpi::communicator* comm, int numProcesses, uv
 		for (int j = 0; j < numSlices; j++) {
 		for (int i = 0; i < numChunkData; i++) { //FIXME
 			_masterCondProb(i+prevChunkData,j) = msgProb[counter];
-//cout << msgProb[counter] << endl;
 			counter++;
 		}
 		}
-		//cout  << "msg:" << msgProb << endl;
 		prevChunkData += numChunkData;
 		CToolbox::displayStatusBar(rank, numProcesses, &lastPercentDone);
 	}
-	//cout << endl;
-	//cout << _masterCondProb << endl;
+	delete[] msgProb;
 }
 
 void saveCondProb2File(opt::variables_map vm, int iter, fmat* myProb) {
