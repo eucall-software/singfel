@@ -218,7 +218,7 @@ void CDetector::init_dp( beam::CBeam *beam ){
     pix_mod = sqrt(sum(pixSpace%pixSpace,1));		
 	pixSpaceMax = cx; // FIXME: something fishy going on here 
 }
-
+/*
 void CDetector::set_param(Packet *x){
 	umat temp(x->dp, x->py, x->px, false, true);
 	dp = conv_to<fmat>::from(trans(temp));
@@ -230,7 +230,7 @@ void CDetector::set_param(Packet *x){
 	cx = ((double) px-1)/2;			// this can be user defined
 	cy = ((double) py-1)/2;			// this can be user defined
 }
-
+*/
 void CDetector::readGeomFile(string geomFile) {
 	/****** Detector ******/
 	// Parse the geom file

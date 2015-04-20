@@ -69,7 +69,8 @@ ivec str2ivec(std::string line){
 		myVec[counter] = atoi(temp.c_str());
 		counter++;
 	}
-	return myVec;
+	ivec cleanVec = myVec.subvec(0,counter-1);
+	return cleanVec;
 }
 
 // Convert a string containing comma separated integers to ivec
@@ -89,7 +90,8 @@ fvec str2fvec(std::string line){
 		myVec[counter] = atof(temp.c_str());
 		counter++;
 	}
-	return myVec;
+	fvec cleanVec = myVec.subvec(0,counter-1);
+	return cleanVec;
 }
 
 int hdf5write(std::string filename, std::string datasetname, arma::fmat data){
@@ -435,7 +437,7 @@ void load_array(int *array, int size){
 		cout << array[i] << endl;
 	}
 }
-
+/*
 void load_array2D(int *array2D, int rows, int cols){
 	for (int i = 0; i < rows; i++) {
 	for (int j = 0; j < cols; j++) {
@@ -450,7 +452,7 @@ void load_array2D(int *array2D, int rows, int cols){
 	dung = trans(dung);
 	dung.print("read in as matrix: ");
 }
-
+*/
 void load_constantf(float ang){
 	cout << ang << endl;
 }
@@ -518,6 +520,7 @@ void load_qSample(float *array,int size){
 	}
 }
 
+/*
 void calculate_dp(Packet *pack){
 
 	wall_clock timer;
@@ -533,13 +536,13 @@ void calculate_dp(Packet *pack){
 	particle.load_xyzInd("../xyzInd.dat");		// rowvec xyzInd (temporary)
 	particle.load_ffTable("../ffTable.dat");	// mat ffTable (atomType x qSample)
 	particle.load_qSample("../qSample.dat");	// rowvec q vector sin(theta)/lambda
-	/*
-	CParticle::set_atomType(pack); // This is the actual code when reading from Zoltan's program
-	CParticle::set_atomPos(pack);
-	CParticle::set_xyzInd(pack);
-	CParticle::set_ffTable(pack);
-	CParticle::set_qSample(pack);
-	*/
+	
+	//CParticle::set_atomType(pack); // This is the actual code when reading from Zoltan's program
+	//CParticle::set_atomPos(pack);
+	//CParticle::set_xyzInd(pack);
+	//CParticle::set_ffTable(pack);
+	//CParticle::set_qSample(pack);
+	
 	// beam
 	CBeam beam = CBeam();
 	beam.set_param(pack);
@@ -686,6 +689,7 @@ void calculate_dp(Packet *pack){
 		pack->dp = detector_counts.memptr();	
 	}
 }
+*/
 
 void CIO::get_image(){
 	cout << "Hello" << endl;

@@ -9,8 +9,7 @@ using namespace arma;
 fcube CDiffraction::f_hkl;
 fcube CDiffraction::f_hkl_list;
 
-CDiffraction::CDiffraction() {
-}
+CDiffraction::CDiffraction() {}
 
 void CDiffraction::displayResolution(detector::CDetector* det, beam::CBeam* beam) {
 	double d = det->get_detector_dist();
