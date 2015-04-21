@@ -92,7 +92,10 @@ static void diffract(opt::variables_map vm) {
 	string geomFile = vm["geomFile"].as<string>();
 	int numSlices = vm["numSlices"].as<int>();
 	int saveSlices = vm["saveSlices"].as<int>();
-	
+	#ifdef COMPILE_WITH_CUDA
+	int localRank=0;
+	int deviceCount=cuda_getDeviceCount();
+	#endif
   	int ntasks,pmiID,diffrID,dpID;
   	int numTasksDone = 0;
   	float lastPercentDone = 0.0;
@@ -197,8 +200,38 @@ static void diffract(opt::variables_map vm) {
 			CDiffraction::calculate_atomicFactor(&particle, &det);
 			// Incoherent contribution
 			getComptonScattering(vm, &particle, &det, &Compton);
-
+			
 			#ifdef COMPILE_WITH_CUDA
+			if (localRank < deviceCount){
+				float* F_mem = F_hkl_sq.memptr();
+				// f_hkl: py x px x numAtomTypes
+				float* f_mem = CDiffraction::f_hkl.memptr();
+				float* q_mem = det.q_xyz.memptr();
+				float* p_mem = particle.atomPos.memptr();
+				int*   i_mem = particle.xyzInd.memptr();
+				cuda_structureFactorLimki(F_mem, f_mem, q_mem, p_mem, i_mem, det.numPix, particle.numAtoms, particle.numAtomTypes,localRank);
+				detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+			}else
+			#endif
+			{
+				//CDiffraction::get_atomicFormFactorList(&particle, &det);
+				//F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
+				F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
+				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+				detector_intensity += photon_field;
+			}
+			/*
+			#ifdef COMPILE_WITH_CUDA
+			float* F_mem = F_hkl_sq.memptr();
+			// f_hkl: py x px x numAtomTypes
+			float* f_mem = CDiffraction::f_hkl.memptr();
+			float* q_mem = det.q_xyz.memptr();
+			float* p_mem = particle.atomPos.memptr();
+			int*   i_mem = particle.xyzInd.memptr();
+			cuda_structureFactorLimki(F_mem, f_mem, q_mem, p_mem, i_mem, det.numPix, particle.numAtoms, particle.numAtomTypes);
+	
+			detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+			
 			if (!USE_CHUNK) {
 
 				CDiffraction::get_atomicFormFactorList(&particle,&det);
@@ -254,13 +287,14 @@ static void diffract(opt::variables_map vm) {
 				F_hkl_sq = sumDr % sumDr + sumDi % sumDi;
 				detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 			}
+			
 			#else // compute using CPU
 				CDiffraction::get_atomicFormFactorList(&particle, &det);
 				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
 				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 				detector_intensity += photon_field;
 			#endif
-			
+			*/
 			if (saveSlices) {
 				savePhotonField(outputName, isFirstSlice, timeSlice, &photon_field);
 			}

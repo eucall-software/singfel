@@ -4,9 +4,7 @@ LINK_DIRECTORIES(${SINGFELPROJECT_BINARY_DIR}/src)
 find_package(CUDA)
 IF(CUDA_FOUND)
   MESSAGE("CUDA FOUND")
-    
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
-  add_definitions(-DUSE_CHUNK=1)
   
   #CUDA_ADD_EXECUTABLE(radiationSINGFEL_old radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(radiationSINGFEL_old ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})

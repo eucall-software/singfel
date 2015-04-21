@@ -9,7 +9,8 @@ using namespace arma;
 fcube CDiffraction::f_hkl;
 fcube CDiffraction::f_hkl_list;
 
-CDiffraction::CDiffraction() {}
+CDiffraction::CDiffraction() {
+}
 
 void CDiffraction::displayResolution(detector::CDetector* det, beam::CBeam* beam) {
 	double d = det->get_detector_dist();
@@ -90,6 +91,39 @@ cube CDiffraction::get_FourierMap(particle::CParticle *particle, detector::CDete
 
 // Calculate molecular form factor |F_hkl(q)|^2.
 // Rename to calculate_molecularFormFactorSq
+fmat CDiffraction::calculate_molecularFormFactorSq(particle::CParticle *particle, detector::CDetector *detector) {
+	/*fmat F_hkl_sq;
+	F_hkl_sq.zeros(detector->py,detector->px);
+	fcolvec map;
+	frowvec f;
+	fcolvec q;
+	for (int ind_x = 0; ind_x < detector->px; ind_x++) {
+		for (int ind_y = 0; ind_y < detector->py; ind_y++) {
+			//f_hkl_list.slice(j) = f_hkl.slice((unsigned int) particle->xyzInd(j));
+			f = CDiffraction::f_hkl_list(span(ind_y),span(ind_x),span()); // 1xN
+			q = detector->q_xyz(span(ind_y),span(ind_x),span()); // py x px x 3
+			map = 2*datum::pi*particle->atomPos * q; // Nx3 3x1
+			F_hkl_sq(ind_y,ind_x) = as_scalar( pow(f * cos(map),2) + pow(f * sin(map),2) ); // 1xN Nx1
+		}
+	}
+	return F_hkl_sq;
+	*/
+	
+	fmat F_hkl_sq,F_re,F_im;
+	fmat map; //px*py
+	F_re.zeros(detector->py,detector->px);
+	F_im.zeros(detector->py,detector->px);	
+	for(int atm=0;atm<particle->numAtoms;atm++){
+		map=2*datum::pi*particle->atomPos(atm) * detector->q_xyz;
+		//px*py angles  1*3                             px*py*3
+		F_re+=f_hkl.slice((unsigned int) particle->xyzInd(atm))*cos(map);
+		F_im+=f_hkl.slice((unsigned int) particle->xyzInd(atm))*sin(map);
+	}
+	F_hkl_sq=pow(F_re,2)+pow(F_im,2);
+	return F_hkl_sq;
+	
+}
+
 fmat CDiffraction::calculate_intensity(particle::CParticle *particle, detector::CDetector *detector) {
 	fmat F_hkl_sq;
 	F_hkl_sq.zeros(detector->py,detector->px);
@@ -145,3 +179,4 @@ void CDiffraction::calculate_compton(particle::CParticle *particle, detector::CD
 	
 	_Compton = S_bound + N_free;
 }
+
