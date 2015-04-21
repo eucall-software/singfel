@@ -101,7 +101,7 @@ FIND_PACKAGE(MPI REQUIRED)
 INCLUDE_DIRECTORIES(${MPI_INCLUDE_PATH})
 
 #SET(CMAKE_CXX_FLAGS "-std=c++0x -g -Wall") # Add c++11 features
-#add_definitions(-DCOMPILE_WITH_CXX11) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
+#add_definitions(-DCOMPILE_WITH_CXX11=1) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
 SET(CMAKE_CXX_FLAGS "-g -Wall")
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
