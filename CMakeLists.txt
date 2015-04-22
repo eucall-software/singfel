@@ -115,6 +115,21 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 
 MESSAGE("${CMAKE_MODULE_PATH}")
 
+
+SET(GENERAL_SRC ${LIBSINGFEL}/io.cpp 
+				${LIBSINGFEL}/detector.cpp 
+				${LIBSINGFEL}/beam.cpp 
+				${LIBSINGFEL}/particle.cpp 
+				${LIBSINGFEL}/diffraction.cpp 
+				${LIBSINGFEL}/diffractionVolume.cpp 
+				${LIBSINGFEL}/diffractionPattern.cpp 
+				${LIBSINGFEL}/toolbox.cpp)
+SET(GENERAL_LIB ${ARMADILLO_LIBRARIES} 
+				${GSL_LIBRARIES} 
+				${HDF5_LIBRARIES} 
+				${Boost_LIBRARIES})
+
+
 ADD_SUBDIRECTORY(src)
-ADD_SUBDIRECTORY(test)
+#ADD_SUBDIRECTORY(test)
 ADD_SUBDIRECTORY(libsingfel)

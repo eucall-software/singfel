@@ -109,16 +109,25 @@ fmat CDiffraction::calculate_molecularFormFactorSq(particle::CParticle *particle
 	return F_hkl_sq;
 	*/
 	
+	
 	fmat F_hkl_sq,F_re,F_im;
 	fmat map; //px*py
+	//detector q_xyz [Y,X,3]
+	//particle atomPos [Row,3]
+	
+	
 	F_re.zeros(detector->py,detector->px);
 	F_im.zeros(detector->py,detector->px);	
 	for(int atm=0;atm<particle->numAtoms;atm++){
-		map=2*datum::pi*particle->atomPos(atm) * detector->q_xyz;
-		//px*py angles  1*3                             px*py*3
-		F_re+=f_hkl.slice((unsigned int) particle->xyzInd(atm))*cos(map);
-		F_im+=f_hkl.slice((unsigned int) particle->xyzInd(atm))*sin(map);
+		map=2*datum::pi*(particle->atomPos(atm,0) * detector->q_xyz.slice(0)+ 
+						 particle->atomPos(atm,1) * detector->q_xyz.slice(1)+ 
+						 particle->atomPos(atm,2) * detector->q_xyz.slice(2));
+		
+		//px*py
+		F_re+=f_hkl.slice((unsigned int) particle->xyzInd(atm))%cos(map);
+		F_im+=f_hkl.slice((unsigned int) particle->xyzInd(atm))%sin(map);
 	}
+	//cout << map;
 	F_hkl_sq=pow(F_re,2)+pow(F_im,2);
 	return F_hkl_sq;
 	

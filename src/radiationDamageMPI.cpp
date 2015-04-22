@@ -33,8 +33,11 @@
 #include "particle.h"
 #include "diffraction.h"
 #include "toolbox.h"
-#include "diffraction.cuh"
 #include "io.h"
+
+#ifdef COMPILE_WITH_CUDA
+#include "diffraction.cuh"
+#endif
 
 namespace mpi = boost::mpi;
 namespace opt = boost::program_options;
