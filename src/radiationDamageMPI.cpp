@@ -301,8 +301,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				boost::filesystem::remove( outputName );
 			}
 
-			// Run prepHDF5
-			
+			// Run prepHDF5		
 			string scriptName;
 			sstm.str("");
 			sstm << inputDir << "/prepHDF5.py";
@@ -311,7 +310,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			                   + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
 			assert(i == 0);
-			
+				
 			// Set up diffraction geometry
 			if (givenPhotonEnergy == false) {
 				setEnergyFromFile(filename, &beam);
@@ -320,7 +319,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				setFocusFromFile(filename, &beam);
 			}
 			det.init_dp(&beam);
-			
+
 			double total_phot = 0;
 			photon_field.zeros(py,px);
 			detector_intensity.zeros(py,px);
@@ -331,13 +330,11 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			while(!done) {	// sum up time slices
 				setTimeSliceInterval(numSlices, &sliceInterval, &timeSlice, \
 				                     &done);
-
 				// Particle //
 				CParticle particle = CParticle();
 				loadParticle(vm, filename, timeSlice, &particle);
 				// Apply random rotation to particle
 				rotateParticle(&quaternion, &particle);
-
 				// Beam // FIXME: Check that these fields exist
 				if (givenFluence == false) {
 					setFluenceFromFile(filename, timeSlice, sliceInterval, \
@@ -501,7 +498,6 @@ void loadParticle(const opt::variables_map vm, const string filename, \
 	stringstream ss;
 	ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice;
 	datasetname = ss.str();
-	
 	// rowvec atomType
 	particle->load_atomType(filename,datasetname+"/T");
 	// mat pos

@@ -567,10 +567,6 @@ void CToolbox::insert_slice(CDiffrPat* mySlice, fmat *pixRot, CDiffrVol* diffrVo
     fmat& _pixRot = pixRot[0];
 	CDiffrVol& _diffrVol = diffrVol[0];
 
-	//fmat myPhotons = mySlice.photonCount;//myDPnPixmap->slice(0);
-
-	//fmat myPixmap = myDPnPixmap->slice(1); // photon count pixmap
-	
     int volDim = diffrVol->volDim; //myPhotons.n_rows;
     
     imat xyz;
@@ -584,7 +580,7 @@ void CToolbox::insert_slice(CDiffrPat* mySlice, fmat *pixRot, CDiffrVol* diffrVo
 	float photons;
 
 	// Check outliers
-	uvec goodpixmap = mySlice->photonpixmap; //find(myPixmap == 1);
+	uvec goodpixmap = mySlice->photonpixmap;
 	uvec::iterator a = goodpixmap.begin();
     uvec::iterator b = goodpixmap.end();
     for(uvec::iterator p=a; p!=b; ++p) {

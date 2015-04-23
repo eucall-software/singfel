@@ -83,3 +83,21 @@ int CDiffrVol::saveDiffractionVolume(opt::variables_map vm, int iter) {
 	}
 	return 0;
 }
+
+void CDiffrVol::saveDiffractionVolume(opt::variables_map vm) {
+	int volDim = vm["volDim"].as<int>();
+	string output = vm["output"].as<string>();
+	
+	string filename;
+	std::stringstream ss;
+	for (int i = 0; i < volDim; i++) {
+		ss.str("");
+		ss << output << "/vol/vol_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		intensity.slice(i).save(filename,raw_ascii);
+		ss.str("");
+		ss << output << "/vol/volWeight_" << setfill('0') << setw(7) << i << ".dat";
+		filename = ss.str();
+		weight.slice(i).save(filename,raw_ascii);
+	}
+}

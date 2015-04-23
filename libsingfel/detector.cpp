@@ -152,7 +152,6 @@ void CDetector::init_dp( beam::CBeam *beam ){
 	set_numPix(py,px);
 	set_center_x(cx);
 	set_center_y(cy);	
-
 	// Used for single particle. Set 1/pix_width=9090 for LCLS
 	q_xyz.zeros(py,px,3);
 	float rx, ry, r, twotheta, az;

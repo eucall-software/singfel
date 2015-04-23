@@ -454,7 +454,9 @@ int maximization(boost::mpi::communicator* comm, opt::variables_map vm, \
 			cout << "Done" << endl;
 		}
 	} else {
+		cout << "Loading conditional probabilities... ";
 		loadCondProb(vm, iter, &myProb);
+		cout << "Done" << endl;
 	}
 	// normalize conditional probabilities
 	cout << "Normalizing conditional probabilities... ";
@@ -493,8 +495,7 @@ int compression(opt::variables_map vm, CDiffrVol* diffrVol, \
 		percentile = str2fvec(percentileStr);
 	}
 	
-	diffrVol->initVol();//intensity.zeros(volDim,volDim,volDim);
-	//diffrVol->weight.zeros(volDim,volDim,volDim);
+	diffrVol->initVol();
 	int active = 1;
 	string interpolate = "linear";
 	CDiffrPat myUpdatedSlice; 	// first slice: diffraction pattern
@@ -504,9 +505,7 @@ int compression(opt::variables_map vm, CDiffrVol* diffrVol, \
 	fvec candidateProb;
 	if (usePercentile) {
 		loadCandidateProbPerSlice(vm, iter, &candidateProb);
-//cout << "candidateProb: " << candidateProb << endl;
 		getGoodSlicesIndex(&candidateProb, percentile(iter), &goodSlicesInd);
-//cout << "goodSlicesInd: " << goodSlicesInd << endl;
 		uvec::iterator a = goodSlicesInd.begin();
 		uvec::iterator b = goodSlicesInd.end();
 		for(uvec::iterator sliceInd = a; sliceInd != b; ++sliceInd) {

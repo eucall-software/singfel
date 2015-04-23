@@ -72,9 +72,10 @@ int main( int argc, char* argv[] ){
   	myR.zeros(3,3);
   	//float psi,theta,phi;
 
-	fcube myIntensity, myWeight;
-	myIntensity.zeros(volDim,volDim,volDim);
-	myWeight.zeros(volDim,volDim,volDim);
+	CDiffrVol diffrVol = CDiffrVol(volDim);
+	//fcube myIntensity, myWeight;
+	//myIntensity.zeros(volDim,volDim,volDim);
+	//myWeight.zeros(volDim,volDim,volDim);
 
 	int active = 0;
 	string interpolate = "linear";
@@ -85,15 +86,15 @@ int main( int argc, char* argv[] ){
   		loadDPnPixmap(vm, i+1, &myDPnPixmap);
   		loadQuaternion(vm, i+1, &quat);
   		myR = CToolbox::quaternion2rot3D(quat);
-       	CToolbox::merge3D(&myDPnPixmap, &myR, &myIntensity, &myWeight, &det, active, interpolate);
+       	CToolbox::merge3D(&myDPnPixmap, &myR, &diffrVol, &det, active, interpolate);
        	// Display status
 		CToolbox::displayStatusBar(i+1,numImages,&lastPercentDone);
   	}
-  	CToolbox::normalize(&myIntensity,&myWeight);
+  	diffrVol.normalize(); //CToolbox::normalize(&myIntensity,&myWeight);
   		
   	// ########### Save diffraction volume ##############
   	cout << "Saving diffraction volume..." << endl;
-  	saveDiffractionVolume(vm, &myIntensity, &myWeight);
+  	diffrVol.saveDiffractionVolume(vm);
 
   	return 0;
 }
@@ -141,23 +142,6 @@ void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
 }
 
-void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight) {
-	string output = vm["output"].as<string>();
-	int volDim = vm["volDim"].as<int>();
-	
-	string filename;
-	std::stringstream ss;
-	for (int i = 0; i < volDim; i++) {
-		ss.str("");
-		ss << output << "/vol/vol_" << setfill('0') << setw(7) << i << ".dat";
-		filename = ss.str();
-		myIntensity->slice(i).save(filename,raw_ascii);
-		ss.str("");
-		ss << output << "/vol/volWeight_" << setfill('0') << setw(7) << i << ".dat";
-		filename = ss.str();
-		myWeight->slice(i).save(filename,raw_ascii);
-	}
-}
 opt::variables_map parse_input( int argc, char* argv[] ) {
 
     // Constructing an options describing variable and giving it a

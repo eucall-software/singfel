@@ -33,6 +33,7 @@ namespace diffractionVolume{
 		void loadInitVol(opt::variables_map vm);
 		void normalize();
 		int saveDiffractionVolume(opt::variables_map vm, int iter);
+		void saveDiffractionVolume(opt::variables_map vm);
 		static arma::fcube intensity;	// 3D diffraction volume
 		static arma::fcube weight;		// 3D diffraction volume weight
 		static int volDim;				// number of pixels in x,y,z

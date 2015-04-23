@@ -30,7 +30,6 @@ CParticle::CParticle (){
 void CParticle::load_atomType(string filename, string datasetname){ // load from hdf5
 	atomType = hdf5readT<irowvec>(filename,datasetname);
 	//atomType = hdf5readVector<irowvec>(filename,datasetname);
-	//atomType.print("atomType: ");
 	numAtomTypes = atomType.n_elem;
 }
 
@@ -100,7 +99,7 @@ int CParticle::get_numAtoms(){
 void CParticle::load_ionList(string filename, string datasetname){ // load from hdf5
 	ionList = hdf5readT<irowvec>(filename,datasetname);
 	//ionList = hdf5readVector<irowvec>(filename,datasetname);
-	//CParticle::ionList.print("ionList: ");
+//CParticle::ionList.print("ionList: ");
 	CParticle::set_xyzInd(&ionList);
 }
 
@@ -128,14 +127,12 @@ void CParticle::set_xyzInd(Packet *x){
 }
 */
 void CParticle::set_xyzInd(irowvec *ionList){
+irowvec& _ionList = ionList[0];
 	int numAtoms = ionList->n_elem;
-	//cout << numAtoms << endl;
 	xyzInd = zeros<irowvec>(numAtoms);
 	for (int i = 0; i < numAtoms; i++) {
-		//cout << "iList: " << ionList[i] << endl;
-		xyzInd(i) = conv_to< int >::from(find(ionList[0](i) == atomType, 0, "first"));
+		xyzInd(i) = conv_to< int >::from(find(_ionList(i) == atomType, 0, "first"));
 	}
-	//CParticle::xyzInd.print("set_xyzInd: ");
 }
 
 void CParticle::load_ffTable(string filename, string datasetname){ // load from hdf5
