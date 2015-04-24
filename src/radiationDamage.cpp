@@ -158,6 +158,8 @@ static void diffract(opt::variables_map vm) {
 		if ( boost::filesystem::exists( outputName ) ) {
 			boost::filesystem::remove( outputName );
 		}
+		
+		/*
 		// Run prepHDF5
 		string scriptName;
 		sstm.str("");
@@ -165,8 +167,10 @@ static void diffract(opt::variables_map vm) {
 		scriptName = sstm.str();
 		string myCommand = string("python ") + scriptName + " "  + filename + " " + outputName + " " + configFile;
 		int i = system(myCommand.c_str());
-		assert(i == 0);
 		
+		*/
+		int i = prepS2E(filename.c_str(),outputName.c_str(),configFile.c_str());
+		assert(i == 0);
 		// Set up diffraction geometry
 		if (givenPhotonEnergy == false) {
 			setEnergyFromFile(filename, &beam);

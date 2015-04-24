@@ -702,87 +702,213 @@ double CIO::get_size(){
 }
 
 
-bool prepS2E(string filename,string outputName,string configFile){
-	H5File *file_in = new H5File( filename.c_str(),H5F_ACC_RDONLY);
-	H5File *file_out = new H5File( outputName.c_str(),H5F_ACC_TRUNC);
-	
-	Group* grp_hist = 				new Group( file_out->createGroup( "history" ));
-	Group* grp_hist_parent = 		new Group( file_out->createGroup( "history/parent" ));
-	Group* grp_hist_parent_detail = new Group( file_out->createGroup( "history/parent/detail" ));
+int prepS2E(const char* filename,const char* outputName,const char* configFile){
+	hid_t file_in,file_out;
+	hid_t grp_hist,grp_hist_parent,grp_hist_parent_detail,grp_tmp; 
+	hid_t attr,dataset;
+	hid_t str_type;
+	hid_t dataspace;
+	hid_t ocpypl_id;
+	hid_t props;
 	int parent_name_size;
-	char* parent_name;
-	std::string::size_type tmpsa,tmpsb;
-	tmpsb=filename.rfind("/");
+	hsize_t rank,dimens_1d[1];
+	char parent_name[PATH_MAX];
+	char filename_full[PATH_MAX];
+	char outputNameTmp[PATH_MAX];
+	int tmpsa,tmpsb;
+	sprintf(outputNameTmp,"%s~",outputName);
+	file_in  = H5Fopen  (filename,   H5F_ACC_RDONLY, H5P_DEFAULT);
+	file_out = H5Fcreate(outputNameTmp, H5F_ACC_TRUNC,  H5P_DEFAULT, H5P_DEFAULT);
+	
+	grp_hist = H5Gcreate (file_out, "history", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    //H5Gclose(grp_hist);
+	ocpypl_id = H5Pcreate(H5P_OBJECT_COPY);
+	H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
+	H5Ocopy(file_in,"history/parent",file_out,"history/parent",ocpypl_id,H5P_DEFAULT);
+	    
+    grp_hist_parent = H5Gopen(file_out,"history/parent",H5P_DEFAULT);
+	if (grp_hist_parent<0)
+		grp_hist_parent = H5Gcreate (file_out, "history/parent", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	grp_hist_parent_detail = H5Gopen(file_out,"history/parent/detail",H5P_DEFAULT);
+	if (grp_hist_parent_detail<0)
+		grp_hist_parent_detail = H5Gcreate (file_out, "history/parent/detail", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    
+	
+	if (NULL==realpath(filename,filename_full))
+		return -1;
+	for(tmpsb=strlen(filename_full)-1;tmpsb>=0 && filename_full[tmpsb]!='/';tmpsb--);
+	for(tmpsa=tmpsb-1;tmpsa>=0 && filename_full[tmpsa]!='/';tmpsa--);
+
 	if (tmpsb==0){
 		tmpsa=0;
 		tmpsb=1;
-	}else{
-		tmpsa=filename.rfind("/",tmpsb-1);
+	}else
 		tmpsa++;
-	}
+
 	//COPY PARENT NAME TO grp_hist_parent[name]
-	parent_name_size=tmpsb-tmpsa;
-	parent_name=new char[parent_name_size+3];
+	parent_name_size=tmpsb-tmpsa+1;
 	parent_name[0]='_';
-	memcpy(parent_name+1,filename.c_str()+tmpsa,parent_name_size);
+	memcpy(parent_name+1,filename_full+tmpsa,parent_name_size-1);
 	parent_name[parent_name_size]='\0';
 	
-	StrType str_type(0, H5T_VARIABLE);
-	DataSpace att_space(H5S_SCALAR);
-	Attribute att = grp_hist_parent->createAttribute( "name", str_type, att_space );
-	att.write( str_type, parent_name);
+	//!!H5Tset_size (str_type, H5T_VARIABLE);
+	if (H5Aexists(grp_hist_parent,"name"))
+		H5Adelete(grp_hist_parent,"name");
+		
+	dataspace = H5Screate(H5S_SCALAR);
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, parent_name_size);
+	attr = H5Acreate (grp_hist_parent, "name", str_type, dataspace,H5P_DEFAULT,H5P_DEFAULT);
+	H5Awrite (attr, str_type, parent_name);
+	H5Sclose (dataspace);
+	H5Aclose (attr);
+	H5Giterate(file_in, "/", NULL, file_info, &file_out );
 	
-	//COPY STUFF FROM "history/parent" to grp_hist_parent
-	//TBI
+	if (H5Lexists( grp_hist_parent_detail, "data", H5P_DEFAULT))
+		H5Ldelete( grp_hist_parent_detail, "data", H5P_DEFAULT); 
+	H5Lcreate_external( filename_full, "data", grp_hist_parent_detail, "data", H5P_DEFAULT, H5P_DEFAULT );
 	
-	//BROWSE objectname IN file_in OTHER THAN data OR history
-	////IF objectname IS DATASET: file_out["history/parent/detail/"+objectname]=group[objectname]
-	////IF objectname IS GROUP: COPY STUFF from "objectname" to file_out["history/parent/detail/" + objectname]
+	str_type = H5Tcopy (H5T_C_S1);	
+	rank = 1;
+	dimens_1d[0] = 1;
+	props = H5Pcreate (H5P_DATASET_CREATE);
 	
-	//Create external link to parent's data
-    //file_out['history/parent/detail/data'] = h5py.ExternalLink(src,'/data')
-
-	//Create your own groups
-    Group* grp_data = new Group( file_out->createGroup( "data" ));
-    Group* grp_param = new Group( file_out->createGroup( "params" ));
-    grp_param = new Group( file_out->createGroup( "misc" ));
-    grp_param = new Group( file_out->createGroup( "info" ));
-    
-
-
-    //str_type = h5py.new_vlen(str)
-	// Interface version  
-    //dataset = file_out.create_dataset("version", (1,), dtype='f')
-    //dataset[...] = 0.1
-    //Populate /info
-    //dataset = file_out.create_dataset("info/package_version",(1,), dtype=str_type)
-    //data = ("SingFEL v0.1.0")
-    //dataset[...] = data
-    //dataset = file_out.create_dataset("info/contact",(2,), dtype=str_type)
-    //data = ("Name: Chunhong Yoon", "Email: chun.hong.yoon@desy.de")
-    //dataset[...] = data
-    //dataset = file_out.create_dataset("info/data_description",(1,), dtype=str_type)
-    //data = ("This dataset contains a diffraction pattern generated using SingFEL.")
-    //dataset[...] = data
-    //dataset = file_out.create_dataset("info/method_description",(1,), dtype=str_type)
-    //data = ("Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern. Finally, Poissonian noise is added to the diffraction pattern.")
-    //dataset[...] = data
-    //Populate /params
-    //dataset = file_out.create_dataset("params/info",(1,), dtype=str_type)
-    //data = open(config)
-    //dataset[...] = data.read()
-     
-    file_out->close();
-    file_in->close();
+	grp_tmp = H5Gcreate (file_out, "data", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	H5Gclose(grp_tmp);		
+	grp_tmp = H5Gcreate (file_out, "params", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	char *config;
+	FILE *cfgf=NULL;
+	cfgf=fopen(configFile,"r");
+	if (cfgf==NULL){
+		printf("[E]File not found %s\n",configFile);
+		return -1;
+	}
+	fseek(cfgf, 0L, SEEK_END);
+	size_t cfgsz;
+	cfgsz=ftell(cfgf);
+	fseek(cfgf, 0L, SEEK_SET);
+	config=(char*)malloc(cfgsz);
+	fread(config,1,cfgsz,cfgf);
+	fclose(cfgf);
+	H5Tset_size (str_type, strlen(config)+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(grp_tmp,"info",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,config);
+	H5Sclose (dataspace);
+	H5Gclose(grp_tmp);
+	delete(config);
+	grp_tmp = H5Gcreate (file_out, "misc", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	H5Gclose(grp_tmp);
+	grp_tmp = H5Gcreate (file_out, "info", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+	//make info
+	string text="SingFEL v0.1.0";
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(grp_tmp,"package_version",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+	text="This dataset contains a diffraction pattern generated using SingFEL.";
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(grp_tmp,"data_description",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+	text="Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern. Finally, Poissonian noise is added to the diffraction pattern.";
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(grp_tmp,"method_description",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
 	
+	char* strcontact[2];
+	string text1="Name: Chunhong Yoon";
+	strcontact[0]=(char*)text1.c_str();
+	string text2="Email: chun.hong.yoon@desy.de";
+	strcontact[1]=(char*)text2.c_str();
+	H5Tset_size (str_type, H5T_VARIABLE);
+	dimens_1d[0] = 2;
 	
-    
-    delete grp_hist;
-    delete grp_hist;
-    delete grp_hist_parent;
-    delete grp_hist_parent_detail;
-	return true;
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(grp_tmp,"contact",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,strcontact);
+	H5Sclose (dataspace);
+	H5Gclose(grp_tmp);
+	
+	dimens_1d[0] = 1;
+	float ver=0.1;
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(file_out,"version",H5T_IEEE_F32LE,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, H5T_IEEE_F32LE, H5S_ALL,H5S_ALL,H5P_DEFAULT,&ver);
+	H5Sclose (dataspace);
+	
+	H5Gclose(grp_hist);
+	H5Gclose(grp_hist_parent);
+	H5Gclose(grp_hist_parent_detail);
+	H5Fclose(file_in);
+	H5Fclose(file_out);
+	
+	//clean up : copy only not un-linked data from tmp to out
+	file_in  = H5Fopen  (outputNameTmp, H5F_ACC_RDONLY, H5P_DEFAULT);
+	file_out = H5Fcreate(outputName,    H5F_ACC_TRUNC,  H5P_DEFAULT, H5P_DEFAULT);
+	H5Giterate(file_in, "/", NULL, file_copy, &file_out);
+	H5Fclose(file_in);
+	H5Fclose(file_out);
+	//delete tmp file
+	remove(outputNameTmp);
+	
+	return 0 && configFile==NULL;
 }
+
+herr_t file_info(hid_t loc_id, const char *name, void *opdata)
+{
+	hid_t ocpypl_id,prev_grp,prev_ds;
+	if (0 == strncmp(name, "data", 5) || 0 == strncmp(name, "history", 8))
+		return 0;
+    H5G_stat_t statbuf;
+    H5Gget_objinfo(loc_id, name, false, &statbuf);
+    char* dststr;
+    dststr=(char*)malloc(strlen(name)+2+strlen("history/parent/detail/"));
+    sprintf(dststr,"history/parent/detail/%s",name);
+    switch (statbuf.type) {
+    case H5G_GROUP: 
+		prev_grp = H5Gopen(*(hid_t*)opdata,dststr,H5P_DEFAULT);
+		if (prev_grp>=0){
+			H5Gclose(prev_grp);
+			H5Ldelete (*(hid_t*)opdata,dststr,H5P_DEFAULT);
+		}
+		ocpypl_id = H5Pcreate(H5P_OBJECT_COPY);
+		H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
+		H5Ocopy(loc_id,name,*(hid_t*)opdata,dststr,ocpypl_id,H5P_DEFAULT);
+		break;
+    case H5G_DATASET: 
+		prev_ds = H5Dopen(*(hid_t*)opdata,dststr,H5P_DEFAULT);
+		if (prev_ds>=0){
+			H5Dclose(prev_ds);
+			H5Ldelete (*(hid_t*)opdata,dststr,H5P_DEFAULT);
+		}
+		ocpypl_id = H5Pcreate(H5P_OBJECT_COPY);
+		H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
+		H5Ocopy(loc_id,name,*(hid_t*)opdata,dststr,ocpypl_id,H5P_DEFAULT);
+		break;
+    default:
+		;
+    }
+    delete(dststr); 
+    return 0;
+}	
+
+herr_t file_copy(hid_t loc_id, const char *name, void *opdata)
+{
+	hid_t ocpypl_id;
+	ocpypl_id = H5Pcreate(H5P_OBJECT_COPY);
+	H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
+	H5Ocopy(loc_id,name,*(hid_t*)opdata,name,ocpypl_id,H5P_DEFAULT);
+    return 0;
+}	
+
+
+
+
 
 /*
 BOOST_PYTHON_MODULE(libio)
