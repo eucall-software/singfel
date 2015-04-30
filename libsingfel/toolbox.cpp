@@ -768,8 +768,8 @@ double CToolbox::calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* my
 	      % log(mySlice->photonCount(myDP->photonpixmap)) \
 	      - mySlice->photonCount(myDP->photonpixmap) );
 	sim = exp(sim);
-	assert(numGoodpixels != 0);
-	sim /= numGoodpixels; // normalize by number of pixels compared
+	//assert(numGoodpixels != 0);
+	//sim /= numGoodpixels; // normalize by number of pixels compared
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
 		cout << "photonInd: " << myDP->photonpixmap;
@@ -787,8 +787,8 @@ double CToolbox::calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP
 	sim = sum( pow(myDP->photonCount(myDP->photonpixmap) \
 	      - mySlice->photonCount(myDP->photonpixmap),2) );
 	sim = exp( -sim / (2*pow(stdDev,2)) );
-	assert(numGoodpixels != 0);
-	sim /= numGoodpixels; // normalize by number of pixels compared
+	//assert(numGoodpixels != 0);
+	//sim /= numGoodpixels; // normalize by number of pixels compared
 	// debug message
 	if (numGoodpixels == 0 || sim > 1) {
 		cout << "photonInd: " << myDP->photonpixmap;
@@ -806,6 +806,17 @@ fvec CToolbox::calculateGaussianSimilarityBlock(fmat* sliceBlock, fmat* dataBloc
 	// dataBlock (numChunkData x maxElement)
 	sim = sum( pow(*sliceBlock-*dataBlock,2), 1);	// row-wise sum
 	sim = exp( -sim / (2*pow(stdDev,2)) ); // sim (numChunkData x 1)
+	return sim;
+}
+
+// Calculates Poisson log-likelihood
+fvec CToolbox::calculatePoissonianSimilarityBlock(fmat* sliceBlock, fmat* dataBlock) {
+	fvec sim; // measure of similarity
+	// sliceBlock (numChunkData x maxElement)
+	// dataBlock (numChunkData x maxElement)
+
+	sim = sum( *dataBlock % log(*sliceBlock) - *sliceBlock, 1);	// row-wise sum
+	sim = exp( sim ); // sim (numChunkData x 1)
 	return sim;
 }
 

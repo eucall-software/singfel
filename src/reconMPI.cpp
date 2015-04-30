@@ -336,7 +336,7 @@ wall_clock timer;
 				// Compare measured diffractions with expansion slice
 				/////////////////////////////////////////////////////
 				if (useProbType == "POISSON") {
-					//val = CToolbox::calculatePoissonianSimilarity(&mySlice, &myDP);
+					val = CToolbox::calculatePoissonianSimilarityBlock(&sliceBlock, &dataBlock);
 				} else {
 					val = CToolbox::calculateGaussianSimilarityBlock(&sliceBlock, &dataBlock, gaussianStdDev(iter));
 				}
@@ -496,7 +496,7 @@ int compression(opt::variables_map vm, CDiffrVol* diffrVol, \
 	}
 	
 	diffrVol->initVol();
-	int active = 1;
+	int active = 0;
 	string interpolate = "linear";
 	CDiffrPat myUpdatedSlice; 	// first slice: diffraction pattern
 						// second slice: good pixel map

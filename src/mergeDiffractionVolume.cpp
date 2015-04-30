@@ -73,9 +73,6 @@ int main( int argc, char* argv[] ){
   	//float psi,theta,phi;
 
 	CDiffrVol diffrVol = CDiffrVol(volDim);
-	//fcube myIntensity, myWeight;
-	//myIntensity.zeros(volDim,volDim,volDim);
-	//myWeight.zeros(volDim,volDim,volDim);
 
 	int active = 0;
 	string interpolate = "linear";
@@ -90,7 +87,7 @@ int main( int argc, char* argv[] ){
        	// Display status
 		CToolbox::displayStatusBar(i+1,numImages,&lastPercentDone);
   	}
-  	diffrVol.normalize(); //CToolbox::normalize(&myIntensity,&myWeight);
+  	diffrVol.normalize();
   		
   	// ########### Save diffraction volume ##############
   	cout << "Saving diffraction volume..." << endl;

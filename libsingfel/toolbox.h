@@ -83,7 +83,8 @@ public:
 	static double calculatePoissonianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP);
 	static double calculateGaussianSimilarity(CDiffrPat* mySlice, CDiffrPat* myDP, float stdDev);
 	static fvec calculateGaussianSimilarityBlock(fmat* sliceBlock, fmat* dataBlock, float stdDev);
-
+	static fvec calculatePoissonianSimilarityBlock(fmat* sliceBlock, fmat* dataBlock);
+	
 private:
 	double mNumber;
 };
