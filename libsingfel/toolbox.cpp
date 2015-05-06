@@ -10,7 +10,7 @@
 #include <gsl/gsl_randist.h>
 #include "toolbox.h"
 #include "io.h"
-
+#include <sys/ioctl.h>
 #include <string>
 #include <sstream>
 #include <math.h>
@@ -28,14 +28,16 @@ using namespace toolbox;
 using namespace detector;
 
 // Display status bar in the terminal
-void CToolbox::displayStatusBar(int numDone, int totalJobs, \
-                                float* lastPercentDone) {
+void CToolbox::displayStatusBar(int numDone, int totalJobs, float* lastPercentDone) {
 	float percentDone = round(numDone*100./totalJobs);
 	// Check if percentDone increased by at least 1 percent since last time
-	if (percentDone > *lastPercentDone+1) {
+	if (percentDone > *lastPercentDone) {
 		*lastPercentDone = percentDone;
-		for (int i = 0; i < 100; i++) {
-			if (i <= percentDone) {
+		struct winsize w;
+		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w); //OR STDIN_FILENO ... none worked in putty
+		int cols=(100<w.ws_col?100:w.ws_col);
+		for (int i = 0; i < cols; i++) {
+			if (i*100 <= percentDone*cols) {
 				cout << "*";
 			} else {
 				cout << "-";
@@ -843,3 +845,4 @@ fvec CToolbox::calculatePoissonianSimilarityBlock(fmat* sliceBlock, fmat* dataBl
 
 
 #endif /* SINGFEL_TOOLBOX_H */
+

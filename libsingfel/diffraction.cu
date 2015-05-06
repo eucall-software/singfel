@@ -61,6 +61,36 @@ __global__ void structureFactor(float *F, float *f, float *q, float *p, int numP
 	}
 }
 
+
+__global__ void matAmp(float *F,float *Fim, int numPix){
+	int index = ((blockIdx.y*blockDim.y + threadIdx.y)*gridDim.x + blockIdx.x )*blockDim.x + threadIdx.x;
+	if (index<numPix){
+		F[index]=F[index]*F[index]+Fim[index]*Fim[index];
+	}
+}
+	
+//structureFactorLimki<<<dim3(0x6,1),dim3(0xB,1)>>>(d_F,d_f,d_q,d_p,d_i,numPix,chunkSize);
+__global__ void structureFactorLimki(float *Fre,float *Fim, float *f, float *q, float *p, int *i, int numPix, int chunkSize){
+	int index = ((blockIdx.y*blockDim.y + threadIdx.y)*gridDim.x + blockIdx.x )*blockDim.x + threadIdx.x;
+	if (index<numPix){
+		// F (py x px) [re & im]
+		// f (py x px x numAtomTypes)
+		// q (py x px x 3)
+		// i (1 x chunkSize)
+		// p (chunkSize x 3)
+		float map = 0;
+		int f_ind = 0;
+		for (int n = 0; n < chunkSize; n++) {
+			map = 6.283185307F * (p[n]*q[index] + p[n+chunkSize]*q[index+(numPix)] + p[n+(2*chunkSize)]*q[index+(2*numPix)]);
+			f_ind = index + i[n]*numPix;
+			Fre[index] += f[f_ind] * cos(map);
+			Fim[index] += f[f_ind] * sin(map);
+		}
+	}
+}
+
+
+
 __global__ void structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize){
 	int index = ((blockIdx.y*blockDim.y + threadIdx.y)*gridDim.x + blockIdx.x )*blockDim.x + threadIdx.x;
 	if (index<numPix){
@@ -217,6 +247,82 @@ void cuda_structureFactor(float *F, float *f, float *q, float *p, int numPix, in
   	cudaFree(d_F); cudaFree(d_f); cudaFree(d_q); cudaFree(d_p);
 }
 
+
+void cuda_structureFactorLimki(float *F, float *f, float *q, float *p, int *i, int numPix, int numAtoms, int numAtomTypes , int deviceID){
+	int device,numBlocks;
+	size_t size_F,size_f,size_q,size_i,size_p;
+	size_t globalMem,fixedMem;
+	int chunk,chunkSize,chunkSizeMax;
+	float *d_F,*d_f,*d_p,*d_q,*d_Fim;
+	int *d_i;
+	struct cudaDeviceProp prop; 
+	dim3 dimG,dimB;
+	size_F = sizeof(float) * numPix;
+	size_f = sizeof(float) * numPix * numAtomTypes;
+	size_q = sizeof(float) * numPix * 3;
+	fixedMem = size_F*2 + size_f + size_q;
+	dimB.x = CUDA_BLOCK_SIZE;
+	dimG.x = numBlocks = (numPix+dimB.x-1)/dimB.x;
+	if (dimG.x > CUDA_GROUP_LIMIT){
+		dimG.y = (numBlocks + CUDA_GROUP_LIMIT -1) / CUDA_GROUP_LIMIT;
+		dimG.x = (numBlocks + dimG.y -1) / dimG.y;
+	}
+	//cudaGetDevice(&device);
+	device = deviceID;
+	cudaSetDevice(device);
+	cudaGetDeviceProperties(&prop,device);
+	
+	globalMem = prop.totalGlobalMem  - CUDA_RESERVE_MEM;
+	if (globalMem <= fixedMem){
+		printf("Device memory[%lu] not enough to hold all data[>%lu]!\n",globalMem,fixedMem);
+		exit(EXIT_FAILURE);
+	}	
+	chunkSizeMax = (globalMem - fixedMem) / (3 * sizeof(float) + sizeof(int));
+	if (chunkSizeMax>numAtoms)
+		chunkSizeMax=numAtoms;
+
+	size_p = sizeof(float) * chunkSizeMax * 3;
+	size_i = sizeof(int)   * chunkSizeMax;
+
+	cudaMalloc((void **)&d_F, size_F);
+	cudaMalloc((void **)&d_Fim, size_F);
+  	cudaMalloc((void **)&d_f, size_f);
+  	cudaMalloc((void **)&d_q, size_q);
+  	cudaMalloc((void **)&d_p, size_p);
+  	cudaMalloc((void **)&d_i, size_i);
+  	cudaMemcpy(d_f, f, size_f, cudaMemcpyHostToDevice);
+  	cudaMemcpy(d_q, q, size_q, cudaMemcpyHostToDevice);
+  	cudaMemset(d_F,0,size_F);
+  	cudaMemset(d_Fim,0,size_F);
+ 	
+  	chunkSize=chunkSizeMax;
+  	for(chunk=0;chunk<numAtoms;chunk+=chunkSizeMax){
+		
+		if (chunkSize+chunk>=numAtoms)
+			chunkSize=numAtoms-chunk;
+		cudaMemcpy(d_i				, i + chunk				, sizeof(int)*	chunkSize, cudaMemcpyHostToDevice);
+		cudaMemcpy(d_p				, p + chunk				, sizeof(float)*chunkSize, cudaMemcpyHostToDevice);
+		cudaMemcpy(d_p + chunkSize	, p + chunk + numAtoms	, sizeof(float)*chunkSize, cudaMemcpyHostToDevice);
+		cudaMemcpy(d_p + 2*chunkSize, p + chunk + 2*numAtoms, sizeof(float)*chunkSize, cudaMemcpyHostToDevice);
+		structureFactorLimki<<<dimG,dimB>>>(d_F,d_Fim,d_f,d_q,d_p,d_i,numPix,chunkSize);
+	}
+  	matAmp<<<dimG,dimB>>>(d_F,d_Fim,numPix);
+  	cudaMemcpy(F, d_F, size_F, cudaMemcpyDeviceToHost);
+  	cudaFree(d_F);
+  	cudaFree(d_Fim);
+  	cudaFree(d_f);
+  	cudaFree(d_q);
+  	cudaFree(d_p);
+  	cudaFree(d_i);
+}
+
+int cuda_getDeviceCount(){
+	int tmp;
+	if (cudaSuccess != cudaGetDeviceCount(&tmp))
+		return 0;
+	return tmp;
+}
+	
 void cuda_structureFactorChunk(float *sf_real, float *sf_imag, float *f, float *q, int *i, float *p, int numAtomTypes, int numPix, int chunkSize) {
 	float *d_sf_real, *d_sf_imag, *d_f, *d_q, *d_p; // Pointer to device memory
 	int *d_i;
@@ -282,4 +388,5 @@ void cuda_structureFactorChunkParallel(float *pad_real, float *pad_imag, float *
 	// Cleanup
   	cudaFree(d_pad_real); cudaFree(d_pad_imag); cudaFree(d_f); cudaFree(d_q); cudaFree(d_i); cudaFree(d_p);
 }
+
 

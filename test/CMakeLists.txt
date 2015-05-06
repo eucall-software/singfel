@@ -8,6 +8,6 @@ IF(CUDA_FOUND)
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
   # Place GPU tests here
 ELSEIF(NOT CUDA_FOUND)
-  ADD_EXECUTABLE(boostTest boostTest.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(boostTest ${Boost_LIBRARIES} ${ARMADILLO_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} )  
+  ADD_EXECUTABLE(boostTest boostTest.cpp ${GENERAL_SRC})
+  TARGET_LINK_LIBRARIES(boostTest ${GENERAL_LIB} ${MPI_LIBRARIES} )  
 ENDIF()

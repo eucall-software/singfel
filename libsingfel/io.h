@@ -1425,7 +1425,9 @@ struct Packet {
 
 void calculate_dp(Packet*);
 int write_HDF5(char *);
-bool prepS2E(string filename,string outputName,string configFile);
+herr_t file_info(hid_t loc_id, const char *name, void *opdata);
+herr_t file_copy(hid_t loc_id, const char *name, void *opdata);
+int prepS2E(const char* filename,const char* outputName,const char* configFile);
 
 class CIO{
 	//int b;

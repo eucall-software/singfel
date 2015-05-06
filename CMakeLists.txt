@@ -101,7 +101,7 @@ FIND_PACKAGE(MPI REQUIRED)
 INCLUDE_DIRECTORIES(${MPI_INCLUDE_PATH})
 
 #SET(CMAKE_CXX_FLAGS "-std=c++0x -g -Wall") # Add c++11 features
-#add_definitions(-DCOMPILE_WITH_CXX11) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
+#add_definitions(-DCOMPILE_WITH_CXX11=1) # set #define COMPILE_WITH_CXX11 to 1 in .cpp
 SET(CMAKE_CXX_FLAGS "-g -Wall")
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
@@ -114,6 +114,21 @@ message("${CMAKE_SOURCE_DIR}")
 SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 
 MESSAGE("${CMAKE_MODULE_PATH}")
+
+
+SET(GENERAL_SRC ${LIBSINGFEL}/io.cpp 
+				${LIBSINGFEL}/detector.cpp 
+				${LIBSINGFEL}/beam.cpp 
+				${LIBSINGFEL}/particle.cpp 
+				${LIBSINGFEL}/diffraction.cpp 
+				${LIBSINGFEL}/diffractionVolume.cpp 
+				${LIBSINGFEL}/diffractionPattern.cpp 
+				${LIBSINGFEL}/toolbox.cpp)
+SET(GENERAL_LIB ${ARMADILLO_LIBRARIES} 
+				${GSL_LIBRARIES} 
+				${HDF5_LIBRARIES} 
+				${Boost_LIBRARIES})
+
 
 ADD_SUBDIRECTORY(src)
 #ADD_SUBDIRECTORY(test)

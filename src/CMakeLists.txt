@@ -1,12 +1,10 @@
 INCLUDE_DIRECTORIES(${SINGFELPROJECT_SOURCE_DIR}/src)
 LINK_DIRECTORIES(${SINGFELPROJECT_BINARY_DIR}/src)
-
+				
 find_package(CUDA)
 IF(CUDA_FOUND)
   MESSAGE("CUDA FOUND")
-    
   add_definitions(-DCOMPILE_WITH_CUDA) # set #define COMPILE_WITH_CUDA to 1 in .cpp
-  add_definitions(-DUSE_CHUNK=1)
   
   #CUDA_ADD_EXECUTABLE(radiationSINGFEL_old radiationDamage.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(radiationSINGFEL_old ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})
@@ -17,11 +15,14 @@ IF(CUDA_FOUND)
   #CUDA_ADD_EXECUTABLE(MaximumXCorrelationMPI MaximumXCorrelationMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(MaximumXCorrelationMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})   
   
-  CUDA_ADD_EXECUTABLE(radiationDamageMPI radiationDamageMPI.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
-  TARGET_LINK_LIBRARIES(radiationDamageMPI ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${MPI_LIBRARIES} ${Boost_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(radiationDamageMPI radiationDamageMPI.cpp ${GENERAL_SRC} ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationDamageMPI ${GENERAL_LIB} ${MPI_LIBRARIES})
+  CUDA_ADD_EXECUTABLE(radiationDamage radiationDamage.cpp ${GENERAL_SRC} ${LIBSINGFEL}/diffraction.cu)
+  TARGET_LINK_LIBRARIES(radiationDamage ${GENERAL_LIB})
+  
   #gprof switches
-  set_target_properties(radiationDamageMPI PROPERTIES  COMPILE_FLAGS "-pg")
-  set_target_properties(radiationDamageMPI PROPERTIES  LINK_FLAGS "-pg")
+  #set_target_properties(radiationDamageMPI PROPERTIES  COMPILE_FLAGS "-pg")
+  #set_target_properties(radiationDamageMPI PROPERTIES  LINK_FLAGS "-pg")
 
   
   #if(MPI_COMPILE_FLAGS)

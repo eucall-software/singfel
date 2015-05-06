@@ -12,6 +12,10 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+//SHM for local rank
+#include <sys/ipc.h>
+#include <sys/stat.h>
+#include <sys/shm.h>
 // Armadillo library
 #include <armadillo>
 // Boost library
@@ -29,8 +33,11 @@
 #include "particle.h"
 #include "diffraction.h"
 #include "toolbox.h"
-#include "diffraction.cuh"
 #include "io.h"
+
+#ifdef COMPILE_WITH_CUDA
+#include "diffraction.cuh"
+#endif
 
 namespace mpi = boost::mpi;
 namespace opt = boost::program_options;
@@ -47,8 +54,15 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
+#define MPI_SHMKEY 0x6FB1407 
+//#define MPI_SHMKEY 0x6FB10407
+
 const int master = 0; // Process with rank=0 is the master
 const int msgLength = 4; // MPI message length
+int localRank=0;
+#ifdef COMPILE_WITH_CUDA
+int deviceCount=cuda_getDeviceCount();
+#endif
 
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
@@ -83,12 +97,31 @@ int main( int argc, char* argv[] ){
 	// All processes parse the input
 	opt::variables_map vm = parse_input(argc, argv, comm);
 	// Set random seed
-	srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
-	world.barrier();
+	//srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
+	srand( 0x01333337);
+	int shmid;
+	key_t shmkey = (key_t)MPI_SHMKEY;
+	static int *shmval;
+	if (world.rank() != master){
+		shmid = shmget(shmkey,sizeof(int),0666 | IPC_CREAT);
+		if ( 0 > shmid )
+			perror("shmget");   
+		shmval = (int*)shmat(shmid,NULL,0);
+		if ( 0 > shmval )
+			perror("shmval"); 
+		*shmval=0;
+	}
 
+	world.barrier();
+	if (world.rank() != master){
+		//printf("Local %d\n",localRank);fflush(NULL);
+		localRank = __sync_fetch_and_add( shmval,1);
+		//printf("Local %d\n",localRank);fflush(NULL);
+	}
 	wall_clock timerMaster;
 
 	timerMaster.tic();
+
 
 	// Main program
 	if (world.rank() == master) {
@@ -98,7 +131,12 @@ int main( int argc, char* argv[] ){
 	}
 
 	world.barrier();
-
+	if (world.rank() != master) {
+		shmdt(shmval);
+		shmctl(shmid, IPC_RMID, 0);
+	}
+	
+	
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -230,7 +268,8 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	
 	wall_clock timer;
 	boost::mpi::status status;
-
+	
+	
 	string filename;
 	string outputName;
 		
@@ -264,7 +303,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	fmat F_hkl_sq(py,px);
 	fmat Compton(py,px);
 	fmat myPos;
-
+	
 	while (1) {
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg, msgLength);
@@ -346,7 +385,27 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				CDiffraction::calculate_atomicFactor(&particle, &det);
 				// Incoherent contribution
 				getComptonScattering(vm, &particle, &det, &Compton);
-
+				
+				#ifdef COMPILE_WITH_CUDA
+				if (localRank < 2*deviceCount){
+					float* F_mem = F_hkl_sq.memptr();
+					// f_hkl: py x px x numAtomTypes
+					float* f_mem = CDiffraction::f_hkl.memptr();
+					float* q_mem = det.q_xyz.memptr();
+					float* p_mem = particle.atomPos.memptr();
+					int*   i_mem = particle.xyzInd.memptr();
+					cuda_structureFactorLimki(F_mem, f_mem, q_mem, p_mem, i_mem, det.numPix, particle.numAtoms, particle.numAtomTypes,localRank%deviceCount);
+					detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+				}else
+				#endif
+				{
+					//CDiffraction::get_atomicFormFactorList(&particle, &det);
+					//F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
+					F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
+					photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+					detector_intensity += photon_field;
+				}
+/*
 				#ifdef COMPILE_WITH_CUDA
 				if (!USE_CHUNK) {
 
@@ -430,7 +489,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					               * beam.get_photonsPerPulsePerArea();
 					detector_intensity += photon_field;
 				#endif
-				
+	*/			
 				if (saveSlices) {
 					savePhotonField(outputName, isFirstSlice, timeSlice, \
 					                &photon_field);

@@ -27,6 +27,7 @@ public:
 	static void get_formFactorList(particle::CParticle *particle);
 	static void get_atomicFormFactorList(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::cube get_FourierMap(particle::CParticle *particle, detector::CDetector *detector);
+	static arma::fmat calculate_molecularFormFactorSq(particle::CParticle *particle, detector::CDetector *detector);
 	static arma::fmat calculate_intensity(particle::CParticle *particle, detector::CDetector *detector);
 	static void calculate_compton(particle::CParticle *particle, detector::CDetector *detector, arma::fmat *Compton);	
 	static void displayResolution(detector::CDetector *detector, beam::CBeam *beam);
