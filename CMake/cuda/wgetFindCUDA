@@ -1,0 +1,4 @@
+wget https://raw.githubusercontent.com/Kitware/CMake/master/Modules/FindCUDA.cmake -O FindCUDA.cmake
+wget https://raw.githubusercontent.com/Kitware/CMake/master/Modules/FindPackageMessage.cmake -O FindPackageMessage.cmake
+wget https://raw.githubusercontent.com/Kitware/CMake/master/Modules/CMakeParseArguments.cmake -O CMakeParseArguments.cmake
+wget https://raw.githubusercontent.com/Kitware/CMake/master/Modules/FindPackageHandleStandardArgs.cmake -O FindPackageHandleStandardArgs.cmake
