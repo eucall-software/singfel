@@ -94,6 +94,8 @@ static void diffract(opt::variables_map vm) {
 	string geomFile = vm["geomFile"].as<string>();
 	int numSlices = vm["numSlices"].as<int>();
 	int saveSlices = vm["saveSlices"].as<int>();
+	bool calculateCompton = vm["calculateCompton"].as<bool>();
+	
 	#ifdef COMPILE_WITH_CUDA
 	int localRank=0;
 	int deviceCount=cuda_getDeviceCount();
@@ -205,8 +207,9 @@ static void diffract(opt::variables_map vm) {
 			// Coherent contribution
 			CDiffraction::calculate_atomicFactor(&particle, &det);
 			// Incoherent contribution
-			getComptonScattering(vm, &particle, &det, &Compton);
-			
+			if (calculateCompton) {
+				getComptonScattering(vm, &particle, &det, &Compton);
+			}
 			#ifdef COMPILE_WITH_CUDA
 			if (localRank < deviceCount){
 				float* F_mem = F_hkl_sq.memptr();
@@ -215,92 +218,31 @@ static void diffract(opt::variables_map vm) {
 				float* q_mem = det.q_xyz.memptr();
 				float* p_mem = particle.atomPos.memptr();
 				int*   i_mem = particle.xyzInd.memptr();
-				cuda_structureFactorLimki(F_mem, f_mem, q_mem, p_mem, i_mem, det.numPix, particle.numAtoms, particle.numAtomTypes,localRank);
-				detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
+				cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, i_mem, \
+				                     det.numPix, particle.numAtoms, \
+				                     particle.numAtomTypes, localRank);
+				if (calculateCompton) {
+					photon_field = (F_hkl_sq+Compton) % det.solidAngle \
+					                % det.thomson \
+					                * beam.get_photonsPerPulsePerArea();
+				} else {
+					photon_field = F_hkl_sq % det.solidAngle % det.thomson \
+					                * beam.get_photonsPerPulsePerArea();
+				}
 			}else
 			#endif
 			{
-				//CDiffraction::get_atomicFormFactorList(&particle, &det);
-				//F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
 				F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
-				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-				detector_intensity += photon_field;
-			}
-			/*
-			#ifdef COMPILE_WITH_CUDA
-			float* F_mem = F_hkl_sq.memptr();
-			// f_hkl: py x px x numAtomTypes
-			float* f_mem = CDiffraction::f_hkl.memptr();
-			float* q_mem = det.q_xyz.memptr();
-			float* p_mem = particle.atomPos.memptr();
-			int*   i_mem = particle.xyzInd.memptr();
-			cuda_structureFactorLimki(F_mem, f_mem, q_mem, p_mem, i_mem, det.numPix, particle.numAtoms, particle.numAtomTypes);
-	
-			detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-			
-			if (!USE_CHUNK) {
-
-				CDiffraction::get_atomicFormFactorList(&particle,&det);
-
-			 	float* F_mem = F_hkl_sq.memptr();
-				float* f_mem = CDiffraction::f_hkl_list.memptr();
-				float* q_mem = det.q_xyz.memptr();
-				float* p_mem = particle.atomPos.memptr();
-				cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, det.numPix, particle.numAtoms);
-	
-				detector_intensity += (F_hkl_sq+Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-		
-			} else if (USE_CHUNK) {
-
-				int max_chunkSize = 100;
-				int chunkSize = 0;
-				// f_hkl: py x px x numAtomTypes
-				float* f_mem = CDiffraction::f_hkl.memptr();
-				// q_xyz: py x px x 3 
-				float* q_mem = det.q_xyz.memptr();
-
-				fmat pad_real;
-				fmat pad_imag;
-				fmat sumDr;
-				sumDr.zeros(py*px,1);
-				fmat sumDi;
-				sumDi.zeros(py*px,1);
-	
-				int first_ind = 0;
-				int last_ind = 0;
-				while (first_ind < particle.numAtoms) {			 
-					last_ind = min((last_ind + max_chunkSize), particle.numAtoms);
-					chunkSize = last_ind-first_ind;
-					pad_real.zeros(py*px,chunkSize);
-				 	float* pad_real_mem = pad_real.memptr();
-					pad_imag.zeros(py*px,chunkSize);
-				 	float* pad_imag_mem = pad_imag.memptr();
-				 	
-					// xyzInd & pos are chunked
-					// particle.xyzInd // 1 x chunk
-					// particle.pos // chunk x 3
-					irowvec xyzInd_sub = particle.xyzInd.subvec( first_ind, last_ind-1 );
-					int* i_mem = xyzInd_sub.memptr();	
-					fmat pos_sub = particle.atomPos( span(first_ind, last_ind-1),span::all);
-					float* p_mem = pos_sub.memptr();
-					cuda_structureFactorChunkParallel(pad_real_mem, pad_imag_mem, f_mem, q_mem, i_mem, p_mem, particle.numAtomTypes, det.numPix, chunkSize);
-					sumDr += sum(pad_real,1);
-					sumDi += sum(pad_imag,1);
-					first_ind += max_chunkSize;
+				if (calculateCompton) {
+					photon_field = (F_hkl_sq + Compton) % det.solidAngle \
+					               % det.thomson \
+					               * beam.get_photonsPerPulsePerArea();
+				} else {
+					photon_field = F_hkl_sq % det.solidAngle % det.thomson \
+					               * beam.get_photonsPerPulsePerArea();
 				}
-				sumDr.reshape(py,px);
-				sumDi.reshape(py,px);
-				F_hkl_sq = sumDr % sumDr + sumDi % sumDi;
-				detector_intensity += (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
 			}
-			
-			#else // compute using CPU
-				CDiffraction::get_atomicFormFactorList(&particle, &det);
-				F_hkl_sq = CDiffraction::calculate_intensity(&particle, &det);
-				photon_field = (F_hkl_sq + Compton) % det.solidAngle % det.thomson * beam.get_photonsPerPulsePerArea();
-				detector_intensity += photon_field;
-			#endif
-			*/
+			detector_intensity += photon_field;
 			if (saveSlices) {
 				savePhotonField(outputName, isFirstSlice, timeSlice, &photon_field);
 			}

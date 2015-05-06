@@ -23,10 +23,10 @@ void cuda_func3(int *, int *, int *, int);
 void cuda_funcVec(int *, int *, int *, int);
 void cuda_funcMat(float *, float *, float *, int, int);
 void cuda_funcCube(float *, float *, float *, int, int, int);
-void cuda_structureFactor(float *, float *, float *, float *, int, int);
-void cuda_structureFactorChunk(float *, float *, float *, float *, int *, float *, int, int, int);
-void cuda_structureFactorChunkParallel(float *, float *, float *, float *, int *, float *, int, int, int);
-void cuda_structureFactorLimki(float *, float *, float *, float *, int *, int, int, int, int = 0);
+//void cuda_structureFactor(float *, float *, float *, float *, int, int);
+//void cuda_structureFactorChunk(float *, float *, float *, float *, int *, float *, int, int, int);
+//void cuda_structureFactorChunkParallel(float *, float *, float *, float *, int *, float *, int, int, int);
+void cuda_structureFactor(float *, float *, float *, float *, int *, int, int, int, int = 0);
 
 #ifdef __cplusplus
 }  /* extern "C" */
