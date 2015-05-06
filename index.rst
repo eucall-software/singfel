@@ -15,6 +15,7 @@ Contents:
    :maxdepth: 2
 
    docs/getting_started.rst
+   docs/radiationDamage.rst
 
 Indices and tables
 ==================
