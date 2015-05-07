@@ -63,7 +63,7 @@ find_path (ARMADILLO_INCLUDES Mat_meat.hpp
 
 find_library (ARMADILLO_LIBRARIES armadillo
   PATHS
-  $ENV{ARMA_DIR}/lib 
+  $ENV{ARMA_DIR} 
   /usr/lib
   /usr/local/lib
   /opt/lib
