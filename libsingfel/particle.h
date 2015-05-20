@@ -54,7 +54,7 @@ public:
 		
 	static void load_ffTable(string filename, string datasetname); // load hdf5
 	static void load_ffTable(string);
-	static void set_ffTable(Packet*);
+	//static void set_ffTable(Packet*);
 	static void load_qSample(string filename, string datasetname); // load hdf5
 	static void load_qSample(string);
 	static void load_particleOrientation(string filename, string datasetname); // load hdf5

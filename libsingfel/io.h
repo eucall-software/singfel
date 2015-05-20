@@ -27,6 +27,7 @@
 #endif
 
 #include "H5Cpp.h"
+#include "hdf5_hl.h"
 
 #ifndef H5_NO_NAMESPACE
     using namespace H5;
@@ -1016,352 +1017,133 @@ template<typename T> T hdf5readCube(std::string filename, std::string datasetnam
    }
 }
 
-template<typename T> T hdf5readT(std::string filename, std::string datasetname){
-	const H5std_string FILE_NAME( filename );
-	const H5std_string DATASET_NAME( datasetname );
-	int NX, NY, NZ;
-   
-    T myData;
+template<typename T> T hdf5readConst(std::string filename, std::string datasetname) {
+	hid_t file_id;
+	int rank;
+		
+	// Open hdf5 file
+	file_id = H5Fopen (filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
-   /*
-    * Try block to detect exceptions raised by any of the calls inside it
-    */
-   try
-   {
-      /*
-       * Turn off the auto-printing when failure occurs so that we can
-       * handle the errors appropriately
-       */
-		Exception::dontPrint();
+	// Get rank
+	H5LTget_dataset_ndims(file_id,datasetname.c_str(),&rank);
+	if (rank != 0) {
+		cerr << "Error: rank is not zero: " << rank << endl;
+		cerr << "Try using hdf5read instead" << endl;
+		exit(0);
+	}
 	
-	  /*
-       * Open the specified file and the specified dataset in the file.
-       */
-      	H5File file( FILE_NAME, H5F_ACC_RDONLY );
-      	DataSet dataset = file.openDataSet( DATASET_NAME );
-
-      /*
-       * Get the class of the datatype that is used by the dataset.
-       */
-      	H5T_class_t type_class = dataset.getTypeClass();
-
-      /*
-       * Get class of datatype and print message if it's a float.
-       */
-      if( type_class == H5T_FLOAT ) {// H5T_NATIVE_DOUBLE ) {//H5T_FLOAT ) {
-	 	//cout << "Data set has FLOAT type" << endl;
-
-         /*
-	  	  * Get the integer datatype
-          */
-	 	 FloatType intype = dataset.getFloatType();
-
-         /*
-          * Get order of datatype and print message if it's a little endian.
-          */
-	 	 H5std_string order_string;
-         H5T_order_t order = intype.getOrder( order_string );
-	 	 //cout << "Endian:" << order << endl;
-
-         /*
-          * Get size of the data element stored in file and print it.
-          */
-         size_t size = intype.getSize();
-         //cout << "Data size is " << size << endl;
-      } else if( type_class == H5T_INTEGER ) {
-	 	// cout << "Data set has INTEGER type" << endl;
-	 	 /*
-	  	  * Get the integer datatype
-          */
-	 	 IntType intype = dataset.getIntType();
-
-         /*
-          * Get order of datatype and print message if it's a little endian.
-          */
-	 	 H5std_string order_string;
-         H5T_order_t order = intype.getOrder( order_string );
-	 	 //cout << "Endian:" << order << endl;
-
-         /*
-          * Get size of the data element stored in file and print it.
-          */
-         size_t size = intype.getSize();
-         //cout << "Data size is " << size << endl;
-	  }
-      /*
-       * Get dataspace of the dataset.
-       */
-      DataSpace dataspace = dataset.getSpace();
-
-      /*
-       * Get the number of dimensions in the dataspace.
-       */
-      int rank = dataspace.getSimpleExtentNdims();
-      //cout << "rank " << rank << endl;
-      /*
-       * Get the dimension size of each dimension in the dataspace and
-       * display them.
-       */
-      hsize_t dims_out[rank];
-      int ndims = dataspace.getSimpleExtentDims( dims_out, NULL);
-/*      
-		if (rank == 1) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << endl;
-		} else if (rank == 2) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << " x " <<
-				(unsigned long)(dims_out[1]) << endl;
-		} else if (rank == 3) {
-			cout << "rank " << rank << ", dimensions " <<
-				(unsigned long)(dims_out[0]) << " x " <<
-				(unsigned long)(dims_out[1]) << " x " <<
-				(unsigned long)(dims_out[2]) << endl;
-		}
-*/		
-		if (rank == 1) {
-			NX = (unsigned long)(dims_out[0]);
-		} else if (rank == 2) {
-			NX = (unsigned long)(dims_out[0]);
-			NY = (unsigned long)(dims_out[1]);
-		} else if (rank == 3) {
-			NX = (unsigned long)(dims_out[0]);
-			NY = (unsigned long)(dims_out[1]);
-			NZ = (unsigned long)(dims_out[2]);
-		}
-		  
-		/*
-		* Define hyperslab in the dataset; implicitly giving strike and
-		* block NULL.
-		*/
-		hsize_t      offset[rank];	// hyperslab offset in the file
-		hsize_t      count[rank];	// size of the hyperslab in the file
-		if (rank == 1) {
-			offset[0] = 0;
-			count[0]  = NX;
-		} else if (rank == 2) {
-			offset[0] = 0;
-			offset[1] = 0;
-			count[0]  = NX;
-			count[1]  = NY;
-		} else if (rank == 2) {
-			offset[0] = 0;
-			offset[1] = 0;
-			offset[2] = 0;
-			count[0]  = NX;
-			count[1]  = NY;
-			count[2]  = NZ;
-		}
-		dataspace.selectHyperslab( H5S_SELECT_SET, count, offset );
-
-		/*
-		* Define the memory dataspace.
-		*/
-      hsize_t     dimsm[rank];              /* memory space dimensions */
-		if (rank == 1) {
-			dimsm[0] = NX;
-		} else if (rank == 2) {
-			dimsm[0] = NX;
-      		dimsm[1] = NY;
-		} else if (rank == 3) {
-			dimsm[0] = NX;
-      		dimsm[1] = NY;
-      		dimsm[1] = NZ;
-		}
-      DataSpace memspace( rank, dimsm );
-	  
-      /*
-       * Define memory hyperslab.
-       */
-      hsize_t      offset_out[rank];	// hyperslab offset in memory
-      hsize_t      count_out[rank];	// size of the hyperslab in memory
-		if (rank == 1) {
-			offset_out[0] = 0;
-      		count_out[0]  = NX;
-		} else if (rank == 2) {
-			offset_out[0] = 0;
-      		offset_out[1] = 0;
-      		//offset_out[2] = 0;
-      		count_out[0]  = NX;
-      		count_out[1]  = NY;
-      		//count_out[2]  = 1;
-		} else if (rank == 3) {
-			offset_out[0] = 0;
-      		offset_out[1] = 0;
-      		offset_out[2] = 0;
-      		count_out[0]  = NX;
-      		count_out[1]  = NY;
-      		count_out[2]  = NZ;
-		}
-      memspace.selectHyperslab( H5S_SELECT_SET, count_out, offset_out );
-	  
-      /*
-       * Read data from hyperslab in the file into the hyperslab in
-       * memory and display the data.
-       */
-		if (typeid(myData) == typeid(mat)) {
-			//cout << "typeid = mat" << endl;
-			double data_out[NX][NY]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
-			myData.zeros(NX,NY); 
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j) = data_out[i][j];  
-			}
-			}      
-		} else if (typeid(myData) == typeid(fmat)) {
-		//cout << "typeid = fmat" << endl;
-			float data_out[NX][NY]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
-			myData.zeros(NX,NY); 
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j) = data_out[i][j];  
-			}
-			}      
-		} else if (typeid(myData) == typeid(imat)) {
-			int data_out[NX][NY]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace );
-			myData.zeros(NX,NY); 
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j) = data_out[i][j];  
-			}
-			}      
-		} else if (typeid(myData) == typeid(umat)) {
-			unsigned int data_out[NX][NY]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
-			myData.zeros(NX,NY); 
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j) = data_out[i][j];  
-			}
-			}      
-		} else if (typeid(myData) == typeid(vec) || 
-                   typeid(myData) == typeid(rowvec)) {
-                   //cout << "typeid = vec | rowvec" << endl;
-            if (rank == 2 && NY > NX) NX = NY;
-			double data_out[NX]; /* output buffer */
-			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
-			myData.zeros(NX); 
-			for (int i = 0; i < NX; i++) {
-				myData(i) = data_out[i];
-			}
-		} else if (typeid(myData) == typeid(fvec) || 
-                   typeid(myData) == typeid(frowvec)) {
-                   //cout << "typeid = fvec | frowvec" << endl;
-            if (rank == 2 && NY > NX) NX = NY;
-			float data_out[NX]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
-			myData.zeros(NX); 
-			for (int i = 0; i < NX; i++) {
-				myData(i) = data_out[i];  
-			}
-		} else if (typeid(myData) == typeid(ivec) || 
-                   typeid(myData) == typeid(irowvec)) {
-            if (rank == 2 && NY > NX) NX = NY;
-			int data_out[NX]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace );
-			myData.zeros(NX); 
-			for (int i = 0; i < NX; i++) {
-				myData(i) = data_out[i];  
-			}
-		} else if (typeid(myData) == typeid(uvec) || 
-                   typeid(myData) == typeid(urowvec)) {
-            if (rank == 2 && NY > NX) NX = NY;
-			unsigned int data_out[NX]; /* output buffer */	
-			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
-			myData.zeros(NX);
-			for (int i = 0; i < NX; i++) {
-				myData(i) = data_out[i];  
-			}
-		}/* else if (typeid(myData) == typeid(cube)) {
-			double data_out[NX][NY][NZ];
-			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
-			myData.zeros(NX,NY,NZ);
-			for (int k = 0; k < NZ; k++) {
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j,k) = data_out[i][j][k];  
-			}
-			}
-		} else if (typeid(myData) == typeid(fcube)) {
-			float data_out[NX][NY][NZ];
-			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
-			myData.zeros(NX,NY,NZ);
-			for (int k = 0; k < NZ; k++) {
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j,k) = data_out[i][j][k];  
-			}
-			}
-		} else if (typeid(myData) == typeid(icube)) {
-			int data_out[NX][NY][NZ];
-			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace );
-			myData.zeros(NX,NY,NZ);
-			for (int k = 0; k < NZ; k++) {
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j,k) = data_out[i][j][k];  
-			}
-			}
-		} else if (typeid(myData) == typeid(ucube)) {
-			unsigned int data_out[NX][NY][NZ];
-			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
-			myData.zeros(NX,NY,NZ);
-			for (int k = 0; k < NZ; k++) {
-			for (int j = 0; j < NY; j++) {
-			for (int i = 0; i < NX; i++) {
-				myData(i,j,k) = data_out[i][j][k];  
-			}
-			}
-		} else if (typeid(myData) == typeid(double)) {
-			double data_out[1];
-			dataset.read( data_out, PredType::NATIVE_DOUBLE, memspace, dataspace );
-			myData(0) = data_out[0];  
-		} else if (typeid(myData) == typeid(float)) {
-			float data_out[1];
-			dataset.read( data_out, PredType::NATIVE_FLOAT, memspace, dataspace );
-			myData(0) = data_out[0];
-		} else if (typeid(myData) == typeid(int)) {
-			int data_out[1];
-			dataset.read( data_out, PredType::NATIVE_INT, memspace, dataspace ); 
-			myData(0) = data_out[0];
-		} else if (typeid(myData) == typeid(unsigned int)) {
-			unsigned int data_out[1];
-			dataset.read( data_out, PredType::NATIVE_UINT, memspace, dataspace );
-			myData(0) = data_out[0];
-		}*/
+	T myData;
+	if (typeid(T) == typeid(double)) {
+		double data[1];
+		H5LTread_dataset_double(file_id,datasetname.c_str(),data);
+		myData = data[0];
+	} else if (typeid(T) == typeid(float)) {
+		float data[1];
+		H5LTread_dataset_float(file_id,datasetname.c_str(),data);
+		myData = data[0];		
+	} else if (typeid(T) == typeid(int)) {
+		int data[1];
+		H5LTread_dataset_int(file_id,datasetname.c_str(),data);
+		myData = data[0];		
+	}
+	// close file
+	H5Fclose (file_id);
 	return myData;
-	}  // end of try block
+}
 
-   // catch failure caused by the H5File operations
-   catch( FileIException error )
-   {
-      error.printError();
-      //return -1;
-   }
+template<typename T> T hdf5read(std::string filename, std::string datasetname){
 
-   // catch failure caused by the DataSet operations
-   catch( DataSetIException error )
-   {
-      error.printError();
-      //return -1;
-   }
+	hid_t file_id;
+	T myData;
+	int rank;
+	
+	// open hdf5 file
+	file_id = H5Fopen (filename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
 
-   // catch failure caused by the DataSpace operations
-   catch( DataSpaceIException error )
-   {
-      error.printError();
-      //return -1;
-   }
+	// Get rank
+	H5LTget_dataset_ndims(file_id,datasetname.c_str(),&rank);
 
-   // catch failure caused by the DataSpace operations
-   catch( DataTypeIException error )
-   {
-      error.printError();
-      //return -1;
-   }
+	if (rank == 0) {
+		cerr << "Unsupported rank: " << rank << endl;
+		cerr << "Use hdf5readConst instead" << endl;
+		exit(0);
+	} else if (rank == 1) {
+		hsize_t dims[1];
+		// get the dimensions of the dataset
+		H5LTget_dataset_info(file_id,datasetname.c_str(),dims,NULL,NULL);
+		if (typeid(myData) == typeid(vec) || 
+            typeid(myData) == typeid(rowvec)) {
+            double data[dims[0]];
+			// read dataset
+			H5LTread_dataset_double(file_id,datasetname.c_str(),data);
+			myData.zeros(dims[0]);
+			for (int i = 0; i < dims[0]; i++) {
+				myData(i) = data[i];
+			}            
+        } else if (typeid(myData) == typeid(fvec) || 
+                   typeid(myData) == typeid(frowvec)) {
+            float data[dims[0]];
+			// read dataset
+			H5LTread_dataset_float(file_id,datasetname.c_str(),data);
+			myData.zeros(dims[0]);
+			for (int i = 0; i < dims[0]; i++) {
+				myData(i) = data[i];
+			}
+        } else if (typeid(myData) == typeid(ivec) || 
+                   typeid(myData) == typeid(irowvec)) {
+            int data[dims[0]];
+			// read dataset
+			H5LTread_dataset_int(file_id,datasetname.c_str(),data);
+			myData.zeros(dims[0]); 
+			for (int i = 0; i < dims[0]; i++) {
+				myData(i) = data[i];
+			}         
+        }
+	} else if (rank == 2) {
+		hsize_t     dims[2];
+		// get the dimensions of the dataset
+		H5LTget_dataset_info(file_id,datasetname.c_str(),dims,NULL,NULL);
+		if (typeid(myData) == typeid(mat)) {
+            double data[dims[0]*dims[1]];
+			// read dataset
+			myData.zeros(dims[0],dims[1]);
+			H5LTread_dataset_double(file_id,datasetname.c_str(),data);
+			for (int i = 0; i < dims[0]; i++) {
+			for (int j = 0; j < dims[1]; j++) {
+				myData(i,j) = data[i*dims[1]+j];
+			}
+			}   
+        } else if (typeid(myData) == typeid(fmat)) {
+            float data[dims[0]*dims[1]];
+			// read dataset
+			H5LTread_dataset_float(file_id,datasetname.c_str(),data);
+			myData.zeros(dims[0],dims[1]);
+			for (int i = 0; i < dims[0]; i++) {
+			for (int j = 0; j < dims[1]; j++) {
+				myData(i,j) = data[i*dims[1]+j];
+			}
+			}    	
+        } else if (typeid(myData) == typeid(imat)) {
+            int data[dims[0]*dims[1]];
+			// read dataset
+			H5LTread_dataset_int(file_id,datasetname.c_str(),data);
+			myData.zeros(dims[0],dims[1]); 
+			for (int i = 0; i < dims[0]; i++) {
+			for (int j = 0; j < dims[1]; j++) {
+				myData(i,j) = data[i*dims[1]+j];
+			}
+			}     
+        }
+	} else {
+		cout << "Rank > 2 is not supported" << endl;
+		exit(0);
+	}
+
+	// close file
+	H5Fclose (file_id);
+ 
+	return myData;
+
 }
 
 #ifdef __cplusplus
@@ -1372,7 +1154,7 @@ extern "C" {
 arma::ivec str2ivec(std::string);
 arma::fvec str2fvec(std::string);
 
-arma::fmat hdf5read(std::string,std::string);
+//arma::fmat hdf5read(std::string,std::string);
 //int hdf5write(std::string,std::string,arma::fmat);
 int hdf5write(std::string,std::string,arma::fmat);
 

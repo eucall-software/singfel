@@ -531,8 +531,8 @@ void setFluenceFromFile(const string filename, const int timeSlice, \
 		stringstream ss;
 		ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
 		datasetname = ss.str(); 					
-		vec myNph = hdf5readT<vec>(filename,datasetname+"/Nph");
-		beam->set_photonsPerPulse(myNph[0]);
+		double myNph = hdf5readConst<double>(filename,datasetname+"/Nph");
+		beam->set_photonsPerPulse(myNph);
 		n_phot += beam->get_photonsPerPulse();	// number of photons per pulse
 	}
 	beam->set_photonsPerPulse(n_phot);

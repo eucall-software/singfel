@@ -36,7 +36,7 @@ void CDiffrPat::loadPhotonCount(opt::variables_map vm, int ind) {
 		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
 		filename = ss.str();
 		// Read in diffraction			
-		photonCount = hdf5readT<fmat>(filename,hdfField);
+		photonCount = hdf5read<fmat>(filename,hdfField);
 	}
 	photonpixmap = find( photonCount > 0 );
 }
