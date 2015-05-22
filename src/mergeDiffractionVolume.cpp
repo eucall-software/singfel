@@ -25,6 +25,8 @@
 #include "diffraction.h"
 #include "toolbox.h"
 #include "io.h"
+#include "diffractionVolume.h"
+#include "diffractionPattern.h"
 
 using namespace std;
 using namespace arma;
@@ -33,11 +35,13 @@ using namespace beam;
 using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
+using namespace diffractionVolume;
+using namespace diffractionPattern;
 
 opt::variables_map parse_input(int argc, char* argv[]);
-void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap);
+//void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap);
 void loadQuaternion(opt::variables_map vm, int ind, fvec* quat);
-void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
+//void saveDiffractionVolume(opt::variables_map vm, fcube* myIntensity, fcube* myWeight);
 
 int main( int argc, char* argv[] ){
 
@@ -66,24 +70,29 @@ int main( int argc, char* argv[] ){
 	std::stringstream ss;
   	string filename;
   		
-  	fcube myDPnPixmap;
+  	//fcube myDPnPixmap;
   	fvec quat(4);
   	fmat myR;
   	myR.zeros(3,3);
   	//float psi,theta,phi;
 
 	CDiffrVol diffrVol = CDiffrVol(volDim);
-
+	CDiffrPat mySlice;
+	mySlice.init(volDim);
+	
 	int active = 0;
 	string interpolate = "linear";
 	float lastPercentDone = 0;
   	// ########### Save diffraction volume ##############
   	cout << "Merging diffraction volume..." << endl;
   	for (int i = 0; i < numImages; i++) {
-  		loadDPnPixmap(vm, i+1, &myDPnPixmap);
-  		loadQuaternion(vm, i+1, &quat);
-  		myR = CToolbox::quaternion2rot3D(quat);
-       	CToolbox::merge3D(&myDPnPixmap, &myR, &diffrVol, &det, active, interpolate);
+  		// Get updated expansion slice
+		mySlice.loadPhotonCount(vm, i+1);
+		// Get angle
+		loadQuaternion(vm, i+1, &quat);
+		myR = CToolbox::quaternion2rot3D(quat);
+		// Merge into 3D diffraction volume	
+       	CToolbox::merge3D(&mySlice, &myR, &diffrVol, &det, active, interpolate);
        	// Display status
 		CToolbox::displayStatusBar(i+1,numImages,&lastPercentDone);
   	}
@@ -106,12 +115,12 @@ void loadQuaternion(opt::variables_map vm, int ind, fvec* quat) {
 	if (format == "S2E") {
 		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
 		filename = ss.str();
-		_quat = hdf5readT<fvec>(filename,"/data/angle");
+		_quat = hdf5read<fvec>(filename,"/data/angle");
 	} else {
 		// TODO: Add default behaviour
 	}
 }
-
+/*
 void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 	string input = vm["input"].as<string>();
 	string output = vm["output"].as<string>();
@@ -126,7 +135,7 @@ void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".h5";
 		filename = ss.str();
 		// Read in diffraction			
-		myDPnPixmap->slice(0) = hdf5readT<fmat>(filename,hdfField);
+		myDPnPixmap->slice(0) = hdf5read<fmat>(filename,hdfField);
 	} else {
 		ss << input << "/diffr/diffr_out_" << setfill('0') << setw(7) << ind << ".dat";
 		filename = ss.str();
@@ -138,7 +147,7 @@ void loadDPnPixmap(opt::variables_map vm, int ind, fcube* myDPnPixmap) {
 	fmat pixmap = load_asciiImage(filename); // load badpixmap
 	myDPnPixmap->slice(1) = CToolbox::badpixmap2goodpixmap(pixmap); // goodpixmap
 }
-
+*/
 opt::variables_map parse_input( int argc, char* argv[] ) {
 
     // Constructing an options describing variable and giving it a
