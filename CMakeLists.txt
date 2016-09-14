@@ -29,28 +29,30 @@ IF(NOT CMAKE_BUILD_TYPE)
   #SET(CMAKE_BUILD_TYPE "MINSIZEREL")
 ENDIF()
 
-FIND_PACKAGE(HDF5 REQUIRED)
+FIND_PACKAGE(HDF5 REQUIRED HL CXX)
 IF(HDF5_FOUND)
   MESSAGE("HDF5 FOUND!!!")
-  FILE(GLOB myHDF5Libs "$ENV{HDF5_DIR}/lib/libhdf5*.so")
-  set(HDF5_LIBRARIES ${myHDF5Libs})
+  MESSAGE("HDF5_INCLUDE_DIRS=${HDF5_INCLUDE_DIRS}")
+  MESSAGE("HDF5_LIBRARY_DIRS=${HDF5_LIBRARY_DIRS}")
+#  FILE(GLOB myHDF5Libs "$ENV{HDF5_DIR}/lib/libhdf5*.so")
+#  set(HDF5_LIBRARIES ${myHDF5Libs})
   INCLUDE_DIRECTORIES(${HDF5_INCLUDE_DIRS} $ENV{HDF5_DIR}/hl/src)
-  LINK_DIRECTORIES(${HDF5_LIBRARIES})
+  LINK_DIRECTORIES(${HDF5_LIBRARIES} ${HDF5_HL_LIBRARIES})
 ELSE()
   MESSAGE("HDF5 IS NOT FOUND!!!!")
 ENDIF()
 
 FIND_PACKAGE(GSL REQUIRED)
-IF(HDF5_FOUND)
+IF(GSL_FOUND)
   MESSAGE("GSL FOUND!!!")
 ELSE()
   MESSAGE("GSL IS NOT FOUND!!!!")
 ENDIF()
 
 FIND_PACKAGE(Armadillo 3.9 REQUIRED)
-IF(HAVE_ARMADILLO)
+IF(ARMADILLO_FOUND)
   MESSAGE("ARMADILLO FOUND!!!")
-  INCLUDE(ARMA_FindMKL) # Look for MKL
+  INCLUDE(FindMKL) # Look for MKL
   INCLUDE_DIRECTORIES(${ARMADILLO_INCLUDE_DIRS} ${HDF5_INCLUDE_DIRS} ${ARMADILLO_INCLUDES})
   LINK_DIRECTORIES(${ARMADILLO_LIBRARIES} ${HDF5_LIBRARIES})
   MESSAGE(STATUS "MKL_FOUND     = ${MKL_FOUND}")
@@ -59,15 +61,23 @@ IF(HAVE_ARMADILLO)
     INCLUDE_DIRECTORIES(${MKL_INCLUDE_DIRS})
     LINK_DIRECTORIES(${ARMADILLO_LIBRARIES} ${MKL_INCLUDE_DIRS})
     LINK_LIBRARIES(iomp5)
+#  ELSE()
+#    FIND_PACKAGE(BLAS)
+#    FIND_PACKAGE(LAPACK)
+#    LINK_LIBRARIES(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
   ENDIF()
-ELSEIF(NOT HAVE_ARMADILLO)
-  MESSAGE("ARMA NOT FOUND. GOODBYE!!!")
 ENDIF()
 
-FIND_PACKAGE(PythonInterp)
-FIND_PACKAGE(PythonLibs)
-SET(BOOST_ROOT $ENV{BOOST_DIR})
-FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS python thread date_time system mpi serialization filesystem unit_test_framework)
+# Make sure we get the correct python2.7 libs and headers.
+#SET(PYTHON_INCLUDE_PATH $ENV{PYTHON27_INCLUDE_PATH})
+# Uncomment the following line e.g. on rhel6 with non-default location of libpython2.7.so and set PYTHON27_LIB environment variable in $ROOT/build/setenv.sh.
+#SET(PYTHON_LIBRARY $ENV{PYTHON27_LIB})
+
+# order of calls is important!
+FIND_PACKAGE(PythonInterp 2.7)
+FIND_PACKAGE(PythonLibs 2.7)
+
+FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS python thread date_time system mpi serialization filesystem unit_test_framework program_options)
 IF(Boost_FOUND)
   MESSAGE("BOOST FOUND!!!")
   add_definitions(-DCOMPILE_WITH_BOOST) # set #define COMPILE_WITH_BOOST to 1 in .cpp
@@ -91,13 +101,8 @@ IF(Boost_FOUND)
 ELSEIF(NOT Boost_FOUND)
   MESSAGE("Unable to find correct Boost version. Did you set BOOST_DIR?")
 ENDIF()
-MESSAGE("CHUCKIE BOOST SAYS: ${Boost_LIBRARIES}")
-###### FIND BOOST WORKS, BUT LET'S USE LOCAL INSTALL ######
-set(Boost_INCLUDE_DIRS "$ENV{BOOST_DIR}/include")
-FILE(GLOB myBoostLibs "$ENV{BOOST_DIR}/lib/libboost*.so")
-set(Boost_LIBRARIES ${myBoostLibs})
+MESSAGE("BOOST LIBS: ${Boost_LIBRARIES}")
 
-# MPICH
 FIND_PACKAGE(MPI REQUIRED)
 INCLUDE_DIRECTORIES(${MPI_INCLUDE_PATH})
 
@@ -117,17 +122,17 @@ SET(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/CMake/cuda" ${CMAKE_MODULE_PATH})
 MESSAGE("${CMAKE_MODULE_PATH}")
 
 
-SET(GENERAL_SRC ${LIBSINGFEL}/io.cpp 
-				${LIBSINGFEL}/detector.cpp 
-				${LIBSINGFEL}/beam.cpp 
-				${LIBSINGFEL}/particle.cpp 
-				${LIBSINGFEL}/diffraction.cpp 
-				${LIBSINGFEL}/diffractionVolume.cpp 
-				${LIBSINGFEL}/diffractionPattern.cpp 
+SET(GENERAL_SRC ${LIBSINGFEL}/io.cpp
+				${LIBSINGFEL}/detector.cpp
+				${LIBSINGFEL}/beam.cpp
+				${LIBSINGFEL}/particle.cpp
+				${LIBSINGFEL}/diffraction.cpp
+				${LIBSINGFEL}/diffractionVolume.cpp
+				${LIBSINGFEL}/diffractionPattern.cpp
 				${LIBSINGFEL}/toolbox.cpp)
-SET(GENERAL_LIB ${ARMADILLO_LIBRARIES} 
-				${GSL_LIBRARIES} 
-				${HDF5_LIBRARIES} 
+SET(GENERAL_LIB ${ARMADILLO_LIBRARIES}
+				${GSL_LIBRARIES}
+				${HDF5_LIBRARIES}
 				${Boost_LIBRARIES})
 
 
