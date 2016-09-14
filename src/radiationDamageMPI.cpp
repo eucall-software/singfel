@@ -530,9 +530,17 @@ void setFluenceFromFile(const string filename, const int timeSlice, \
 		string datasetname;
 		stringstream ss;
 		ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
-		datasetname = ss.str(); 					
-		double myNph = hdf5readConst<double>(filename,datasetname+"/Nph");
-		beam->set_photonsPerPulse(myNph);
+		datasetname = ss.str();
+// SY: new format for fluence
+//		double myNph = hdf5readConst<double>(filename,datasetname+"/Nph");
+		vec vecNph;
+		vecNph = hdf5read<vec>(filename,datasetname+"/Nph");
+		if (vecNph.n_elem !=1)
+		{
+			cerr << "setFluenceFromFile: Wrong fluence format in : " << filename << endl;
+			exit(0);
+		}
+		beam->set_photonsPerPulse(vecNph[0]);
 		n_phot += beam->get_photonsPerPulse();	// number of photons per pulse
 	}
 	beam->set_photonsPerPulse(n_phot);
