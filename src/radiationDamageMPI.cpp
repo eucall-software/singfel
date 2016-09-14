@@ -54,7 +54,7 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-#define MPI_SHMKEY 0x6FB1407
+#define MPI_SHMKEY 0x6FB1407 
 //#define MPI_SHMKEY 0x6FB10407
 
 const int master = 0; // Process with rank=0 is the master
@@ -105,10 +105,10 @@ int main( int argc, char* argv[] ){
 	if (world.rank() != master){
 		shmid = shmget(shmkey,sizeof(int),0666 | IPC_CREAT);
 		if ( 0 > shmid )
-			perror("shmget");
+			perror("shmget");   
 		shmval = (int*)shmat(shmid,NULL,0);
 		if ( 0 > shmval )
-			perror("shmval");
+			perror("shmval"); 
 		*shmval=0;
 	}
 
@@ -135,8 +135,8 @@ int main( int argc, char* argv[] ){
 		shmdt(shmval);
 		shmctl(shmid, IPC_RMID, 0);
 	}
-
-
+	
+	
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -174,12 +174,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	// 1) pmiID
 	// 2) diffrID
 	// 3) sliceInterval
-
+	 
 	int diffrID = (pmiStartID-1)*numDP+1;
 	int pmiID = pmiStartID;
 	int dpID = 1;
 	fvec quaternion(4);
-
+	
 	// Setup rotations
 	fmat myQuaternions;
 	generateRotations(uniformRotation, rotationAxis, ntasks, \
@@ -191,7 +191,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	for (rank = 1; rank < numProcesses; ++rank) {
 		if (pmiID > pmiEndID) {
 			cout << "Error!!" << endl;
-			return;
+			return;	
 		}
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
@@ -203,7 +203,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
 		comm->send(rank, DPTAG, id1, 3);
-
+				
 		diffrID++;
 		dpID++;
 		numTasksDone++;
@@ -215,7 +215,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	// Listen for slaves
 	int msgDone = 0;
-
+	
 	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, DONETAG, msgDone);
@@ -229,7 +229,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
 		comm->send(status.source(), DPTAG, id1, 3);
-
+		
 		diffrID++;
 		dpID++;
 		numTasksDone++;
@@ -243,12 +243,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		// Display status
 		CToolbox::displayStatusBar(numTasksDone,ntasks,&lastPercentDone);
 	}
-
+	
   	// Wait for status update of slaves.
 	for (rank = 1; rank < numProcesses; ++rank) {
 		status = comm->recv(rank, DONETAG, msgDone);
 	}
-
+    
 	// KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
 	for (rank = 1; rank < numProcesses; ++rank) {
@@ -266,24 +266,24 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int numSlices = vm["numSlices"].as<int>();
 	int saveSlices = vm["saveSlices"].as<int>();
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
-
+	
 	wall_clock timer;
 	boost::mpi::status status;
-
-
+	
+	
 	string filename;
 	string outputName;
-
+		
 	// Set up beam and detector from file
 	CDetector det = CDetector();
 	CBeam beam = CBeam();
 	beam.readBeamFile(beamFile);
 	det.readGeomFile(geomFile);
-
+	
 	bool givenFluence = false;
 	if (beam.get_photonsPerPulse() > 0) {
 		givenFluence = true;
-	}
+	}	
 	bool givenPhotonEnergy = false;
 	if (beam.get_photon_energy() > 0) {
 		givenPhotonEnergy = true;
@@ -296,7 +296,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int px = det.get_numPix_x();
 	int py = px;
 	float msg[msgLength];
-
+	
 	fvec quaternion(4);
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
@@ -304,7 +304,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	fmat F_hkl_sq(py,px);
 	fmat Compton(py,px);
 	fmat myPos;
-
+	
 	while (1) {
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg, msgLength);
@@ -324,7 +324,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 			// input file
 			stringstream sstm;
-            sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) \
+			sstm << inputDir << "/pmi/pmi_out_" << setfill('0') << setw(7) \
 			     << pmiID << ".h5";
 			filename = sstm.str();
 			if ( !boost::filesystem::exists( filename ) ) {
@@ -341,7 +341,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				boost::filesystem::remove( outputName );
 			}
 
-			// Run prepHDF5
+			// Run prepHDF5		
 			string scriptName;
 			sstm.str("");
 			sstm << inputDir << "/prepHDF5.py";
@@ -350,7 +350,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			                   + filename + " " + outputName + " " + configFile;
 			int i = system(myCommand.c_str());
 			assert(i == 0);
-
+				
 			// Set up diffraction geometry
 			if (givenPhotonEnergy == false) {
 				setEnergyFromFile(filename, &beam);
@@ -363,7 +363,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			double total_phot = 0;
 			photon_field.zeros(py,px);
 			detector_intensity.zeros(py,px);
-			detector_counts.zeros(py,px);
+			detector_counts.zeros(py,px);	
 			int done = 0;
 			int timeSlice = 0;
 			int isFirstSlice = 1;
@@ -381,10 +381,10 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					                   &beam);
 				}
 				total_phot += beam.get_photonsPerPulse();
-
+				
 				// Coherent contribution
 				CDiffraction::calculate_atomicFactor(&particle, &det);
-
+				
 				// Incoherent contribution
 				if (calculateCompton) {
 					getComptonScattering(vm, &particle, &det, &Compton);
@@ -424,7 +424,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					}
 				}
 				detector_intensity += photon_field;
-
+				
 				if (saveSlices) {
 					savePhotonField(outputName, isFirstSlice, timeSlice, \
 					                &photon_field);
@@ -436,7 +436,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			CDetector::apply_badPixels(&detector_intensity);
 			// Poisson noise
 			detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
-
+			
 			// Save to HDF5
 			saveAsDiffrOutFile(outputName, &detector_counts, \
 			                   &detector_intensity, &quaternion, &det, &beam, \
@@ -444,7 +444,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
     		comm->send(master, DONETAG, 1);
     	}
-
+		
 		if (status.tag() == DIETAG) {
 			return;
 		}
@@ -452,18 +452,18 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	if (comm->rank() == 1) {
 		CDiffraction::displayResolution(&det, &beam);
-	}
+	}	
 }// end of slave_diffract
 
 void generateRotations(const bool uniformRotation, const string rotationAxis, \
                        const int numQuaternions, fmat* myQuaternions) {
 	fmat& _myQuaternions = myQuaternions[0];
-
+	
 	_myQuaternions.zeros(numQuaternions,4);
 	if (uniformRotation) { // uniform rotations
 		if (rotationAxis == "y" || rotationAxis == "z") {
 			_myQuaternions = CToolbox::pointsOn1Sphere(numQuaternions, \
-			                                           rotationAxis);
+			                                           rotationAxis);		
 		} else if (rotationAxis == "xyz") {
 			_myQuaternions = CToolbox::pointsOn4Sphere(numQuaternions);
 		}
@@ -496,9 +496,9 @@ void loadParticle(const opt::variables_map vm, const string filename, \
 	particle->load_atomType(filename,datasetname+"/T");
 	// mat pos
 	particle->load_atomPos(filename,datasetname+"/r");
-	// rowvec ion list
+	// rowvec ion list	
 	particle->load_ionList(filename,datasetname+"/xyz");
-	// mat ffTable (atomType x qSample)
+	// mat ffTable (atomType x qSample)	
 	particle->load_ffTable(filename,datasetname+"/ff");
 	// rowvec q vector sin(theta)/lambda
 	particle->load_qSample(filename,datasetname+"/halfQ");
@@ -515,7 +515,7 @@ void loadParticle(const opt::variables_map vm, const string filename, \
 
 void rotateParticle(fvec* quaternion, CParticle* particle) {
 	fvec& _quat = quaternion[0];
-
+	
 	// Rotate particle
 	fmat rot3D = CToolbox::quaternion2rot3D(_quat);
 	fmat myPos = particle->get_atomPos();
@@ -565,7 +565,7 @@ void setFocusFromFile(const string filename, CBeam* beam) {
 void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
                           CDetector* det, fmat* Compton) {
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
-
+	
 	if (calculateCompton) {
 		CDiffraction::calculate_compton(particle, det, Compton); // get S_hkl
 	} else {
@@ -576,7 +576,7 @@ void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
 void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field) {
 	fmat& _photon_field = photon_field[0];
-
+	
 	int createSubgroup;
 	if (isFirstSlice == 1) {
 		createSubgroup = 1;
@@ -598,7 +598,7 @@ void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
 			int createSubgroup = 0;
 			// FIXME: groupname and subgroupname are redundant
 			int success = hdf5writeVector(outputName,"data","","/data/data", \
-			                                  *detector_counts, createSubgroup);
+			                                  *detector_counts, createSubgroup); 
 			success = hdf5writeVector(outputName,"data","","/data/diffr", \
 			                               *detector_intensity, createSubgroup);
 			createSubgroup = 0;
@@ -624,7 +624,7 @@ void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
 			          "/params/beam/photonEnergy", photonEnergy,createSubgroup);
 			createSubgroup = 0;
 			success = hdf5writeScalar(outputName,"params","params/beam",\
-			                 "/params/beam/photons", total_phot,createSubgroup);
+			                 "/params/beam/photons", total_phot,createSubgroup);			
 			createSubgroup = 0;
 			double focusArea = beam->get_focus_area();
 			success = hdf5writeScalar(outputName,"params","params/beam",\
