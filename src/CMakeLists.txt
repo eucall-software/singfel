@@ -76,8 +76,8 @@ ELSEIF(NOT CUDA_FOUND)
   #TARGET_LINK_LIBRARIES(makeDiffractionVolumeSingleAxisStream ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES})  
   #MESSAGE("CHUCK SAYS: ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES}")
 
-  ADD_EXECUTABLE(mergeDiffractionVolume mergeDiffractionVolume.cpp ${GENERAL_SRC})
-  TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${GENERAL_LIB}) 
+  #  ADD_EXECUTABLE(mergeDiffractionVolume mergeDiffractionVolume.cpp ${GENERAL_SRC})
+  #TARGET_LINK_LIBRARIES(mergeDiffractionVolume ${GENERAL_LIB}) 
     
   #ADD_EXECUTABLE(MaximumXCorrelation MaximumXCorrelation.cpp ${LIBSINGFEL}/io.cpp ${LIBSINGFEL}/detector.cpp ${LIBSINGFEL}/beam.cpp ${LIBSINGFEL}/particle.cpp ${LIBSINGFEL}/diffraction.cpp ${LIBSINGFEL}/toolbox.cpp ${LIBSINGFEL}/diffraction.cu)
   #TARGET_LINK_LIBRARIES(MaximumXCorrelation ${ARMADILLO_LIBRARIES} ${GSL_LIBRARIES} ${HDF5_LIBRARIES} ${Boost_LIBRARIES})  
