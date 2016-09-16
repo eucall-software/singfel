@@ -59,14 +59,16 @@ using namespace toolbox;
 
 const int master = 0; // Process with rank=0 is the master
 const int msgLength = 4; // MPI message length
-int localRank=0;
 #ifdef COMPILE_WITH_CUDA
+int localRank=0;
 int deviceCount=cuda_getDeviceCount();
 #endif
 
-static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
-static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
+static void diffract(mpi::communicator* comm, opt::variables_map vm);
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
+void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int dpID,
+				opt::variables_map vm);
+
 void generateRotations(const bool uniformRotation, \
                        const string rotationAxis, const int numQuaternions, \
                        fmat* myQuaternions);
@@ -98,6 +100,8 @@ int main( int argc, char* argv[] ){
 	opt::variables_map vm = parse_input(argc, argv, comm);
 	// Set random seed
 	//srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
+#ifdef COMPILE_WITH_CUDA
+
 	srand( 0x01333337);
 	int shmid;
 	key_t shmkey = (key_t)MPI_SHMKEY;
@@ -118,24 +122,23 @@ int main( int argc, char* argv[] ){
 		localRank = __sync_fetch_and_add( shmval,1);
 		//printf("Local %d\n",localRank);fflush(NULL);
 	}
+
+#endif
 	wall_clock timerMaster;
 
 	timerMaster.tic();
 
-
 	// Main program
-	if (world.rank() == master) {
-		master_diffract(comm, vm);
-	} else {
-		slave_diffract(comm, vm);
-	}
+		diffract(comm, vm);
+
+#ifdef COMPILE_WITH_CUDA
 
 	world.barrier();
 	if (world.rank() != master) {
 		shmdt(shmval);
 		shmctl(shmid, IPC_RMID, 0);
 	}
-
+#endif
 
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
@@ -144,7 +147,7 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
+static void diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	int pmiStartID = vm["pmiStartID"].as<int>();
 	int pmiEndID = vm["pmiEndID"].as<int>();
@@ -159,16 +162,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	ntasks = (pmiEndID-pmiStartID+1)*numDP;
 	numProcesses = comm->size();
-	numSlaves = comm->size()-1;
-
-	if (numSlaves > ntasks) {
-		cout << "Reduce number of slaves and restart" << endl;
-		for (rank = 1; rank < numProcesses; ++rank) {
-			comm->send(rank, DIETAG, 1);
-			cout << "Killing: " << rank << endl;
-		}
-		return;
-	}
+	rank=comm->rank();
 
 	// Send
 	// 1) pmiID
@@ -178,7 +172,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int diffrID = (pmiStartID-1)*numDP+1;
 	int pmiID = pmiStartID;
 	int dpID = 1;
-	fvec quaternion(4);
+
 
 	// Setup rotations
 	fmat myQuaternions;
@@ -188,76 +182,28 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int counter = 0;
 	int done = 0;
 	float lastPercentDone = 0.;
-	for (rank = 1; rank < numProcesses; ++rank) {
-		if (pmiID > pmiEndID) {
-			cout << "Error!!" << endl;
-			return;
+	for (int ntask = 0; ntask < ntasks; ntask++) {
+
+		if (ntask % numProcesses == rank){
+			make1Diffr(myQuaternions,counter,diffrID,pmiID,vm);
 		}
-		// Tell the slave how to rotate the particle
-		quaternion = trans(myQuaternions.row(counter));
-		counter++;
-		float* quat = &quaternion[0];
-		comm->send(rank, QTAG, quat,4);
-		// Tell the slave to compute DP
-		fvec id;
-		id << pmiID << diffrID << sliceInterval << endr;
-		float* id1 = &id[0];
-		comm->send(rank, DPTAG, id1, 3);
 
 		diffrID++;
 		dpID++;
-		numTasksDone++;
 		if (dpID > numDP) {
 			dpID = 1;
 			pmiID++;
 		}
-	}
-
-	// Listen for slaves
-	int msgDone = 0;
-
-	if (numTasksDone >= ntasks) done = 1;
-	while (!done) {
-		status = comm->recv(boost::mpi::any_source, DONETAG, msgDone);
-		// Tell the slave how to rotate the particle
-		quaternion = trans(myQuaternions.row(counter));
-		float* quat = &quaternion[0];
 		counter++;
-		comm->send(status.source(), QTAG, quat, 4);
-		// Tell the slave to compute DP
-		fvec id;
-		id << pmiID << diffrID << sliceInterval << endr;
-		float* id1 = &id[0];
-		comm->send(status.source(), DPTAG, id1, 3);
-
-		diffrID++;
-		dpID++;
-		numTasksDone++;
-		if (dpID > numDP) {
-			dpID = 1;
-			pmiID++;
-		}
-		if (numTasksDone >= ntasks) {
-			done = 1;
-		}
-		// Display status
-		CToolbox::displayStatusBar(numTasksDone,ntasks,&lastPercentDone);
-	}
-
-  	// Wait for status update of slaves.
-	for (rank = 1; rank < numProcesses; ++rank) {
-		status = comm->recv(rank, DONETAG, msgDone);
-	}
-
-	// KILL SLAVES
-  	// Tell all the slaves to exit by sending an empty message with the DIETAG.
-	for (rank = 1; rank < numProcesses; ++rank) {
-		comm->send(rank, DIETAG, 1);
 	}
 }
 
-static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
+void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int pmiID,
+				opt::variables_map vm) {
+
+
+	int sliceInterval = vm["sliceInterval"].as<int>();
 	string inputDir = vm["inputDir"].as<std::string>();
 	string outputDir = vm["outputDir"].as<string>();
 	string configFile = vm["configFile"].as<string>();
@@ -297,7 +243,6 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int py = px;
 	float msg[msgLength];
 
-	fvec quaternion(4);
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
 	umat detector_counts(py,px);
@@ -305,155 +250,132 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	fmat Compton(py,px);
 	fmat myPos;
 
-	while (1) {
-		// Receive a message from the master
-    	status = comm->recv(master, boost::mpi::any_tag, msg, msgLength);
+	fvec quaternion(4);
+	quaternion = trans(myQuaternions.row(counter));
 
-    	if (status.tag() == QTAG) {
-    		quaternion << msg[0] << msg[1] << msg[2] << msg[3] << endr;
-    	}
 
-		// Receive how many slices assigned to this slave
-		if (status.tag() == DPTAG) {
+	// input file
 
-			timer.tic();
-
-    		int pmiID = (int) msg[0];
-    		int diffrID = (int) msg[1];
-    		int sliceInterval = (int) msg[2];
-
-			// input file
-			stringstream sstm;
-			sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) \
-			     << pmiID << ".h5";
-			filename = sstm.str();
-			if ( !boost::filesystem::exists( filename ) ) {
-				cout << filename << " does not exist!" << endl;
-				exit(0);
-			}
-
-			// output file
-			sstm.str("");
-			sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
-			      << diffrID << ".h5";
-			outputName = sstm.str();
-			if ( boost::filesystem::exists( outputName ) ) {
-				boost::filesystem::remove( outputName );
-			}
-
-			// Run prepHDF5
-			string scriptName;
-			sstm.str("");
-			sstm << inputDir << "/prepHDF5.py";
-			scriptName = sstm.str();
-			string myCommand = string("python ") + scriptName + " " \
-			                   + filename + " " + outputName + " " + configFile;
-			int i = system(myCommand.c_str());
-			assert(i == 0);
-
-			// Set up diffraction geometry
-			if (givenPhotonEnergy == false) {
-				setEnergyFromFile(filename, &beam);
-			}
-			if (givenFocusRadius == false) {
-				setFocusFromFile(filename, &beam);
-			}
-			det.init_dp(&beam);
-
-			double total_phot = 0;
-			photon_field.zeros(py,px);
-			detector_intensity.zeros(py,px);
-			detector_counts.zeros(py,px);
-			int done = 0;
-			int timeSlice = 0;
-			int isFirstSlice = 1;
-			while(!done) {	// sum up time slices
-				setTimeSliceInterval(numSlices, &sliceInterval, &timeSlice, \
-				                     &done);
-				// Particle //
-				CParticle particle = CParticle();
-				loadParticle(vm, filename, timeSlice, &particle);
-				// Apply random rotation to particle
-				rotateParticle(&quaternion, &particle);
-				// Beam // FIXME: Check that these fields exist
-				if (givenFluence == false) {
-					setFluenceFromFile(filename, timeSlice, sliceInterval, \
-					                   &beam);
-				}
-				total_phot += beam.get_photonsPerPulse();
-
-				// Coherent contribution
-				CDiffraction::calculate_atomicFactor(&particle, &det);
-
-				// Incoherent contribution
-				if (calculateCompton) {
-					getComptonScattering(vm, &particle, &det, &Compton);
-				}
-				#ifdef COMPILE_WITH_CUDA
-				if (localRank < 2*deviceCount){
-					float* F_mem = F_hkl_sq.memptr();
-					// f_hkl: py x px x numAtomTypes
-					float* f_mem = CDiffraction::f_hkl.memptr();
-					float* q_mem = det.q_xyz.memptr();
-					float* p_mem = particle.atomPos.memptr();
-					int*   i_mem = particle.xyzInd.memptr();
-					cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, i_mem, \
-					               det.numPix, particle.numAtoms,  \
-					               particle.numAtomTypes,localRank%deviceCount);
-					if (calculateCompton) {
-						photon_field += (F_hkl_sq+Compton) % det.solidAngle \
-						                % det.thomson \
-						                * beam.get_photonsPerPulsePerArea();
-					} else {
-						photon_field += F_hkl_sq % det.solidAngle \
-						                % det.thomson \
-						                * beam.get_photonsPerPulsePerArea();
-					}
-				}else
-				#endif
-				{
-					F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
-					if (calculateCompton) {
-						photon_field = (F_hkl_sq + Compton) % det.solidAngle \
-						               % det.thomson \
-						               * beam.get_photonsPerPulsePerArea();
-					} else {
-						photon_field = F_hkl_sq % det.solidAngle \
-						               % det.thomson \
-						               * beam.get_photonsPerPulsePerArea();
-					}
-				}
-				detector_intensity += photon_field;
-
-				if (saveSlices) {
-					savePhotonField(outputName, isFirstSlice, timeSlice, \
-					                &photon_field);
-				}
-				isFirstSlice = 0;
-			}// end timeSlice
-
-			// Apply badpixelmap
-			CDetector::apply_badPixels(&detector_intensity);
-			// Poisson noise
-			detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
-
-			// Save to HDF5
-			saveAsDiffrOutFile(outputName, &detector_counts, \
-			                   &detector_intensity, &quaternion, &det, &beam, \
-			                   total_phot);
-
-    		comm->send(master, DONETAG, 1);
-    	}
-
-		if (status.tag() == DIETAG) {
-			return;
-		}
-	} // end of while
-
-	if (comm->rank() == 1) {
-		CDiffraction::displayResolution(&det, &beam);
+	stringstream sstm;
+	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) \
+		     << pmiID << ".h5";
+	filename = sstm.str();
+	if ( !boost::filesystem::exists( filename ) ) {
+		cout << filename << " does not exist!" << endl;
+		exit(0);
 	}
-}// end of slave_diffract
+
+	// output file
+
+	sstm.str("");
+	sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
+			      << diffrID << ".h5";
+	outputName = sstm.str();
+	if ( boost::filesystem::exists( outputName ) ) {
+		boost::filesystem::remove( outputName );
+	}
+
+	// Run prepHDF5
+	string scriptName;
+	sstm.str("");
+	sstm << inputDir << "/prepHDF5.py";
+	scriptName = sstm.str();
+	string myCommand = string("python ") + scriptName + " " \
+	                   + filename + " " + outputName + " " + configFile;
+	int i = system(myCommand.c_str());
+	assert(i == 0);
+
+	// Set up diffraction geometry
+	if (givenPhotonEnergy == false) {
+		setEnergyFromFile(filename, &beam);
+	}
+	if (givenFocusRadius == false) {
+		setFocusFromFile(filename, &beam);
+	}
+	det.init_dp(&beam);
+
+	double total_phot = 0;
+	photon_field.zeros(py,px);
+	detector_intensity.zeros(py,px);
+	detector_counts.zeros(py,px);
+	int done = 0;
+	int timeSlice = 0;
+	int isFirstSlice = 1;
+	while(!done) {	// sum up time slices
+		setTimeSliceInterval(numSlices, &sliceInterval, &timeSlice, \
+		                     &done);
+		// Particle //
+			CParticle particle = CParticle();
+			loadParticle(vm, filename, timeSlice, &particle);
+		// Apply random rotation to particle
+		rotateParticle(&quaternion, &particle);
+		// Beam // FIXME: Check that these fields exist
+		if (givenFluence == false) {
+			setFluenceFromFile(filename, timeSlice, sliceInterval, \
+			                   &beam);
+		}
+		total_phot += beam.get_photonsPerPulse();
+			// Coherent contribution
+		CDiffraction::calculate_atomicFactor(&particle, &det);
+			// Incoherent contribution
+		if (calculateCompton) {
+			getComptonScattering(vm, &particle, &det, &Compton);
+		}
+		#ifdef COMPILE_WITH_CUDA
+		if (localRank < 2*deviceCount){
+			float* F_mem = F_hkl_sq.memptr();
+			// f_hkl: py x px x numAtomTypes
+			float* f_mem = CDiffraction::f_hkl.memptr();
+			float* q_mem = det.q_xyz.memptr();
+			float* p_mem = particle.atomPos.memptr();
+			int*   i_mem = particle.xyzInd.memptr();
+			cuda_structureFactor(F_mem, f_mem, q_mem, p_mem, i_mem, \
+			               det.numPix, particle.numAtoms,  \
+			               particle.numAtomTypes,localRank%deviceCount);
+			if (calculateCompton) {
+				photon_field += (F_hkl_sq+Compton) % det.solidAngle \
+				                % det.thomson \
+				                * beam.get_photonsPerPulsePerArea();
+			} else {
+				photon_field += F_hkl_sq % det.solidAngle \
+				                % det.thomson \
+				                * beam.get_photonsPerPulsePerArea();
+			}
+		}else
+		#endif
+		{
+			F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
+			if (calculateCompton) {
+				photon_field = (F_hkl_sq + Compton) % det.solidAngle \
+				               % det.thomson \
+				               * beam.get_photonsPerPulsePerArea();
+			} else {
+				photon_field = F_hkl_sq % det.solidAngle \
+				               % det.thomson \
+				               * beam.get_photonsPerPulsePerArea();
+			}
+		}
+		detector_intensity += photon_field;
+
+		if (saveSlices) {
+			savePhotonField(outputName, isFirstSlice, timeSlice, \
+			                &photon_field);
+		}
+		isFirstSlice = 0;
+	}// end timeSlice
+
+	// Apply badpixelmap
+	CDetector::apply_badPixels(&detector_intensity);
+	// Poisson noise
+	detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
+
+	// Save to HDF5
+	saveAsDiffrOutFile(outputName, &detector_counts, \
+	                   &detector_intensity, &quaternion, &det, &beam, \
+	                   total_phot);
+
+
+}// end of diffract
 
 void generateRotations(const bool uniformRotation, const string rotationAxis, \
                        const int numQuaternions, fmat* myQuaternions) {
