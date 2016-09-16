@@ -13,7 +13,7 @@
 # |   (at your option) any later version.                                       |
 # |                                                                             |
 # |   This program is distributed in the hope that it will be useful,           |
-# |   but WITHOUT ANY WARRANTY; without even the implied warranty of            |
+# |   but WITHOUT ANY WA; without even the implied warranty of            |
 # |   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             |
 # |   GNU General Public License for more details.                              |
 # |                                                                             |
@@ -26,7 +26,7 @@
 # - Check for the presence of ARMADILLO
 #
 # The following variables are set when ARMADILLO is found:
-#  HAVE_ARMADILLO       = Set to true, if all components of ARMADILLO have been
+#  Armadillo_FOUND       = Set to true, if all components of ARMADILLO have been
 #                         found.
 #  ARMADILLO_INCLUDES   = Include path for the header files of ARMADILLO
 #  ARMADILLO_LIBRARIES  = Link these to use ARMADILLO
@@ -63,7 +63,7 @@ find_path (ARMADILLO_INCLUDES Mat_meat.hpp
 
 find_library (ARMADILLO_LIBRARIES armadillo
   PATHS
-  $ENV{ARMA_DIR}
+  $ENV{ARMA_DIR}/lib
   /usr/lib
   /usr/local/lib
   /opt/lib
@@ -71,33 +71,7 @@ find_library (ARMADILLO_LIBRARIES armadillo
   PATH_SUFFIXES
   )
 
-## -----------------------------------------------------------------------------
-## Actions taken when all components have been found
 
-if (ARMADILLO_INCLUDES)
-  MESSAGE("ARMA INC FOUND: ${ARMADILLO_INCLUDES}")
-elseif(NOT ARMADILLO_INCLUDES)
-  MESSAGE("WHAT!!!!!!!!!!!!!!")
-endif()
-
-if (ARMADILLO_LIBRARIES)
-  MESSAGE("ARMA LIB FOUND: ${ARMADILLO_LIBRARIES}")
-endif (ARMADILLO_LIBRARIES)
-
-if (ARMADILLO_INCLUDES AND ARMADILLO_LIBRARIES)
-  set (HAVE_ARMADILLO TRUE)
-  MESSAGE("ARMA FOUND")
-else (ARMADILLO_INCLUDES AND ARMADILLO_LIBRARIES)
-  set (HAVE_ARMADILLO FALSE)
-  if (NOT ARMADILLO_FIND_QUIETLY)
-    if (NOT ARMADILLO_INCLUDES)
-      message (STATUS "Unable to find Armadillo header files!")
-    endif (NOT ARMADILLO_INCLUDES)
-    if (NOT ARMADILLO_LIBRARIES)
-      message (STATUS "Unable to find Armadillo library files!")
-    endif (NOT ARMADILLO_LIBRARIES)
-  endif (NOT ARMADILLO_FIND_QUIETLY)
-endif (ARMADILLO_INCLUDES AND ARMADILLO_LIBRARIES)
 
 ## -----------------------------------------------------------------------------
 ## Check for correct version of Armadillo
@@ -199,21 +173,26 @@ endif()
 string(REGEX REPLACE "/armadillo_bits" "" ARMADILLO_EXTRA_INCLUDE ${ARMADILLO_INCLUDES})
 set (ARMADILLO_INCLUDES ${ARMADILLO_INCLUDES} ${ARMADILLO_EXTRA_INCLUDE})
 
-## -----------------------------------------------------------------------------
-## Report status
+include (FindPackageHandleStandardArgs)
+find_package_handle_standard_args (Armadillo DEFAULT_MSG ARMADILLO_LIBRARIES ARMADILLO_INCLUDES)
 
-if (HAVE_ARMADILLO)
-  if (NOT ARMADILLO_FIND_QUIETLY)
-    message ("Message from FindArmadillo.cmake:")
-    message (STATUS "Found components for Armadillo ${ARMA_FOUND_VERSION}")
-    message (STATUS "ARMADILLO_INCLUDES  = ${ARMADILLO_INCLUDES}")
-    message (STATUS "ARMADILLO_LIBRARIES = ${ARMADILLO_LIBRARIES}")
-  endif (NOT ARMADILLO_FIND_QUIETLY)
-else (HAVE_ARMADILLO)
-  if (ARMADILLO_FIND_REQUIRED)
-    message (FATAL_ERROR "Could not find Armadillo!")
-  endif (ARMADILLO_FIND_REQUIRED)
-endif (HAVE_ARMADILLO)
+
+include (GetPrerequisites)
+  
+foreach (lib ${ARMADILLO_LIBRARIES})
+    get_prerequisites(${lib} DEPENDENCIES 0 1 "" "")
+    foreach(DEPENDENCY_FILE ${DEPENDENCIES})
+       gp_resolve_item("${lib}" "${DEPENDENCY_FILE}" "" "" 
+                       resolved_file)
+    if(NOT EXISTS ${resolved_file})
+        message (FATAL_ERROR "Cannot resolve armadillo's library dependency. ${resolved_file} not found. Set LD_LIBRARY_PATH")
+    endif()                       
+    endforeach()    
+ENDFOREACH(lib)
+
+## -----------------------------------------------------------------------------
+## Actions taken when all components have been found
+
 
 ## -----------------------------------------------------------------------------
 ## Mark advanced variables
@@ -222,3 +201,5 @@ mark_as_advanced (
   ARMADILLO_INCLUDES
   ARMADILLO_LIBRARIES
   )
+
+
