@@ -64,10 +64,11 @@ int localRank=0;
 int deviceCount=cuda_getDeviceCount();
 #endif
 
-static void diffract(mpi::communicator* comm, opt::variables_map vm);
+static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
+static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
+
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
-void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int dpID,
-				opt::variables_map vm);
+void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm);
 
 void generateRotations(const bool uniformRotation, \
                        const string rotationAxis, const int numQuaternions, \
@@ -129,7 +130,11 @@ int main( int argc, char* argv[] ){
 	timerMaster.tic();
 
 	// Main program
-		diffract(comm, vm);
+	if (world.rank() == master) {
+		master_diffract(comm, vm);
+	} else {
+		slave_diffract(comm, vm);
+	}
 
 #ifdef COMPILE_WITH_CUDA
 
@@ -140,6 +145,7 @@ int main( int argc, char* argv[] ){
 	}
 #endif
 
+	world.barrier();
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -147,60 +153,81 @@ int main( int argc, char* argv[] ){
   	return 0;
 }
 
-static void diffract(mpi::communicator* comm, opt::variables_map vm) {
+static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	int pmiStartID = vm["pmiStartID"].as<int>();
 	int pmiEndID = vm["pmiEndID"].as<int>();
 	int numDP = vm["numDP"].as<int>();
-	int sliceInterval = vm["sliceInterval"].as<int>();
+
+	int numProcesses = comm->size();
+
+  	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
+
+	fmat myQuaternions;
+	if (numProcesses==1)
+	{
+		string rotationAxis = vm["rotationAxis"].as<string>();
+		bool uniformRotation = vm["uniformRotation"].as<bool>();
+		generateRotations(uniformRotation, rotationAxis, ntasks, \
+	                  &myQuaternions);
+	}
+
+	for (int ntask = 0; ntask < ntasks; ntask++) {
+		if (numProcesses==1)
+		{
+			make1Diffr(myQuaternions,ntask,vm);
+		}
+		else
+		{
+			int tmp;
+		  	boost::mpi::status status = comm->recv(boost::mpi::any_source, 0, tmp);
+			comm->send(status.source(), 0, &ntask, 1);
+		}
+	}
+
+// final send
+	int ntask=-1;
+	for (int np = 0; np < numProcesses; np++) {
+		if (np!= master)
+			{
+				comm->send(np, 0, &ntask, 1);
+			}
+	}
+
+}
+
+
+static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
+
 	string rotationAxis = vm["rotationAxis"].as<string>();
 	bool uniformRotation = vm["uniformRotation"].as<bool>();
 
-  	int ntasks, rank, numProcesses, numSlaves;
-  	int numTasksDone = 0;
-  	boost::mpi::status status;
 
-	ntasks = (pmiEndID-pmiStartID+1)*numDP;
-	numProcesses = comm->size();
-	rank=comm->rank();
+	int pmiStartID = vm["pmiStartID"].as<int>();
+	int pmiEndID = vm["pmiEndID"].as<int>();
+	int numDP = vm["numDP"].as<int>();
 
-	// Send
-	// 1) pmiID
-	// 2) diffrID
-	// 3) sliceInterval
-
-	int diffrID = (pmiStartID-1)*numDP+1;
-	int pmiID = pmiStartID;
-	int dpID = 1;
-
+	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
 
 	// Setup rotations
 	fmat myQuaternions;
 	generateRotations(uniformRotation, rotationAxis, ntasks, \
 	                  &myQuaternions);
 
-	int counter = 0;
-	int done = 0;
-	float lastPercentDone = 0.;
-	for (int ntask = 0; ntask < ntasks; ntask++) {
+	int counter;
 
-		if (ntask % numProcesses == rank){
-			make1Diffr(myQuaternions,counter,diffrID,pmiID,vm);
-		}
+	// ready to go
+	comm->send(master, 0, &counter, 1);
 
-		diffrID++;
-		dpID++;
-		if (dpID > numDP) {
-			dpID = 1;
-			pmiID++;
-		}
-		counter++;
+	while (true){
+		comm->recv(master, 0, counter);
+		if (counter < 0) return;
+		make1Diffr(myQuaternions,counter,vm);
+		comm->send(master, 0, &counter, 1);
 	}
 }
 
-
-void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int pmiID,
-				opt::variables_map vm) {
+void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 
 
 	int sliceInterval = vm["sliceInterval"].as<int>();
@@ -213,9 +240,12 @@ void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int pmiID,
 	int saveSlices = vm["saveSlices"].as<int>();
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
 
-	wall_clock timer;
-	boost::mpi::status status;
+	int pmiStartID = vm["pmiStartID"].as<int>();
+	int numDP = vm["numDP"].as<int>();
 
+
+	int pmiID = pmiStartID + counter/numDP;
+	int diffrID = (pmiStartID-1)*numDP+1 + (pmiID-1)*numDP+counter%numDP;
 
 	string filename;
 	string outputName;
@@ -241,7 +271,6 @@ void make1Diffr(const fmat& myQuaternions,int counter,int diffrID,int pmiID,
 
 	int px = det.get_numPix_x();
 	int py = px;
-	float msg[msgLength];
 
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
