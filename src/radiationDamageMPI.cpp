@@ -235,6 +235,7 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 	string outputDir = vm["outputDir"].as<string>();
 	string configFile = vm["configFile"].as<string>();
 	string beamFile = vm["beamFile"].as<string>();
+
 	string geomFile = vm["geomFile"].as<string>();
 	int numSlices = vm["numSlices"].as<int>();
 	int saveSlices = vm["saveSlices"].as<int>();
@@ -307,7 +308,13 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 	// Run prepHDF5
 	string scriptName;
 	sstm.str("");
-	sstm << inputDir << "/prepHDF5.py";
+	if (vm.count("prepHDF5File")) {
+		sstm << vm["prepHDF5File"].as<string>();
+	}
+	else {
+		sstm << inputDir << "/prepHDF5.py";
+	}
+
 	scriptName = sstm.str();
 	string myCommand = string("python ") + scriptName + " " \
 	                   + filename + " " + outputName + " " + configFile;
@@ -603,6 +610,10 @@ opt::variables_map parse_input( int argc, char* argv[], \
         ("beamFile", opt::value<string>(), "Beam file defining X-ray beam")
         ("geomFile", opt::value<string>(), \
                      "Geometry file defining diffraction geometry")
+
+        ("prepHDF5File", opt::value<string>(), \
+                     "Absolute path to the prepHDF5.py script")
+
         ("rotationAxis", opt::value<string>()->default_value("xyz"), \
                          "Euler rotation convention")
         ("numSlices", opt::value<int>(), \
@@ -652,6 +663,8 @@ opt::variables_map parse_input( int argc, char* argv[], \
     		cout << "beamFile: " << vm["beamFile"].as<string>() << endl;
 		if (vm.count("geomFile"))
     		cout << "geomFile: " << vm["geomFile"].as<string>() << endl;
+		if (vm.count("prepHDF5File"))
+    		cout << "prepHDF5File: " << vm["prepHDF5File"].as<string>() << endl;
 		if (vm.count("rotationAxis"))
     		cout << "rotationAxis: " << vm["rotationAxis"].as<string>() << endl;
 		if (vm.count("numSlices"))
