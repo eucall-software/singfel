@@ -33,7 +33,7 @@
 #include "particle.h"
 #include "diffraction.h"
 #include "toolbox.h"
-#include "io.h"
+//#include "io.h"
 
 #ifdef COMPILE_WITH_CUDA
 #include "diffraction.cuh"
@@ -54,7 +54,7 @@ using namespace toolbox;
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
-#define MPI_SHMKEY 0x6FB1407 
+#define MPI_SHMKEY 0x6FB1407
 //#define MPI_SHMKEY 0x6FB10407
 
 const int master = 0; // Process with rank=0 is the master
@@ -85,7 +85,10 @@ void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field);
 void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
                         fmat* detector_intensity, fvec* quaternion, \
-                        CDetector* det, CBeam* beam, double total_phot);
+                        CDetector* det, CBeam* beam, double total_phot, int diffrID);
+void saveDiffrData(const string outputName, umat* detector_counts, \
+                        fmat* detector_intensity, fvec* quaternion, \
+                        CDetector* det, CBeam* beam, double total_phot, int * dset_data_ids, int * dset_diffr_ids, int plist_id);
 
 int main( int argc, char* argv[] ){
 
@@ -105,10 +108,10 @@ int main( int argc, char* argv[] ){
 	if (world.rank() != master){
 		shmid = shmget(shmkey,sizeof(int),0666 | IPC_CREAT);
 		if ( 0 > shmid )
-			perror("shmget");   
+			perror("shmget");
 		shmval = (int*)shmat(shmid,NULL,0);
 		if ( 0 > shmval )
-			perror("shmval"); 
+			perror("shmval");
 		*shmval=0;
 	}
 
@@ -123,7 +126,26 @@ int main( int argc, char* argv[] ){
 	timerMaster.tic();
 
 
-	// Main program
+    //str_type = h5py.new_vlen(str)
+	//# Interface version
+    //dataset = file_out.create_dataset("version", (1,), dtype='f')
+    //dataset[...] = 0.1
+    //# Populate /info
+    //dataset = file_out.create_dataset("info/package_version",(1,), dtype=str_type)
+    //data = ("SingFEL v0.1.0")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/contact",(2,), dtype=str_type)
+    //data = ("Name: Chunhong Yoon", "Email: chun.hong.yoon@desy.de")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/data_description",(1,), dtype=str_type)
+    //data = ("This dataset contains a diffraction pattern generated using SingFEL.")
+    //dataset[...] = data
+    //dataset = file_out.create_dataset("info/method_description",(1,), dtype=str_type)
+    //data = ("Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern. Finally, Poissonian noise is added to the diffraction pattern.")
+    //dataset[...] = data
+
+
+    // Main program
 	if (world.rank() == master) {
 		master_diffract(comm, vm);
 	} else {
@@ -135,8 +157,8 @@ int main( int argc, char* argv[] ){
 		shmdt(shmval);
 		shmctl(shmid, IPC_RMID, 0);
 	}
-	
-	
+
+
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
@@ -174,12 +196,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	// 1) pmiID
 	// 2) diffrID
 	// 3) sliceInterval
-	 
+
 	int diffrID = (pmiStartID-1)*numDP+1;
 	int pmiID = pmiStartID;
 	int dpID = 1;
 	fvec quaternion(4);
-	
+
 	// Setup rotations
 	fmat myQuaternions;
 	generateRotations(uniformRotation, rotationAxis, ntasks, \
@@ -191,7 +213,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	for (rank = 1; rank < numProcesses; ++rank) {
 		if (pmiID > pmiEndID) {
 			cout << "Error!!" << endl;
-			return;	
+			return;
 		}
 		// Tell the slave how to rotate the particle
 		quaternion = trans(myQuaternions.row(counter));
@@ -203,7 +225,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
 		comm->send(rank, DPTAG, id1, 3);
-				
+
 		diffrID++;
 		dpID++;
 		numTasksDone++;
@@ -215,7 +237,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	// Listen for slaves
 	int msgDone = 0;
-	
+
 	if (numTasksDone >= ntasks) done = 1;
 	while (!done) {
 		status = comm->recv(boost::mpi::any_source, DONETAG, msgDone);
@@ -229,7 +251,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		id << pmiID << diffrID << sliceInterval << endr;
 		float* id1 = &id[0];
 		comm->send(status.source(), DPTAG, id1, 3);
-		
+
 		diffrID++;
 		dpID++;
 		numTasksDone++;
@@ -243,12 +265,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		// Display status
 		CToolbox::displayStatusBar(numTasksDone,ntasks,&lastPercentDone);
 	}
-	
+
   	// Wait for status update of slaves.
 	for (rank = 1; rank < numProcesses; ++rank) {
 		status = comm->recv(rank, DONETAG, msgDone);
 	}
-    
+
 	// KILL SLAVES
   	// Tell all the slaves to exit by sending an empty message with the DIETAG.
 	for (rank = 1; rank < numProcesses; ++rank) {
@@ -256,9 +278,12 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	}
 }
 
-static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
+static void slave_diffract(mpi::communicator* comm, opt::variables_map vm, int h5_file_id) {
 
-	string inputDir = vm["inputDir"].as<std::string>();
+	int pmiStartID = vm["pmiStartID"].as<int>();
+	int pmiEndID = vm["pmiEndID"].as<int>();
+	int numDP = vm["numDP"].as<int>();
+    string inputDir = vm["inputDir"].as<std::string>();
 	string outputDir = vm["outputDir"].as<string>();
 	string configFile = vm["configFile"].as<string>();
 	string beamFile = vm["beamFile"].as<string>();
@@ -266,24 +291,26 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int numSlices = vm["numSlices"].as<int>();
 	int saveSlices = vm["saveSlices"].as<int>();
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
-	
+
+	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
+
 	wall_clock timer;
 	boost::mpi::status status;
-	
-	
+
+
 	string filename;
 	string outputName;
-		
+
 	// Set up beam and detector from file
 	CDetector det = CDetector();
 	CBeam beam = CBeam();
 	beam.readBeamFile(beamFile);
 	det.readGeomFile(geomFile);
-	
+
 	bool givenFluence = false;
 	if (beam.get_photonsPerPulse() > 0) {
 		givenFluence = true;
-	}	
+	}
 	bool givenPhotonEnergy = false;
 	if (beam.get_photon_energy() > 0) {
 		givenPhotonEnergy = true;
@@ -296,7 +323,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	int px = det.get_numPix_x();
 	int py = px;
 	float msg[msgLength];
-	
+
 	fvec quaternion(4);
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
@@ -304,7 +331,71 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	fmat F_hkl_sq(py,px);
 	fmat Compton(py,px);
 	fmat myPos;
-	
+
+    // Create central hdf file for result storage
+    stringstream sstm;
+    sstm << outputDir << "/diffr_out.h5";
+    string outputName = sstm.str();
+
+    // Set mpi hints
+    int plist_id = H5Pcreate(H5P_FILE_ACCESS);
+    H5Pset_fapl_mpio(plist_id, comm, info);
+
+    // Create parallel h5 file.
+    int h5_file_id = H5Fcreate(outputName, H5F_ACC_TRUNC, H5P_DEFAULT, plist_id);
+
+    // Create hdf groups and metadata
+    int grp_data = H5Gcreate(h5_file_id,   "data",   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT )
+    int grp_params = H5Gcreate(h5_file_id, "params", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT )
+    int grp_misc = H5Gcreate(h5_file_id,   "misc",   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT )
+    int grp_info = H5Gcreate(h5_file_id,   "info",   H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT )
+
+    // Create datasets.
+    int dimensions[2] = {px, py};
+
+    /*
+     * Create the dataspace for the dataset.
+     */
+    int filespace = H5Screate_simple(2, dimensions, NULL);
+
+    /*
+     * Create the dataset with default properties and close filespace.
+     */
+    // Keep track of dataset indices.
+    int dset_data_ids[ntasks];
+    int dset_diffr_ids[ntasks];
+
+    // Loop over number of datasets to be created and create them collectively.
+    for (int r=0; r < ntasks; ++r){
+
+        // Setup dataset name, must be unique for each process.
+        std::stringstream ds_data_name;
+        std::stringstream ds_diff_name;
+        ds_data_name << "data/" << r << "/data";
+        ds_diffr_name << "data/" << r << "/diffr";
+        std::string ds_data_name_str = ds_data_name.str();
+        std::string ds_diffr_name_str = ds_diffr_name.str();
+
+        std::cout << "Rank" << mpi_rank << ": Creating dataset " << ds_data_name_str << std::endl;
+
+        // Create the dataset.
+        dset_data_id = H5Dcreate(file_id, ds_data_name_str.c_str(), H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        dset_diffr_id = H5Dcreate(file_id, ds_diffr_name_str.c_str(), H5T_NATIVE_DOUBLE, filespace, H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+        dset_data_ids[r] = dset_data_id;
+        dset_diffr_ids[r] = dset_diffr_id;
+
+        std::cout << "Rank " << mpi_rank << " created dataset " << r << " with ID " << dset_data_id << std::endl;
+    }
+
+    /*
+     * Create property list for collective dataset write.
+     */
+    plist_id = H5Pcreate(H5P_DATASET_XFER);
+    H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_COLLECTIVE);
+    //H5Pset_dxpl_mpio(plist_id, H5FD_MPIO_INDEPENDENT);
+
+
+    // Start event loop.
 	while (1) {
 		// Receive a message from the master
     	status = comm->recv(master, boost::mpi::any_tag, msg, msgLength);
@@ -332,26 +423,20 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				exit(0);
 			}
 
-			// output file
-			sstm.str("");
-			sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
-			      << diffrID << ".h5";
-			outputName = sstm.str();
-			if ( boost::filesystem::exists( outputName ) ) {
-				boost::filesystem::remove( outputName );
-			}
 
-			// Run prepHDF5		
-			string scriptName;
-			sstm.str("");
-			sstm << inputDir << "/prepHDF5.py";
-			scriptName = sstm.str();
-			string myCommand = string("python ") + scriptName + " " \
-			                   + filename + " " + outputName + " " + configFile;
-			int i = system(myCommand.c_str());
-			assert(i == 0);
-				
-			// Set up diffraction geometry
+
+			// Run prepHDF5
+			//string scriptName;
+			//sstm.str("");
+			//sstm << inputDir << "/prepHDF5.py";
+			//scriptName = sstm.str();
+			//string myCommand = string("python ") + scriptName + " " \
+			                   //+ filename + " " + outputName + " " + configFile;
+			//int i = system(myCommand.c_str());
+			//assert(i == 0);
+            // Create dataset.
+            // Set up diffraction geometry
+            //
 			if (givenPhotonEnergy == false) {
 				setEnergyFromFile(filename, &beam);
 			}
@@ -363,7 +448,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			double total_phot = 0;
 			photon_field.zeros(py,px);
 			detector_intensity.zeros(py,px);
-			detector_counts.zeros(py,px);	
+			detector_counts.zeros(py,px);
 			int done = 0;
 			int timeSlice = 0;
 			int isFirstSlice = 1;
@@ -381,10 +466,10 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					                   &beam);
 				}
 				total_phot += beam.get_photonsPerPulse();
-				
+
 				// Coherent contribution
 				CDiffraction::calculate_atomicFactor(&particle, &det);
-				
+
 				// Incoherent contribution
 				if (calculateCompton) {
 					getComptonScattering(vm, &particle, &det, &Compton);
@@ -424,7 +509,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 					}
 				}
 				detector_intensity += photon_field;
-				
+
 				if (saveSlices) {
 					savePhotonField(outputName, isFirstSlice, timeSlice, \
 					                &photon_field);
@@ -436,15 +521,15 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 			CDetector::apply_badPixels(&detector_intensity);
 			// Poisson noise
 			detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
-			
+
 			// Save to HDF5
-			saveAsDiffrOutFile(outputName, &detector_counts, \
-			                   &detector_intensity, &quaternion, &det, &beam, \
-			                   total_phot);
+            //saveAsDiffrOutFile(outputName, &detector_counts, &detector_intensity, &quaternion, &det, &beam, total_phot, diffrID);
+            status = H5Dwrite(dset_diffr_ids[diffrID-1], H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, plist_id, detector_intensity->memptr());
+            //saveDiffrData(outputName, &detector_counts, &detector_intensity, &quaternion, &det, &beam, total_phot, dset_data_ids, dset_diffr_ids, plist_id);
 
     		comm->send(master, DONETAG, 1);
     	}
-		
+
 		if (status.tag() == DIETAG) {
 			return;
 		}
@@ -452,18 +537,18 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
 	if (comm->rank() == 1) {
 		CDiffraction::displayResolution(&det, &beam);
-	}	
+	}
 }// end of slave_diffract
 
 void generateRotations(const bool uniformRotation, const string rotationAxis, \
                        const int numQuaternions, fmat* myQuaternions) {
 	fmat& _myQuaternions = myQuaternions[0];
-	
+
 	_myQuaternions.zeros(numQuaternions,4);
 	if (uniformRotation) { // uniform rotations
 		if (rotationAxis == "y" || rotationAxis == "z") {
 			_myQuaternions = CToolbox::pointsOn1Sphere(numQuaternions, \
-			                                           rotationAxis);		
+			                                           rotationAxis);
 		} else if (rotationAxis == "xyz") {
 			_myQuaternions = CToolbox::pointsOn4Sphere(numQuaternions);
 		}
@@ -496,9 +581,9 @@ void loadParticle(const opt::variables_map vm, const string filename, \
 	particle->load_atomType(filename,datasetname+"/T");
 	// mat pos
 	particle->load_atomPos(filename,datasetname+"/r");
-	// rowvec ion list	
+	// rowvec ion list
 	particle->load_ionList(filename,datasetname+"/xyz");
-	// mat ffTable (atomType x qSample)	
+	// mat ffTable (atomType x qSample)
 	particle->load_ffTable(filename,datasetname+"/ff");
 	// rowvec q vector sin(theta)/lambda
 	particle->load_qSample(filename,datasetname+"/halfQ");
@@ -515,7 +600,7 @@ void loadParticle(const opt::variables_map vm, const string filename, \
 
 void rotateParticle(fvec* quaternion, CParticle* particle) {
 	fvec& _quat = quaternion[0];
-	
+
 	// Rotate particle
 	fmat rot3D = CToolbox::quaternion2rot3D(_quat);
 	fmat myPos = particle->get_atomPos();
@@ -565,7 +650,7 @@ void setFocusFromFile(const string filename, CBeam* beam) {
 void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
                           CDetector* det, fmat* Compton) {
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
-	
+
 	if (calculateCompton) {
 		CDiffraction::calculate_compton(particle, det, Compton); // get S_hkl
 	} else {
@@ -576,7 +661,7 @@ void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
 void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field) {
 	fmat& _photon_field = photon_field[0];
-	
+
 	int createSubgroup;
 	if (isFirstSlice == 1) {
 		createSubgroup = 1;
@@ -592,13 +677,55 @@ void savePhotonField(const string filename, const int isFirstSlice, \
 	assert(success == 0);
 }
 
+void saveDiffrData(const string outputName, umat* detector_counts, fmat* detector_intensity, fvec* quaternion, int * dset_data_ids, int * dset_diffr_ids, int plist_id, ntask)
+{
+    // Each process writes its own dataset (dset index == mpi_rank).
+    //status = H5Dwrite(dset_diffr_ids[], H5T_NATIVE_DOUBLE, H5S_ALL, H5S_ALL, plist_id, detector_intensity->memptr());
+
+    //int createSubgroup = 0;
+	//// FIXME: groupname and subgroupname are redundant
+	//int success = hdf5writeVector(outputName,group,"","/data/data", \
+	                                  //*detector_counts, createSubgroup);
+	//success = hdf5writeVector(outputName,"data","","/data/diffr", \
+	                               //*detector_intensity, createSubgroup);
+	//createSubgroup = 0;
+	//success = hdf5writeVector(outputName,"data","","/data/angle", \
+	                                       //*quaternion, createSubgroup);
+	//createSubgroup = 1;
+	//double dist = det->get_detector_dist();
+	//success = hdf5writeScalar(outputName,"params","params/geom",\
+	                  //"/params/geom/detectorDist", dist,createSubgroup);
+	//createSubgroup = 0;
+	//double pixelWidth = det->get_pix_width();
+	//success = hdf5writeScalar(outputName,"params","params/geom",\
+	              //"/params/geom/pixelWidth", pixelWidth,createSubgroup);
+	//double pixelHeight = det->get_pix_height();
+	//success = hdf5writeScalar(outputName,"params","params/geom",\
+	            //"/params/geom/pixelHeight", pixelHeight,createSubgroup);
+	//fmat mask = ones<fmat>(det->py,det->px); // FIXME: why is this needed?
+	//success = hdf5writeVector(outputName,"params","params/geom",\
+	                          //"/params/geom/mask", mask,createSubgroup);
+	//createSubgroup = 1;
+	//double photonEnergy = beam->get_photon_energy();
+	//success = hdf5writeScalar(outputName,"params","params/beam",\
+	          //"/params/beam/photonEnergy", photonEnergy,createSubgroup);
+	//createSubgroup = 0;
+	//success = hdf5writeScalar(outputName,"params","params/beam",\
+	                 //"/params/beam/photons", total_phot,createSubgroup);
+	//createSubgroup = 0;
+	//double focusArea = beam->get_focus_area();
+	//success = hdf5writeScalar(outputName,"params","params/beam",\
+			                //"/params/beam/focusArea", focusArea,createSubgroup);
+}
+
 void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
                         fmat* detector_intensity, fvec* quaternion, \
-                        CDetector* det, CBeam* beam, double total_phot) {
+                        CDetector* det, CBeam* beam, double total_phot, int diffrID) {
+
 			int createSubgroup = 0;
 			// FIXME: groupname and subgroupname are redundant
 			int success = hdf5writeVector(outputName,"data","","/data/data", \
-			                                  *detector_counts, createSubgroup); 
+			                                  *detector_counts, createSubgroup);
 			success = hdf5writeVector(outputName,"data","","/data/diffr", \
 			                               *detector_intensity, createSubgroup);
 			createSubgroup = 0;
@@ -624,7 +751,7 @@ void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
 			          "/params/beam/photonEnergy", photonEnergy,createSubgroup);
 			createSubgroup = 0;
 			success = hdf5writeScalar(outputName,"params","params/beam",\
-			                 "/params/beam/photons", total_phot,createSubgroup);			
+			                 "/params/beam/photons", total_phot,createSubgroup);
 			createSubgroup = 0;
 			double focusArea = beam->get_focus_area();
 			success = hdf5writeScalar(outputName,"params","params/beam",\
