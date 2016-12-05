@@ -68,7 +68,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
 
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
-void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm);
+void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, string outputName);
 
 void generateRotations(const bool uniformRotation, \
                        const string rotationAxis, const int numQuaternions, \
@@ -86,9 +86,11 @@ void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
                           CDetector* det, fmat* Compton);
 void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field);
-void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
+void saveAsDiffrOutFile(const string outputName, int counter, umat* detector_counts, \
                         fmat* detector_intensity, fvec* quaternion, \
                         CDetector* det, CBeam* beam, double total_phot);
+
+int prepH5(opt::variables_map vm, string outputName);
 
 int main( int argc, char* argv[] ){
 
@@ -175,7 +177,10 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	for (int ntask = 0; ntask < ntasks; ntask++) {
 		if (numProcesses==1)
 		{
-			make1Diffr(myQuaternions,ntask,vm);
+            string outputName = "diffr_out_0000001.h5";
+            int success = prepH5(vm, outputName);
+            assert(success == 1);
+			make1Diffr(myQuaternions,ntask,vm, outputName);
 		}
 		else
 		{
@@ -203,9 +208,12 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	bool uniformRotation = vm["uniformRotation"].as<bool>();
 
 
+    // Get required input arguments.
 	int pmiStartID = vm["pmiStartID"].as<int>();
 	int pmiEndID = vm["pmiEndID"].as<int>();
 	int numDP = vm["numDP"].as<int>();
+	string inputDir = vm["inputDir"].as<std::string>();
+	string outputDir = vm["outputDir"].as<string>();
 
 	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
 
@@ -214,20 +222,61 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	generateRotations(uniformRotation, rotationAxis, ntasks, \
 	                  &myQuaternions);
 
+    // Init a local counter.
 	int counter;
 
-	// ready to go
+    // Setup IO.
+    // Output file
+    stringstream sstm;
+	sstm.str("");
+	sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
+			      << comm->rank() << ".h5";
+	string outputName = sstm.str();
+	if ( boost::filesystem::exists( outputName ) ) {
+		boost::filesystem::remove( outputName );
+	}
+
+
+	// Wave to master, we're good to go.
 	comm->send(master, 0, &counter, 1);
 
+    // Start event loop and process the diffraction images.
 	while (true){
 		comm->recv(master, 0, counter);
 		if (counter < 0) return;
-		make1Diffr(myQuaternions,counter,vm);
+		make1Diffr(myQuaternions,counter,vm,outputName);
 		comm->send(master, 0, &counter, 1);
 	}
 }
 
-void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
+int prepH5(opt::variables_map vm, string filename) {
+
+    // Get directories from input arguments.
+	string inputDir = vm["inputDir"].as<std::string>();
+	string outputDir = vm["outputDir"].as<string>();
+	string configFile = vm["configFile"].as<string>();
+
+    // Aggregrate script name and system command.
+	string scriptName;
+    stringstream sstm;
+	sstm.str("");
+	if (vm.count("prepHDF5File")) {
+		sstm << vm["prepHDF5File"].as<string>();
+	}
+	else {
+		sstm << inputDir << "/prepHDF5.py";
+	}
+
+	scriptName = sstm.str();
+	string myCommand = string("python ") + scriptName + " " \
+	                   + filename + " " + configFile;
+	int i = system(myCommand.c_str());
+
+    return i;
+}
+
+
+void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, string outputName ) {
 
 
 	int sliceInterval = vm["sliceInterval"].as<int>();
@@ -249,7 +298,6 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 	int diffrID = (pmiStartID-1)*numDP+1 + (pmiID-1)*numDP+counter%numDP;
 
 	string filename;
-	string outputName;
 
 	// Set up beam and detector from file
 	CDetector det = CDetector();
@@ -285,7 +333,6 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 
 
 	// input file
-
 	stringstream sstm;
 	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) \
 		     << pmiID << ".h5";
@@ -295,31 +342,30 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 		exit(0);
 	}
 
-	// output file
+	//// output file
+	//sstm.str("");
+	//sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
+			      //<< diffrID << ".h5";
+	//outputName = sstm.str();
+	//if ( boost::filesystem::exists( outputName ) ) {
+		//boost::filesystem::remove( outputName );
+	//}
 
-	sstm.str("");
-	sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
-			      << diffrID << ".h5";
-	outputName = sstm.str();
-	if ( boost::filesystem::exists( outputName ) ) {
-		boost::filesystem::remove( outputName );
-	}
+	//// Run prepHDF5
+	//string scriptName;
+	//sstm.str("");
+	//if (vm.count("prepHDF5File")) {
+		//sstm << vm["prepHDF5File"].as<string>();
+	//}
+	//else {
+		//sstm << inputDir << "/prepHDF5.py";
+	//}
 
-	// Run prepHDF5
-	string scriptName;
-	sstm.str("");
-	if (vm.count("prepHDF5File")) {
-		sstm << vm["prepHDF5File"].as<string>();
-	}
-	else {
-		sstm << inputDir << "/prepHDF5.py";
-	}
-
-	scriptName = sstm.str();
-	string myCommand = string("python ") + scriptName + " " \
-	                   + filename + " " + outputName + " " + configFile;
-	int i = system(myCommand.c_str());
-	assert(i == 0);
+	//scriptName = sstm.str();
+	//string myCommand = string("python ") + scriptName + " " \
+	                   //+ filename + " " + outputName + " " + configFile;
+	//int i = system(myCommand.c_str());
+	//assert(i == 0);
 
 	// Set up diffraction geometry
 	if (givenPhotonEnergy == false) {
@@ -393,10 +439,10 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 		}
 		detector_intensity += photon_field;
 
-		if (saveSlices) {
-			savePhotonField(outputName, isFirstSlice, timeSlice, \
-			                &photon_field);
-		}
+		//if (saveSlices) {
+			//savePhotonField(outputName, counter, isFirstSlice, timeSlice, \
+			                //&photon_field);
+		//}
 		isFirstSlice = 0;
 	}// end timeSlice
 
@@ -406,7 +452,7 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm) {
 	detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 
 	// Save to HDF5
-	saveAsDiffrOutFile(outputName, &detector_counts, \
+	saveAsDiffrOutFile(outputName, counter, &detector_counts, \
 	                   &detector_intensity, &quaternion, &det, &beam, \
 	                   total_phot);
 
@@ -535,58 +581,49 @@ void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field) {
 	fmat& _photon_field = photon_field[0];
 
-	int createSubgroup;
-	if (isFirstSlice == 1) {
-		createSubgroup = 1;
-	} else {
-		createSubgroup = 0;
-	}
+
 	std::stringstream ss;
-	ss << "/misc/photonField/photonField_" << setfill('0') << setw(7) \
-	   << timeSlice;
+	ss << "photonField_" << setfill('0') << setw(7) << timeSlice;
 	string fieldName = ss.str();
-	int success = hdf5writeVector(filename, "misc", "/misc/photonField", \
-	                              fieldName, _photon_field, createSubgroup);
+	int success = hdf5writeVector(filename,  "/misc/photonField", fieldName, _photon_field );
 	assert(success == 0);
 }
 
-void saveAsDiffrOutFile(const string outputName, umat* detector_counts, \
+void saveAsDiffrOutFile(const string outputName, int count, umat* detector_counts, \
                         fmat* detector_intensity, fvec* quaternion, \
                         CDetector* det, CBeam* beam, double total_phot) {
-			int createSubgroup = 0;
-			// FIXME: groupname and subgroupname are redundant
-			int success = hdf5writeVector(outputName,"data","","/data/data", \
-			                                  *detector_counts, createSubgroup);
-			success = hdf5writeVector(outputName,"data","","/data/diffr", \
-			                               *detector_intensity, createSubgroup);
-			createSubgroup = 0;
-			success = hdf5writeVector(outputName,"data","","/data/angle", \
-			                                       *quaternion, createSubgroup);
-			createSubgroup = 1;
+
+            // Data group.
+            // Detector counts
+            stringstream sstm;
+            sstm.str("");
+            sstm << "data/" << setfill('0') << setw(7) << count << "/";
+            string group_name = sstm.str();
+			int success = hdf5writeVector(outputName, group_name, "data", *detector_counts);
+
+            // Detector intensity.
+			success = hdf5writeVector(outputName,group_name, "diffr", *detector_intensity);
+
+            // Quaternion
+			success = hdf5writeVector(outputName, group_name, "angle", *quaternion);
+
+            // Parameters.
+            // Geometry.
 			double dist = det->get_detector_dist();
-			success = hdf5writeScalar(outputName,"params","params/geom",\
-			                  "/params/geom/detectorDist", dist,createSubgroup);
-			createSubgroup = 0;
+			success = hdf5writeScalar(outputName,"params/geom", "detectorDist", dist);
 			double pixelWidth = det->get_pix_width();
-			success = hdf5writeScalar(outputName,"params","params/geom",\
-			              "/params/geom/pixelWidth", pixelWidth,createSubgroup);
+			success = hdf5writeScalar(outputName,"params/geom", "pixelWidth", pixelWidth);
 			double pixelHeight = det->get_pix_height();
-			success = hdf5writeScalar(outputName,"params","params/geom",\
-			            "/params/geom/pixelHeight", pixelHeight,createSubgroup);
-			fmat mask = ones<fmat>(det->py,det->px); // FIXME: why is this needed?
-			success = hdf5writeVector(outputName,"params","params/geom",\
-			                          "/params/geom/mask", mask,createSubgroup);
-			createSubgroup = 1;
-			double photonEnergy = beam->get_photon_energy();
-			success = hdf5writeScalar(outputName,"params","params/beam",\
-			          "/params/beam/photonEnergy", photonEnergy,createSubgroup);
-			createSubgroup = 0;
-			success = hdf5writeScalar(outputName,"params","params/beam",\
-			                 "/params/beam/photons", total_phot,createSubgroup);
-			createSubgroup = 0;
+			success = hdf5writeScalar(outputName,"params/geom", "pixelHeight", pixelHeight);
+			fmat mask = ones<fmat>(det->py,det->px);
+			success = hdf5writeVector(outputName,"params/geom", "mask", mask);
 			double focusArea = beam->get_focus_area();
-			success = hdf5writeScalar(outputName,"params","params/beam",\
-			                "/params/beam/focusArea", focusArea,createSubgroup);
+			success = hdf5writeScalar(outputName,"params/beam", "focusArea", focusArea);
+
+            // Photons.
+			double photonEnergy = beam->get_photon_energy();
+			success = hdf5writeScalar(outputName,"params/beam", "photonEnergy", photonEnergy);
+            //success = hdf5writeScalar(outputName,"params", "/params/beam/photons", total_phot); // Not needed.
 }
 
 opt::variables_map parse_input( int argc, char* argv[], \
