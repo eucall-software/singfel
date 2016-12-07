@@ -1,44 +1,44 @@
 /*
- * Program for simulating diffraction patterns
+ * MPI enabled program for simulating diffraction patterns
  */
-#include <iostream>
-#include <iomanip>
-#include <sys/time.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
-#include <gsl/gsl_spline.h>
-#include <gsl/gsl_errno.h>
-#include <algorithm>
-#include <fstream>
-#include <string>
-//SHM for local rank
-#include <sys/ipc.h>
-#include <sys/stat.h>
-#include <sys/shm.h>
-// Armadillo library
-#include <armadillo>
-// Boost library
-#include <boost/tokenizer.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/mpi.hpp>
-#include <boost/serialization/string.hpp>
-#include <boost/program_options.hpp>
-// HDF5 library
+
 #include "hdf5.h"
 #include "hdf5_hl.h"
-// SingFEL library
-#include "detector.h"
-#include "beam.h"
-#include "particle.h"
-#include "diffraction.h"
-#include "toolbox.h"
-#include "io.h"
+#include <algorithm>
+#include <armadillo>
+#include <boost/algorithm/string.hpp>
+#include <boost/mpi.hpp>
+#include <boost/program_options.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/tokenizer.hpp>
+#include <fstream>
+#include <gsl/gsl_errno.h>
+#include <gsl/gsl_spline.h>
+#include <iomanip>
+#include <iostream>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
+// SingFEL library
+#include "beam.h"
+#include "detector.h"
+#include "diffraction.h"
+#include "io.h"
+#include "particle.h"
+#include "toolbox.h"
+
+// Check if code is compiled for execution on GPU (CUDA).
 #ifdef COMPILE_WITH_CUDA
 #include "diffraction.cuh"
 #endif
 
+// A couple of useful namespaces.
 namespace mpi = boost::mpi;
 namespace opt = boost::program_options;
 using namespace std;
@@ -49,50 +49,153 @@ using namespace particle;
 using namespace diffraction;
 using namespace toolbox;
 
+// Useful tags
 #define QTAG 1	// quaternion
 #define DPTAG 2	// diffraction pattern
 #define DIETAG 3 // die signal
 #define DONETAG 4 // done signal
 
 #define MPI_SHMKEY 0x6FB1407
-//#define MPI_SHMKEY 0x6FB10407
 
-const int master = 0; // Process with rank=0 is the master
-const int msgLength = 4; // MPI message length
+// Define master node and message length
+const int master = 0;
+const int msgLength = 4;
+
+// Only if CUDA.
 #ifdef COMPILE_WITH_CUDA
 int localRank=0;
 int deviceCount=cuda_getDeviceCount();
 #endif
 
+// Local declarations.
+/* @brief: Master process, steers distribution of tasks over slave processes.
+ * @param comm: MPI communicator
+ * @param vm: Map of command line arguments
+ */
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm);
+
+/* @brief: Slave process for calculation of diffraction patterns.
+ * @param comm: Pointer to MPI communicator.
+ * @param vm: Map of command line arguments
+ */
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm);
 
+/* @brief: Parse command line arguments and setup argument map.
+ * @param argc: Number of command line arguments.
+ * @param argv: Command line arguments list.
+ * @param comm: Pointer to MPI communicator.
+ */
 opt::variables_map parse_input(int argc, char* argv[], mpi::communicator* comm);
+
+/* @brief Calculates a single diffraction pattern and stores in an hdf5 file.
+ * @param myQuaternions: Quaternion to use for this pattern.
+ * @param counter: Global pattern count for this run.
+ * @param vm: Map of command line arguments.
+ * @param outputName: Name of output hdf5 file.
+ */
 void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, string outputName);
 
+/* @brief: Generate the rotations for this run.
+ * @param uniformRotation: Whether to sample the rotation space uniformly.
+ * @param rotationAxis: xyz or Euler convention.
+ * @param numQuaternions: Number of quaternions (rotations).
+ * @param myQuaternions: Pointer to matrix holding the quaternions.
+ */
 void generateRotations(const bool uniformRotation, \
                        const string rotationAxis, const int numQuaternions, \
                        fmat* myQuaternions);
+
+/* @brief: Loads the atom coordinates, structure factors, and form factors for given time slice.
+ * @param vm: Map of command line arguments.
+ * @param filename: Name of hdf5 file that holds the particle data.
+ * @param timeslice: Which time slice to calculate.
+ * @param particle: The particle to calculate.
+ */
 void loadParticle(const opt::variables_map vm, const string filename, \
                   const int timeSlice, CParticle* particle);
+
+/* @brief: Set the interval of time slices to use in the calculations.
+ * @param numSlices: How many slices to use.
+ * @param: sliceInterval: From which interval to take the time slices.
+ * @param timeSlice: The time slice to use.
+ * @param done: Flag indicating success of the operation.
+ */
 void setTimeSliceInterval(const int numSlices, int* sliceInterval, \
                           int* timeSlice, int* done);
+
+/* @brief: Rotate the particle
+ * @param Quaternion: The quaternion to apply to the atom coordinates.
+ * @param particle: The particle to rotate.
+ */
 void rotateParticle(fvec* quaternion, CParticle* particle);
+
+/* @brief: Extract the photon fluence from the input file and set in calculation.
+ * @param filename: The filename to read the fluence from.
+ * @param timeSlice: For which timeSlice to set the fluence.
+ * @sliceInterval: The time slice interval
+ * @beam: The beam information struct.
+ */
 void setFluenceFromFile(const string filename, const int timeSlice, \
                         const int sliceInterval, CBeam* beam);
+
+/* @brief: Extract photon energy from a file and use in calculation.
+ * @param filename: The file to extract the energy from.
+ * @param beam: The beam struct.
+ */
 void setEnergyFromFile(const string filename, CBeam* beam);
+
+/* @brief: Extract focus size from a file and use in calculation.
+ * @param filename: File to extract focus from.
+ * @param beam: The beam info struct.
+ */
 void setFocusFromFile(const string filename, CBeam* beam);
+
+/* @brief: Calculate Compton scattering.
+ * @param vm: Map of command line arguments.
+ * @param particle: The particle to calculate.
+ * @param det: The detector struct.
+ * @param [out] Compton: Matrix holding the result.
+ */
 void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
                           CDetector* det, fmat* Compton);
+
+/* @brief: Save the photon field in the output file.
+ * @param filename: File to save field in.
+ * @param isFirstSlice: Whether it's the first time slice.
+ * @param timeSlice: The time slice of this calculation.
+ * @param photon_field: The field to save.
+ */
 void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field);
-void saveAsDiffrOutFile(const string outputName, const string inputName, int counter, umat* detector_counts, \
-                        fmat* detector_intensity, fvec* quaternion, \
-                        CDetector* det, CBeam* beam, double total_phot);
 
+/* @brief: Save diffraction pattern in hdf5 file.
+ * @param outputName: Name of the output file.
+ * @param inputName: Name of the input file to extract history and metadata from.
+ * @param counter: Running counter of diffraction patterns.
+ * @param detector_counts: Matrix (image) of detector counts (Poissonized).
+ * @param detector_intensity: Matrix (image) of detector intensity (before Poissonization).
+ * @param quaternion: The quaternion used to rotate the sample for this pattern.
+ * @param det: The detector info struct.
+ * @param beam: beam: The beam info struct.
+ * @param total_phot: Total photon count (obsolete).
+ */
+void saveAsDiffrOutFile(const string outputName, const string inputName, int counter, umat* detector_counts, fmat* detector_intensity, fvec* quaternion, CDetector* det, CBeam* beam, double total_phot);
+
+/* @brief: Prepare the output file.
+ * @param vm: Map of command line arguments.
+ * @outputName: Name of output hdf5 file.
+ */
 int prepH5(opt::variables_map vm, string outputName);
-int linkHistory( hid_t, const string, const string);
 
+/* @brief: Link data from preceeding calculator into output file.
+ * @param output_file_id: H5 file id for output file (must be open).
+ * @param inputName: Link target.
+ * @param group_name: Name of hdf5 group inside source file where to save the links.
+ */
+int linkHistory( hid_t output_file_id, const string inputName, const string group_name);
+
+
+// Main
 int main( int argc, char* argv[] ){
 
 	// Initialize MPI
@@ -102,10 +205,9 @@ int main( int argc, char* argv[] ){
 
 	// All processes parse the input
 	opt::variables_map vm = parse_input(argc, argv, comm);
-	// Set random seed
-	//srand( vm["pmiStartID"].as<int>() + world.rank() + (unsigned)time(NULL) );
-#ifdef COMPILE_WITH_CUDA
 
+	// Set random seed if CUDA.
+#ifdef COMPILE_WITH_CUDA
 	srand( 0x01333337);
 	int shmid;
 	key_t shmkey = (key_t)MPI_SHMKEY;
@@ -126,10 +228,12 @@ int main( int argc, char* argv[] ){
 		localRank = __sync_fetch_and_add( shmval,1);
 		//printf("Local %d\n",localRank);fflush(NULL);
 	}
-
 #endif
+
+    // Init the time.
 	wall_clock timerMaster;
 
+    // Tic.
 	timerMaster.tic();
 
 	// Main program
@@ -139,6 +243,7 @@ int main( int argc, char* argv[] ){
 		slave_diffract(comm, vm);
 	}
 
+    // Only on GPU.
 #ifdef COMPILE_WITH_CUDA
 
 	world.barrier();
@@ -148,33 +253,49 @@ int main( int argc, char* argv[] ){
 	}
 #endif
 
+    // Sync.
 	world.barrier();
+    // Time.
 	if (world.rank() == master) {
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
 
-    int finalized = MPI_Finalize();
+    // Clean up hdf5.
     int h5_closed = H5close();
+
+    // Finalize MPI.
+    int finalized = MPI_Finalize();
 
   	return 0;
 }
 
 static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
+    // Get some required command line arguments.
 	int pmiStartID = vm["pmiStartID"].as<int>();
 	int pmiEndID = vm["pmiEndID"].as<int>();
 	int numDP = vm["numDP"].as<int>();
 
+    // Number of processes.
 	int numProcesses = comm->size();
 
+    // Number of tasks.
   	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
 
+    // Setup quaternions.
 	fmat myQuaternions;
+
+    // Setup output filename.
     string outputName = "";
+
+    // If only one process.
 	if (numProcesses==1)
 	{
+        // Some more command line arguments.
 		string rotationAxis = vm["rotationAxis"].as<string>();
 		bool uniformRotation = vm["uniformRotation"].as<bool>();
+
+        // Generate the rotations.
 		generateRotations(uniformRotation, rotationAxis, ntasks, \
 	                  &myQuaternions);
 
@@ -184,20 +305,24 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
         assert(success == 0);
 	}
 
+    // Loop over all tasks.
 	for (int ntask = 0; ntask < ntasks; ntask++) {
+        // If only one process, each pattern is calculated on master.
 		if (numProcesses==1)
 		{
 			make1Diffr(myQuaternions,ntask,vm, outputName);
 		}
 		else
 		{
+            // Get status from slave.
 			int tmp;
 		  	boost::mpi::status status = comm->recv(boost::mpi::any_source, 0, tmp);
+            // Trigger calculation on slave.
 			comm->send(status.source(), 0, &ntask, 1);
 		}
 	}
 
-// final send
+    // Final send.
 	int ntask=-1;
 	for (int np = 0; np < numProcesses; np++) {
 		if (np!= master)
@@ -205,23 +330,21 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 				comm->send(np, 0, &ntask, 1);
 			}
 	}
-
 }
 
 
 static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 
-	string rotationAxis = vm["rotationAxis"].as<string>();
+    // Get some command line arguments.
 	bool uniformRotation = vm["uniformRotation"].as<bool>();
-
-
-    // Get required input arguments.
-	int pmiStartID = vm["pmiStartID"].as<int>();
-	int pmiEndID = vm["pmiEndID"].as<int>();
 	int numDP = vm["numDP"].as<int>();
+	int pmiEndID = vm["pmiEndID"].as<int>();
+	int pmiStartID = vm["pmiStartID"].as<int>();
 	string inputDir = vm["inputDir"].as<std::string>();
 	string outputDir = vm["outputDir"].as<string>();
+	string rotationAxis = vm["rotationAxis"].as<string>();
 
+    // Number of tasks.
 	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
 
 	// Setup rotations
@@ -243,6 +366,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		boost::filesystem::remove( outputName );
 	}
 
+    // Prepare the output file.
     int success = prepH5(vm, outputName);
 
 	// Wave to master, we're good to go.
@@ -264,11 +388,6 @@ int prepH5(opt::variables_map vm, string outputFile) {
     string outputDir = vm["outputDir"].as<string>();
     string configFile = vm["configFile"].as<string>();
 
-    //// Check if output file exists, backup.
-    //if (H5Fis_hdf5(outputFile.c_str()) > 0) { // file does not exist or is invalid
-        //throw;
-    //}
-
     // Create output file.
     hid_t file_id = H5Fcreate(outputFile.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
     // Generate top level directories.
@@ -278,6 +397,7 @@ int prepH5(opt::variables_map vm, string outputFile) {
     hid_t misc_group_id = H5Gcreate( file_id, "misc", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     hid_t info_group_id = H5Gcreate( file_id, "info", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
+    // Needed h5 resources.
 	hid_t props = H5Pcreate (H5P_DATASET_CREATE);
     hid_t str_type, dataspace, dataset;
 	hsize_t rank,dimens_1d[1];
@@ -320,7 +440,7 @@ int prepH5(opt::variables_map vm, string outputFile) {
 	H5Sclose (dataspace);
 
     // Method Description.
-    text="Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern (/data/???????/diffr). Finally, Poissonian noise is added to the diffraction pattern (/data/???????/data).";
+    text="Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern (/data/nnnnnnn/diffr). Finally, Poissonian noise is added to the diffraction pattern (/data/nnnnnnn/data).";
 	str_type = H5Tcopy (H5T_C_S1);
 	H5Tset_size (str_type, text.size()+1);
 	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
@@ -328,60 +448,28 @@ int prepH5(opt::variables_map vm, string outputFile) {
 	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
 	H5Sclose (dataspace);
 
-    //// Parameters.
-    // TODO: Store python script or "pickled" diffractor class.
-    //text = vm["inputDir"].as<string>() + "\n" +\
-           //vm["outputDir"].as<string>() + "\n" +\
-           //vm["configFile"].as<string>() + "\n" +\
-           //vm["beamFile"].as<string>() + "\n" +\
-           //vm["geomFile"].as<string>() + "\n" +\
-           //vm["prepHDF5File"].as<string>() + "\n" +\
-           //vm["rotationAxis"].as<string>() + "\n" +\
-           //vm["numSlices"].as<string>() + "\n" +\
-           //vm["sliceInterval"].as<string>() + "\n" +\
-           //vm["pmiStartID"].as<string>() + "\n" +\
-           //vm["pmiEndID"].as<string>() + "\n" +\
-           //vm["numDP"].as<string>() + "\n" +\
-           //vm["calculateCompton"].as<string>() + "\n" +\
-           //vm["uniformRotation"].as<string>() + "\n" +\
-           //vm["saveSlices"].as<string>() + "\n" +\
-           //vm["gpu"].as<string>();
-
-    //str_type = H5Tcopy (H5T_C_S1);
-	//H5Tset_size (str_type, text.size()+1);
-	//dataspace = H5Screate_simple(rank, dimens_1d, NULL);
-	//dataset = H5Dcreate(params_group_id, "info",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
-	//H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
-	//H5Sclose (dataspace);
-
+    // Close file.
     H5Fclose(file_id);
 
-    std::clog << "Created output file " << outputFile << std::endl;
     return 0;
 }
 
 
 void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, string outputName ) {
-
-
-	int sliceInterval = vm["sliceInterval"].as<int>();
-	string inputDir = vm["inputDir"].as<std::string>();
-	string outputDir = vm["outputDir"].as<string>();
-	string configFile = vm["configFile"].as<string>();
-	string beamFile = vm["beamFile"].as<string>();
-
-	string geomFile = vm["geomFile"].as<string>();
-	int numSlices = vm["numSlices"].as<int>();
-	int saveSlices = vm["saveSlices"].as<int>();
+    // Get required command line arguments.
 	bool calculateCompton = vm["calculateCompton"].as<bool>();
-
-	int pmiStartID = vm["pmiStartID"].as<int>();
 	int numDP = vm["numDP"].as<int>();
-
-
+	int numSlices = vm["numSlices"].as<int>();
+	int pmiStartID = vm["pmiStartID"].as<int>();
 	int pmiID = pmiStartID + counter/numDP;
 	int diffrID = (pmiStartID-1)*numDP+1 + (pmiID-1)*numDP+counter%numDP;
-
+	int saveSlices = vm["saveSlices"].as<int>();
+	int sliceInterval = vm["sliceInterval"].as<int>();
+	string beamFile = vm["beamFile"].as<string>();
+	string configFile = vm["configFile"].as<string>();
+	string geomFile = vm["geomFile"].as<string>();
+	string inputDir = vm["inputDir"].as<std::string>();
+	string outputDir = vm["outputDir"].as<string>();
 
 	// Set up beam and detector from file
 	CDetector det = CDetector();
@@ -402,9 +490,11 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 		givenFocusRadius = true;
 	}
 
+    // Detector geometry.
 	int px = det.get_numPix_x();
 	int py = px;
 
+    // Init matrices.
 	fmat photon_field(py,px);
 	fmat detector_intensity(py,px);
 	umat detector_counts(py,px);
@@ -412,9 +502,9 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	fmat Compton(py,px);
 	fmat myPos;
 
+    // Setup quaternions.
 	fvec quaternion(4);
 	quaternion = trans(myQuaternions.row(counter));
-
 
 	// input file
 	stringstream sstm;
@@ -436,19 +526,21 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	}
 	det.init_dp(&beam);
 
+    // Zero out the data fields.
 	double total_phot = 0;
 	photon_field.zeros(py,px);
 	detector_intensity.zeros(py,px);
 	detector_counts.zeros(py,px);
+
 	int done = 0;
 	int timeSlice = 0;
 	int isFirstSlice = 1;
 	while(!done) {	// sum up time slices
 		setTimeSliceInterval(numSlices, &sliceInterval, &timeSlice, \
 		                     &done);
-		// Particle //
-			CParticle particle = CParticle();
-			loadParticle(vm, inputName, timeSlice, &particle);
+		// Particle
+        CParticle particle = CParticle();
+        loadParticle(vm, inputName, timeSlice, &particle);
 		// Apply random rotation to particle
 		rotateParticle(&quaternion, &particle);
 		// Beam // FIXME: Check that these fields exist
@@ -457,9 +549,9 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 			                   &beam);
 		}
 		total_phot += beam.get_photonsPerPulse();
-			// Coherent contribution
+        // Coherent contribution
 		CDiffraction::calculate_atomicFactor(&particle, &det);
-			// Incoherent contribution
+        // Incoherent contribution
 		if (calculateCompton) {
 			getComptonScattering(vm, &particle, &det, &Compton);
 		}
@@ -485,6 +577,7 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 			}
 		}else
 		#endif
+
 		{
 			F_hkl_sq = CDiffraction::calculate_molecularFormFactorSq(&particle, &det);
 			if (calculateCompton) {
@@ -499,10 +592,6 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 		}
 		detector_intensity += photon_field;
 
-		//if (saveSlices) {
-			//savePhotonField(outputName, counter, isFirstSlice, timeSlice, \
-			                //&photon_field);
-		//}
 		isFirstSlice = 0;
 	}// end timeSlice
 
@@ -515,12 +604,11 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	saveAsDiffrOutFile(outputName, inputName, counter, &detector_counts, \
 	                   &detector_intensity, &quaternion, &det, &beam, \
 	                   total_phot);
-
-
-}// end of diffract
+}
 
 void generateRotations(const bool uniformRotation, const string rotationAxis, \
                        const int numQuaternions, fmat* myQuaternions) {
+
 	fmat& _myQuaternions = myQuaternions[0];
 
 	_myQuaternions.zeros(numQuaternions,4);
@@ -595,8 +683,6 @@ void setFluenceFromFile(const string filename, const int timeSlice, \
 		stringstream ss;
 		ss << "/data/snp_" << setfill('0') << setw(7) << timeSlice-i;
 		datasetname = ss.str();
-// SY: new format for fluence
-//		double myNph = hdf5readConst<double>(filename,datasetname+"/Nph");
 		vec vecNph;
 		vecNph = hdf5read<vec>(filename,datasetname+"/Nph");
 		if (vecNph.n_elem !=1)
