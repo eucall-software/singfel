@@ -153,6 +153,9 @@ int main( int argc, char* argv[] ){
 		cout << "Finished: " << timerMaster.toc() <<" seconds."<<endl;
 	}
 
+    int finalized = MPI_Finalize();
+    int h5_closed = H5close();
+
   	return 0;
 }
 
@@ -167,20 +170,23 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
   	int ntasks = (pmiEndID-pmiStartID+1)*numDP;
 
 	fmat myQuaternions;
+    string outputName = "";
 	if (numProcesses==1)
 	{
 		string rotationAxis = vm["rotationAxis"].as<string>();
 		bool uniformRotation = vm["uniformRotation"].as<bool>();
 		generateRotations(uniformRotation, rotationAxis, ntasks, \
 	                  &myQuaternions);
+
+        // Prepare one hdf5 file for output.
+        outputName = "diffr_out_0000001.h5";
+        int success = prepH5(vm, outputName);
+        assert(success == 0);
 	}
 
 	for (int ntask = 0; ntask < ntasks; ntask++) {
 		if (numProcesses==1)
 		{
-            string outputName = "diffr_out_0000001.h5";
-            int success = prepH5(vm, outputName);
-            assert(success == 0);
 			make1Diffr(myQuaternions,ntask,vm, outputName);
 		}
 		else
@@ -237,6 +243,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		boost::filesystem::remove( outputName );
 	}
 
+    int success = prepH5(vm, outputName);
 
 	// Wave to master, we're good to go.
 	comm->send(master, 0, &counter, 1);

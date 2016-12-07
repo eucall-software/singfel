@@ -165,6 +165,12 @@ template<typename T> int hdf5writeCube(std::string filename, std::string groupna
 			}
 
 	}
+	// catch failure caused by the H5Group operations
+	catch( GroupIException error )
+	{
+	error.printError();
+	return -1;
+	}
 	catch( FileIException error )
 	{
 	error.printError();
@@ -347,6 +353,12 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 			}
 
 	}
+	// catch failure caused by the H5Group operations
+	catch( GroupIException error )
+	{
+	error.printError();
+	return -1;
+	}
 	catch( FileIException error )
 	{
 	error.printError();
@@ -442,7 +454,13 @@ template<typename T> int hdf5writeScalar(std::string filename, std::string group
 				dataset.write( dataW, PredType::NATIVE_UINT );
 			}
 	} // end of try block
-	// catch failure caused by the H5File operations
+	// catch failure caused by the H5Group operations
+	catch( GroupIException error )
+	{
+	error.printError();
+	return -1;
+	}
+    // catch failure caused by the H5File operations
 	catch( FileIException error )
 	{
 	error.printError();
