@@ -86,11 +86,12 @@ void getComptonScattering(const opt::variables_map vm, CParticle* particle, \
                           CDetector* det, fmat* Compton);
 void savePhotonField(const string filename, const int isFirstSlice, \
                      const int timeSlice, fmat* photon_field);
-void saveAsDiffrOutFile(const string outputName, int counter, umat* detector_counts, \
+void saveAsDiffrOutFile(const string outputName, const string inputName, int counter, umat* detector_counts, \
                         fmat* detector_intensity, fvec* quaternion, \
                         CDetector* det, CBeam* beam, double total_phot);
 
 int prepH5(opt::variables_map vm, string outputName);
+int linkHistory( hid_t, const string, const string);
 
 int main( int argc, char* argv[] ){
 
@@ -179,7 +180,7 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 		{
             string outputName = "diffr_out_0000001.h5";
             int success = prepH5(vm, outputName);
-            assert(success == 1);
+            assert(success == 0);
 			make1Diffr(myQuaternions,ntask,vm, outputName);
 		}
 		else
@@ -249,30 +250,107 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	}
 }
 
-int prepH5(opt::variables_map vm, string filename) {
+int prepH5(opt::variables_map vm, string outputFile) {
 
-    // Get directories from input arguments.
-	string inputDir = vm["inputDir"].as<std::string>();
-	string outputDir = vm["outputDir"].as<string>();
-	string configFile = vm["configFile"].as<string>();
+    //Get directories from input arguments.
+    string inputDir = vm["inputDir"].as<std::string>();
+    string outputDir = vm["outputDir"].as<string>();
+    string configFile = vm["configFile"].as<string>();
 
-    // Aggregrate script name and system command.
-	string scriptName;
-    stringstream sstm;
-	sstm.str("");
-	if (vm.count("prepHDF5File")) {
-		sstm << vm["prepHDF5File"].as<string>();
-	}
-	else {
-		sstm << inputDir << "/prepHDF5.py";
-	}
+    //// Check if output file exists, backup.
+    //if (H5Fis_hdf5(outputFile.c_str()) > 0) { // file does not exist or is invalid
+        //throw;
+    //}
 
-	scriptName = sstm.str();
-	string myCommand = string("python ") + scriptName + " " \
-	                   + filename + " " + configFile;
-	int i = system(myCommand.c_str());
+    // Create output file.
+    hid_t file_id = H5Fcreate(outputFile.c_str(), H5F_ACC_EXCL, H5P_DEFAULT, H5P_DEFAULT);
+    // Generate top level directories.
+    //
+    hid_t data_group_id = H5Gcreate( file_id, "data", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t params_group_id = H5Gcreate( file_id, "params", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t misc_group_id = H5Gcreate( file_id, "misc", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    hid_t info_group_id = H5Gcreate( file_id, "info", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 
-    return i;
+	hid_t props = H5Pcreate (H5P_DATASET_CREATE);
+    hid_t str_type, dataspace, dataset;
+	hsize_t rank,dimens_1d[1];
+
+    // Write metadata.
+    // Package format version.
+	string text="SingFEL v0.2.0";
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(info_group_id, "package_version",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+
+    // Data format version.
+	text="0.2";
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(file_id, "version",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+
+    // Contact
+	text="Carsten Fortmann-Grote <carsten.grote@xfel.eu>";
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(info_group_id, "contact",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+
+    // Data Description.
+   	text="This dataset contains diffraction patterns generated using SingFEL.";
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(info_group_id, "data_description",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+
+    // Method Description.
+    text="Form factors of the radiation damaged molecules are calculated in time slices. At each time slice, the coherent scattering is calculated and incoherently added to the final diffraction pattern (/data/???????/diffr). Finally, Poissonian noise is added to the diffraction pattern (/data/???????/data).";
+	str_type = H5Tcopy (H5T_C_S1);
+	H5Tset_size (str_type, text.size()+1);
+	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	dataset = H5Dcreate(info_group_id, "method_description",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	H5Sclose (dataspace);
+
+    //// Parameters.
+    // TODO: Store python script or "pickled" diffractor class.
+    //text = vm["inputDir"].as<string>() + "\n" +\
+           //vm["outputDir"].as<string>() + "\n" +\
+           //vm["configFile"].as<string>() + "\n" +\
+           //vm["beamFile"].as<string>() + "\n" +\
+           //vm["geomFile"].as<string>() + "\n" +\
+           //vm["prepHDF5File"].as<string>() + "\n" +\
+           //vm["rotationAxis"].as<string>() + "\n" +\
+           //vm["numSlices"].as<string>() + "\n" +\
+           //vm["sliceInterval"].as<string>() + "\n" +\
+           //vm["pmiStartID"].as<string>() + "\n" +\
+           //vm["pmiEndID"].as<string>() + "\n" +\
+           //vm["numDP"].as<string>() + "\n" +\
+           //vm["calculateCompton"].as<string>() + "\n" +\
+           //vm["uniformRotation"].as<string>() + "\n" +\
+           //vm["saveSlices"].as<string>() + "\n" +\
+           //vm["gpu"].as<string>();
+
+    //str_type = H5Tcopy (H5T_C_S1);
+	//H5Tset_size (str_type, text.size()+1);
+	//dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	//dataset = H5Dcreate(params_group_id, "info",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	//H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	//H5Sclose (dataspace);
+
+    H5Fclose(file_id);
+
+    std::clog << "Created output file " << outputFile << std::endl;
+    return 0;
 }
 
 
@@ -297,7 +375,6 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	int pmiID = pmiStartID + counter/numDP;
 	int diffrID = (pmiStartID-1)*numDP+1 + (pmiID-1)*numDP+counter%numDP;
 
-	string filename;
 
 	// Set up beam and detector from file
 	CDetector det = CDetector();
@@ -336,43 +413,19 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	stringstream sstm;
 	sstm << inputDir << "/pmi_out_" << setfill('0') << setw(7) \
 		     << pmiID << ".h5";
-	filename = sstm.str();
-	if ( !boost::filesystem::exists( filename ) ) {
-		cout << filename << " does not exist!" << endl;
+
+	string inputName = sstm.str();
+	if ( !boost::filesystem::exists( inputName ) ) {
+		cout << inputName << " does not exist!" << endl;
 		exit(0);
 	}
 
-	//// output file
-	//sstm.str("");
-	//sstm << outputDir << "/diffr_out_" << setfill('0') << setw(7) \
-			      //<< diffrID << ".h5";
-	//outputName = sstm.str();
-	//if ( boost::filesystem::exists( outputName ) ) {
-		//boost::filesystem::remove( outputName );
-	//}
-
-	//// Run prepHDF5
-	//string scriptName;
-	//sstm.str("");
-	//if (vm.count("prepHDF5File")) {
-		//sstm << vm["prepHDF5File"].as<string>();
-	//}
-	//else {
-		//sstm << inputDir << "/prepHDF5.py";
-	//}
-
-	//scriptName = sstm.str();
-	//string myCommand = string("python ") + scriptName + " " \
-	                   //+ filename + " " + outputName + " " + configFile;
-	//int i = system(myCommand.c_str());
-	//assert(i == 0);
-
 	// Set up diffraction geometry
 	if (givenPhotonEnergy == false) {
-		setEnergyFromFile(filename, &beam);
+		setEnergyFromFile(inputName, &beam);
 	}
 	if (givenFocusRadius == false) {
-		setFocusFromFile(filename, &beam);
+		setFocusFromFile(inputName, &beam);
 	}
 	det.init_dp(&beam);
 
@@ -388,12 +441,12 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 		                     &done);
 		// Particle //
 			CParticle particle = CParticle();
-			loadParticle(vm, filename, timeSlice, &particle);
+			loadParticle(vm, inputName, timeSlice, &particle);
 		// Apply random rotation to particle
 		rotateParticle(&quaternion, &particle);
 		// Beam // FIXME: Check that these fields exist
 		if (givenFluence == false) {
-			setFluenceFromFile(filename, timeSlice, sliceInterval, \
+			setFluenceFromFile(inputName, timeSlice, sliceInterval, \
 			                   &beam);
 		}
 		total_phot += beam.get_photonsPerPulse();
@@ -452,7 +505,7 @@ void make1Diffr(const fmat& myQuaternions,int counter,opt::variables_map vm, str
 	detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 
 	// Save to HDF5
-	saveAsDiffrOutFile(outputName, counter, &detector_counts, \
+	saveAsDiffrOutFile(outputName, inputName, counter, &detector_counts, \
 	                   &detector_intensity, &quaternion, &det, &beam, \
 	                   total_phot);
 
@@ -589,16 +642,26 @@ void savePhotonField(const string filename, const int isFirstSlice, \
 	assert(success == 0);
 }
 
-void saveAsDiffrOutFile(const string outputName, int count, umat* detector_counts, \
-                        fmat* detector_intensity, fvec* quaternion, \
-                        CDetector* det, CBeam* beam, double total_phot) {
+void saveAsDiffrOutFile(const string outputName,\
+                        const string inputName,\
+                        int count,\
+                        umat* detector_counts,\
+                        fmat* detector_intensity,\
+                        fvec* quaternion,\
+                        CDetector* det,\
+                        CBeam* beam,\
+                        double total_phot) {
 
             // Data group.
-            // Detector counts
+            // Detector counts.
             stringstream sstm;
             sstm.str("");
             sstm << "data/" << setfill('0') << setw(7) << count << "/";
             string group_name = sstm.str();
+
+            // Open output file.
+            hid_t output_id = H5Fopen(outputName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+
 			int success = hdf5writeVector(outputName, group_name, "data", *detector_counts);
 
             // Detector intensity.
@@ -606,6 +669,15 @@ void saveAsDiffrOutFile(const string outputName, int count, umat* detector_count
 
             // Quaternion
 			success = hdf5writeVector(outputName, group_name, "angle", *quaternion);
+
+            // History
+            string history(group_name+"history");
+            hid_t history_group_id = H5Gcreate( output_id, history.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            string parent(group_name+"history/parent");
+            hid_t parent_group_id = H5Gcreate( output_id, parent.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            string detail(group_name+"history/parent/detail");
+            hid_t detail_group_id = H5Gcreate( output_id, detail.c_str(), H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+            success = linkHistory(output_id, inputName, group_name);
 
             // Parameters.
             // Geometry.
@@ -624,6 +696,8 @@ void saveAsDiffrOutFile(const string outputName, int count, umat* detector_count
 			double photonEnergy = beam->get_photon_energy();
 			success = hdf5writeScalar(outputName,"params/beam", "photonEnergy", photonEnergy);
             //success = hdf5writeScalar(outputName,"params", "/params/beam/photons", total_phot); // Not needed.
+            //
+            H5Fclose( output_id );
 }
 
 opt::variables_map parse_input( int argc, char* argv[], \
@@ -727,4 +801,28 @@ opt::variables_map parse_input( int argc, char* argv[], \
 	}
 	return vm;
 } // end of parse_input
+
+/*
+ * Link history from input pmi file into output diffr file
+ */
+int linkHistory(hid_t out_id, const string inputName, const string group_name) {
+
+    // Data.
+    hid_t link_id = H5Lcreate_external( inputName.c_str(), "/data", out_id, (group_name+"/history/parent/detail/data").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+    // History
+    link_id =       H5Lcreate_external( inputName.c_str(), "/history/parent", out_id, (group_name+"/history/parent/parent").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+    // Info
+    link_id =       H5Lcreate_external( inputName.c_str(), "/info", out_id, (group_name+"/history/parent/detail/info").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+    // Misc
+    link_id =       H5Lcreate_external( inputName.c_str(), "/misc", out_id, (group_name+"/history/parent/detail/misc").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+    // Parameters
+    link_id =       H5Lcreate_external( inputName.c_str(), "/params",  out_id, (group_name+"/history/parent/detail/params").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+    // Version
+    link_id =       H5Lcreate_external( inputName.c_str(), "/version", out_id, (group_name+"/history/parent/detail/version").c_str(), H5P_DEFAULT, H5P_DEFAULT);
+
+    return 0;
+}
+
+
+
 

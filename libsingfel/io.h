@@ -38,6 +38,8 @@
 using namespace std;
 using namespace arma;
 
+//int hdf5writeString(std::string filename, std::string groupname, std::string datasetname, std::string data);
+
 template<typename T> int hdf5writeCube(std::string filename, std::string groupname, std::string datasetname, T data){
 
 	const H5std_string FILE_NAME( filename );
@@ -1111,6 +1113,8 @@ template<typename T> T hdf5read(std::string filename, std::string datasetname){
 	return myData;
 
 }
+
+
 
 #ifdef __cplusplus
 extern "C" {
