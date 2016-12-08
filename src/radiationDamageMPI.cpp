@@ -300,7 +300,10 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	                  &myQuaternions);
 
         // Prepare one hdf5 file for output.
-        outputName = "diffr_out_0000001.h5";
+        outputName = vm["outputDir"].as<string>() + "/diffr_out_0000001.h5";
+        if ( boost::filesystem::exists( outputName ) ) {
+	    	boost::filesystem::remove( outputName );
+	    }
         int success = prepH5(vm, outputName);
         assert(success == 0);
 	}
