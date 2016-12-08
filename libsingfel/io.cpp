@@ -97,10 +97,10 @@ fvec str2fvec(std::string line){
 int hdf5write(std::string filename, std::string datasetname, arma::fmat data){
 	const H5std_string FILE_NAME( filename );
 	const H5std_string DATASET_NAME( datasetname );
-	
+
 	int myDim1 = data.n_rows; // 6
 	int myDim2 = data.n_cols; // 10
-	
+
 	const int MSPACE1_RANK = 1; // Rank of the first dataset in memory
 	const int MSPACE1_DIM = myDim1*myDim2; // Dataset size in memory
 	//const int MSPACE2_RANK = 1; // Rank of the second dataset in memory
@@ -361,24 +361,24 @@ void calculate_dp(Packet *pack){
 
 	wall_clock timer;
 	timer.tic();
-	
+
 	// particle
 	CParticle particle = CParticle();
 	//particle.set_param(pack);
-	
+
 	// Temporary code for testing
 	particle.load_atomType("../atomType.dat"); 	// rowvec atomType
 	particle.load_atomPos("../pos.dat");		// mat pos
 	particle.load_xyzInd("../xyzInd.dat");		// rowvec xyzInd (temporary)
 	particle.load_ffTable("../ffTable.dat");	// mat ffTable (atomType x qSample)
 	particle.load_qSample("../qSample.dat");	// rowvec q vector sin(theta)/lambda
-	
+
 	//CParticle::set_atomType(pack); // This is the actual code when reading from Zoltan's program
 	//CParticle::set_atomPos(pack);
 	//CParticle::set_xyzInd(pack);
 	//CParticle::set_ffTable(pack);
 	//CParticle::set_qSample(pack);
-	
+
 	// beam
 	CBeam beam = CBeam();
 	beam.set_param(pack);
@@ -413,21 +413,21 @@ void calculate_dp(Packet *pack){
 		sumDr.zeros(pack->py*pack->px,1);
 		fmat sumDi;
 		sumDi.zeros(pack->py*pack->px,1);
-			
+
 		int first_ind = 0;
 		int last_ind = 0;
-		while (first_ind < particle.numAtoms) {		 
+		while (first_ind < particle.numAtoms) {
 			last_ind = min((last_ind + max_chunkSize),particle.numAtoms);
 			chunkSize = last_ind-first_ind;
-			
+
 			pad_real.zeros(pack->py*pack->px,chunkSize);
 		 	float* pad_real_mem = pad_real.memptr();
 
 			pad_imag.zeros(pack->py*pack->px,chunkSize);
 		 	float* pad_imag_mem = pad_imag.memptr();
-		 	
+
 			irowvec xyzInd_sub = xyzInd.subvec( first_ind,last_ind-1 );
-			int* i_mem = xyzInd_sub.memptr();	
+			int* i_mem = xyzInd_sub.memptr();
 			fmat pos_sub = pos( span(first_ind,last_ind-1), span::all );
 			float* p_mem = pos_sub.memptr();
 
@@ -453,16 +453,16 @@ void calculate_dp(Packet *pack){
 		//timer.tic();
 		stringstream ss;	//create a stringstream
     	ss << pack->finish;	//add number to the stream
-    			
+
 		string name = "../detector_counts_" + ss.str() + ".dat";
 		umat detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 		detector_counts.save(name,raw_ascii);
-		
+
 		string name1 = "../dp_" + ss.str() + ".dat";
 		det.dp.save(name1,raw_ascii);
-	
+
 		det.dp = det.dp + detector_counts;//detector_counts = det.dp + detector_counts;
-	
+
 		//cout<<"Calculate detector_counts: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
 
 		string name2 = "../F_hkl_sq_cudaChunk_" + ss.str() + ".dat";
@@ -483,7 +483,7 @@ void calculate_dp(Packet *pack){
 		pack->dp = detector_counts.memptr();
 		cout << "pack->dp: " << pack->dp << endl;
 		cout << "End of io loop: " << timer.toc() <<" seconds."<<endl;
-	} 
+	}
 #endif
 	//else {
 	if(!pack->useGPU) {
@@ -494,7 +494,7 @@ void calculate_dp(Packet *pack){
 		timer.tic();
 		stringstream ss;	//create a stringstream
     	ss << pack->finish;	//add number to the stream
-    
+
 		fmat F_hkl_sq; // F_hkl_sq: py x px
 		F_hkl_sq = CDiffraction::calculate_intensity(&particle,&det);
 		fmat detector_intensity;
@@ -504,12 +504,12 @@ void calculate_dp(Packet *pack){
 		string name = "../detector_counts_" + ss.str() + ".dat";
 		umat detector_counts = CToolbox::convert_to_poisson(&detector_intensity);
 		detector_counts.save(name,raw_ascii);
-	
+
 		string name1 = "../dp_" + ss.str() + ".dat";
 		det.dp.save(name1,raw_ascii);
-	
+
 		detector_counts = conv_to<umat>::from(det.dp) + detector_counts;
-	
+
 		cout<<"Calculate detector_counts: Elapsed time is "<<timer.toc()<<" seconds."<<endl; // 14.25s
 
 		string name2 = "../F_hkl_sq_" + ss.str() + ".dat";
@@ -522,7 +522,7 @@ void calculate_dp(Packet *pack){
 			cout<<"Save image: Elapsed time is "<<timer.toc()<<" seconds."<<endl;
 		}
 		detector_counts = trans(detector_counts);
-		pack->dp = detector_counts.memptr();	
+		pack->dp = detector_counts.memptr();
 	}
 }
 */
@@ -540,7 +540,7 @@ double CIO::get_size(){
 
 int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	hid_t file_in,file_out;
-	hid_t grp_hist,grp_hist_parent,grp_hist_parent_detail,grp_tmp; 
+	hid_t grp_hist,grp_hist_parent,grp_hist_parent_detail,grp_tmp;
 	hid_t attr,dataset;
 	hid_t str_type;
 	hid_t dataspace;
@@ -555,21 +555,21 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	sprintf(outputNameTmp,"%s~",outputName);
 	file_in  = H5Fopen  (filename,   H5F_ACC_RDONLY, H5P_DEFAULT);
 	file_out = H5Fcreate(outputNameTmp, H5F_ACC_TRUNC,  H5P_DEFAULT, H5P_DEFAULT);
-	
+
 	grp_hist = H5Gcreate (file_out, "history", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
     //H5Gclose(grp_hist);
 	ocpypl_id = H5Pcreate(H5P_OBJECT_COPY);
 	H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
 	H5Ocopy(file_in,"history/parent",file_out,"history/parent",ocpypl_id,H5P_DEFAULT);
-	    
+
     grp_hist_parent = H5Gopen(file_out,"history/parent",H5P_DEFAULT);
 	if (grp_hist_parent<0)
 		grp_hist_parent = H5Gcreate (file_out, "history/parent", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 	grp_hist_parent_detail = H5Gopen(file_out,"history/parent/detail",H5P_DEFAULT);
 	if (grp_hist_parent_detail<0)
 		grp_hist_parent_detail = H5Gcreate (file_out, "history/parent/detail", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-    
-	
+
+
 	if (NULL==realpath(filename,filename_full))
 		return -1;
 	for(tmpsb=strlen(filename_full)-1;tmpsb>=0 && filename_full[tmpsb]!='/';tmpsb--);
@@ -586,11 +586,11 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	parent_name[0]='_';
 	memcpy(parent_name+1,filename_full+tmpsa,parent_name_size-1);
 	parent_name[parent_name_size]='\0';
-	
+
 	//!!H5Tset_size (str_type, H5T_VARIABLE);
 	if (H5Aexists(grp_hist_parent,"name"))
 		H5Adelete(grp_hist_parent,"name");
-		
+
 	dataspace = H5Screate(H5S_SCALAR);
 	str_type = H5Tcopy (H5T_C_S1);
 	H5Tset_size (str_type, parent_name_size);
@@ -599,18 +599,18 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	H5Sclose (dataspace);
 	H5Aclose (attr);
 	H5Giterate(file_in, "/", NULL, file_info, &file_out );
-	
+
 	if (H5Lexists( grp_hist_parent_detail, "data", H5P_DEFAULT))
-		H5Ldelete( grp_hist_parent_detail, "data", H5P_DEFAULT); 
+		H5Ldelete( grp_hist_parent_detail, "data", H5P_DEFAULT);
 	H5Lcreate_external( filename_full, "data", grp_hist_parent_detail, "data", H5P_DEFAULT, H5P_DEFAULT );
-	
-	str_type = H5Tcopy (H5T_C_S1);	
+
+	str_type = H5Tcopy (H5T_C_S1);
 	rank = 1;
 	dimens_1d[0] = 1;
 	props = H5Pcreate (H5P_DATASET_CREATE);
-	
+
 	grp_tmp = H5Gcreate (file_out, "data", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
-	H5Gclose(grp_tmp);		
+	H5Gclose(grp_tmp);
 	grp_tmp = H5Gcreate (file_out, "params", H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
 	char *config;
 	FILE *cfgf=NULL;
@@ -655,7 +655,7 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	dataset = H5Dcreate(grp_tmp,"method_description",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
 	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
 	H5Sclose (dataspace);
-	
+
 	char* strcontact[2];
 	string text1="Name: Chunhong Yoon";
 	strcontact[0]=(char*)text1.c_str();
@@ -663,26 +663,26 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	strcontact[1]=(char*)text2.c_str();
 	H5Tset_size (str_type, H5T_VARIABLE);
 	dimens_1d[0] = 2;
-	
+
 	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
 	dataset = H5Dcreate(grp_tmp,"contact",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
 	H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,strcontact);
 	H5Sclose (dataspace);
 	H5Gclose(grp_tmp);
-	
+
 	dimens_1d[0] = 1;
 	float ver=0.1;
 	dataspace = H5Screate_simple(rank, dimens_1d, NULL);
 	dataset = H5Dcreate(file_out,"version",H5T_IEEE_F32LE,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
 	H5Dwrite(dataset, H5T_IEEE_F32LE, H5S_ALL,H5S_ALL,H5P_DEFAULT,&ver);
 	H5Sclose (dataspace);
-	
+
 	H5Gclose(grp_hist);
 	H5Gclose(grp_hist_parent);
 	H5Gclose(grp_hist_parent_detail);
 	H5Fclose(file_in);
 	H5Fclose(file_out);
-	
+
 	//clean up : copy only not un-linked data from tmp to out
 	file_in  = H5Fopen  (outputNameTmp, H5F_ACC_RDONLY, H5P_DEFAULT);
 	file_out = H5Fcreate(outputName,    H5F_ACC_TRUNC,  H5P_DEFAULT, H5P_DEFAULT);
@@ -691,7 +691,7 @@ int prepS2E(const char* filename,const char* outputName,const char* configFile){
 	H5Fclose(file_out);
 	//delete tmp file
 	remove(outputNameTmp);
-	
+
 	return 0 && configFile==NULL;
 }
 
@@ -706,7 +706,7 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata)
     dststr=(char*)malloc(strlen(name)+2+strlen("history/parent/detail/"));
     sprintf(dststr,"history/parent/detail/%s",name);
     switch (statbuf.type) {
-    case H5G_GROUP: 
+    case H5G_GROUP:
 		prev_grp = H5Gopen(*(hid_t*)opdata,dststr,H5P_DEFAULT);
 		if (prev_grp>=0){
 			H5Gclose(prev_grp);
@@ -716,7 +716,7 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata)
 		H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
 		H5Ocopy(loc_id,name,*(hid_t*)opdata,dststr,ocpypl_id,H5P_DEFAULT);
 		break;
-    case H5G_DATASET: 
+    case H5G_DATASET:
 		prev_ds = H5Dopen(*(hid_t*)opdata,dststr,H5P_DEFAULT);
 		if (prev_ds>=0){
 			H5Dclose(prev_ds);
@@ -729,9 +729,9 @@ herr_t file_info(hid_t loc_id, const char *name, void *opdata)
     default:
 		;
     }
-    delete(dststr); 
+    delete(dststr);
     return 0;
-}	
+}
 
 herr_t file_copy(hid_t loc_id, const char *name, void *opdata)
 {
@@ -740,7 +740,22 @@ herr_t file_copy(hid_t loc_id, const char *name, void *opdata)
 	H5Pset_copy_object(ocpypl_id, H5O_COPY_MERGE_COMMITTED_DTYPE_FLAG);
 	H5Ocopy(loc_id,name,*(hid_t*)opdata,name,ocpypl_id,H5P_DEFAULT);
     return 0;
-}	
+}
+
+//int hdf5writeString(std::string filename, std::string groupname, std::string datasetname, std::string text) {
+
+	//hid_t props = H5Pcreate (H5P_DATASET_CREATE);
+    //hid_t str_type, dataspace, dataset;
+	//hsize_t rank,dimens_1d[1];
+
+    //// Write metadata.
+    //// Package format version.
+	//str_type = H5Tcopy (H5T_C_S1);
+	//H5Tset_size (str_type, data.size()+1);
+	//dataspace = H5Screate_simple(rank, dimens_1d, NULL);
+	//dataset = H5Dcreate(info_group_id, "package_version",str_type,dataspace,H5P_DEFAULT,props,H5P_DEFAULT);
+	//H5Dwrite(dataset, str_type, H5S_ALL,H5S_ALL,H5P_DEFAULT,text.c_str());
+	//H5Sclose (dataspace);
 
 
 
