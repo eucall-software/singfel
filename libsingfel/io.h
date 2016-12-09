@@ -98,7 +98,7 @@ template<typename T> int hdf5writeCube(std::string filename, std::string groupna
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_DOUBLE );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				double dataW[DIM0][DIM1][DIM2];
 				for (int k = 0; k < DIM2; k++){
 				for (int j = 0; j < DIM1; j++){
@@ -116,7 +116,7 @@ template<typename T> int hdf5writeCube(std::string filename, std::string groupna
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_FLOAT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				float dataW[DIM0][DIM1][DIM2];
 				for (int k = 0; k < DIM2; k++){
 				for (int j = 0; j < DIM1; j++){
@@ -134,7 +134,7 @@ template<typename T> int hdf5writeCube(std::string filename, std::string groupna
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_INT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				int dataW[DIM0][DIM1][DIM2];
 				for (int k = 0; k < DIM2; k++){
 				for (int j = 0; j < DIM1; j++){
@@ -152,7 +152,7 @@ template<typename T> int hdf5writeCube(std::string filename, std::string groupna
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_UINT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				unsigned int dataW[DIM0][DIM1][DIM2];
 				for (int k = 0; k < DIM2; k++){
 				for (int j = 0; j < DIM1; j++){
@@ -207,21 +207,18 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 		myRank = 2;
 	}
 
-	// Try block to detect exceptions raised by any of the calls inside it
-	try
-	{
-		// Turn off the auto-printing when failure occurs so that we can
-		// handle the errors appropriately
-		Exception::dontPrint();
 
+	// Try block to detect exceptions raised by any of the calls inside it
+    try
+	{
 		H5File file;
 		// Check if file exists, if not create a new file
 		if ( !boost::filesystem::exists( filename ) ) {
-			//std::cout << "file does not exist" << std::endl;
+            //std::cout << "file does not exist" << std::endl;
 			// Create a file.
 			file = H5File( FILE_NAME, H5F_ACC_TRUNC );
 		} else {
-			//std::cout << "file does exist" << std::endl;
+            //std::cout << "file does exist" << std::endl;
 			file = H5File(FILE_NAME, H5F_ACC_RDWR);
 		}
 
@@ -229,15 +226,15 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 		// Access the group.
 		Group group;
 		try { // to determine if the dataset exists in the group
-			//cout << " Trying to open group" << endl;
+            //cout << " Trying to open group" << "groupname." << endl;
 			group = Group( file.openGroup( groupname ));
-			//cout << " Opened existing group" << endl;
+            //cout << " Opened existing group." << endl;
 		}
 		catch( FileIException not_found_error ) {
-			//cout << " Group not found." << endl;
+            //cout << " Group " <<groupname << " not found." << endl;
 			// create group
 			group = Group( file.createGroup( groupname ));
-			//cout << " Group created." << endl;
+            //cout << " Group " <<groupname << " created." << endl;
 		}
 
 
@@ -245,137 +242,155 @@ template<typename T> int hdf5writeVector(std::string filename, std::string group
 
 		  // Create the data space for the dataset.
 		  if (typeid(data) == typeid(vec) || typeid(data) == typeid(rowvec)) {
+              //std::cout << "Handling vec || rowvec." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_DOUBLE );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				double dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					//cout << data.at(j) << endl;
+                    //cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_DOUBLE );
 			} else if (typeid(data) == typeid(fvec) || typeid(data) == typeid(frowvec)) {
+                //std::cout << "Handling fvec || frowvec." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_FLOAT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				float dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					//cout << data.at(j) << endl;
+                    //cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_FLOAT );
 			} else if (typeid(data) == typeid(ivec) || typeid(data) == typeid(irowvec)) {
+                //std::cout << "Handling ivec || irowvec." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_INT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				int dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					//cout << data.at(j) << endl;
+                    //cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_INT );
 			} else if (typeid(data) == typeid(uvec) || typeid(data) == typeid(urowvec)) {
+                //std::cout << "Handling uvec || urowvec." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_UINT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				unsigned int dataW[DIM0];
 				for (int j = 0; j < DIM0; j++){
-					//cout << data.at(j) << endl;
+                    //cout << data.at(j) << endl;
 					dataW[j] = data.at(j);
 				}
 				dataset.write( dataW, PredType::NATIVE_UINT );
 			} else if (typeid(data) == typeid(mat)) {
+                //std::cout << "Handling mat." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				dims[1] = DIM1;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_DOUBLE );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				double dataW[DIM0][DIM1];
-				for (int j = 0; j < DIM0; j++)
-					for (int i = 0; i < DIM1; i++)
+				for (int j = 0; j < DIM0; j++) {
+					for (int i = 0; i < DIM1; i++) {
+                        //std::cout << data.at(j,i) << endl;
 						dataW[j][i] = data.at(j,i);
+                    }
+                }
 				dataset.write( dataW, PredType::NATIVE_DOUBLE );
 			} else if (typeid(data) == typeid(fmat)) {
+                //std::cout << "Handling fmat." << std::endl;
 			//cout << "Enter fmat" << endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				dims[1] = DIM1;
-			//cout << myRank << " " << DIM0 << " " << DIM1 << endl;
+                //std::cout << myRank << " " << DIM0 << " " << DIM1 << std::endl;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_FLOAT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				float dataW[DIM0][DIM1];
-				for (int j = 0; j < DIM0; j++)
-					for (int i = 0; i < DIM1; i++)
+				for (int j = 0; j < DIM0; j++) {
+					for (int i = 0; i < DIM1; i++) {
+                        //std::cout << data.at(j,i) << endl;
 						dataW[j][i] = data.at(j,i);
+                    }
+                }
 				dataset.write( dataW, PredType::NATIVE_FLOAT );
 			} else if (typeid(data) == typeid(imat)) {
+                //std::cout << "Handling imat." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				dims[1] = DIM1;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_INT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				int dataW[DIM0][DIM1];
-				for (int j = 0; j < DIM0; j++)
-					for (int i = 0; i < DIM1; i++)
+				for (int j = 0; j < DIM0; j++) {
+					for (int i = 0; i < DIM1; i++) {
+                        //std::cout << data.at(j,i) << endl;
 						dataW[j][i] = data.at(j,i);
+                    }
+                }
 				dataset.write( dataW, PredType::NATIVE_INT );
 			} else if (typeid(data) == typeid(umat)) {
+                //std::cout << "Handling umat." << std::endl;
 				hsize_t dims[myRank];              // dataset dimensions
 				dims[0] = DIM0;
 				dims[1] = DIM1;
 				DataSpace dataspace ( myRank, dims );
 				PredType datatype( PredType::NATIVE_UINT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				unsigned int dataW[DIM0][DIM1];
-				for (int j = 0; j < DIM0; j++)
-					for (int i = 0; i < DIM1; i++)
+				for (int j = 0; j < DIM0; j++) {
+					for (int i = 0; i < DIM1; i++) {
+                        //std::cout << data.at(j,i) << endl;
 						dataW[j][i] = data.at(j,i);
+                    }
+                }
 				dataset.write( dataW, PredType::NATIVE_UINT );
 			}
 
 	}
-	// catch failure caused by the H5Group operations
-	catch( GroupIException error )
-	{
-	error.printError();
-	return -1;
-	}
-	catch( FileIException error )
-	{
-	error.printError();
-	return -1;
-	}
-	// catch failure caused by the DataSet operations
-	catch( DataSetIException error )
-	{
-	error.printError();
-	return -1;
-	}
-	// catch failure caused by the DataSpace operations
-	catch( DataSpaceIException error )
-	{
-	error.printError();
-	return -1;
-	}
+    // Catch exceptions raised by the H5 operations.
+        catch( GroupIException error )
+        {
+            error.printError();
+            return -1;
+        }
+    catch( FileIException error )
+    {
+        error.printError();
+        return -1;
+    }
+    catch( DataSetIException error )
+    {
+        error.printError();
+        return -1;
+    }
+    catch( DataSpaceIException error )
+    {
+        error.printError();
+        return -1;
+    }
 	return 0;
 }
 
@@ -427,28 +442,28 @@ template<typename T> int hdf5writeScalar(std::string filename, std::string group
 			if (typeid(data) == typeid(double)) {
 				PredType datatype( PredType::NATIVE_DOUBLE );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				double dataW[1];
 				dataW[0] = data;
 				dataset.write( dataW, PredType::NATIVE_DOUBLE );
 			} else if (typeid(data) == typeid(float)) {
 				PredType datatype( PredType::NATIVE_FLOAT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				float dataW[1];
 				dataW[0] = data;
 				dataset.write( dataW, PredType::NATIVE_FLOAT );
 			} else if (typeid(data) == typeid(int)) {
 				PredType datatype( PredType::NATIVE_INT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				int dataW[1];
 				dataW[0] = data;
 				dataset.write( dataW, PredType::NATIVE_INT );
 			} else if (typeid(data) == typeid(uint)) {
 				PredType datatype( PredType::NATIVE_UINT );
 				DataSet dataset = group.createDataSet( DATASET_NAME, datatype, dataspace );
-				dataset = file.openDataSet( DATASET_NAME );
+				dataset = group.openDataSet( DATASET_NAME );
 				unsigned int dataW[1];
 				dataW[0] = data;
 				dataset.write( dataW, PredType::NATIVE_UINT );

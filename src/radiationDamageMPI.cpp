@@ -323,6 +323,9 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
             // Trigger calculation on slave.
 			comm->send(status.source(), 0, &ntask, 1);
 		}
+
+        // Print progress.
+        std::cout << "Launched " << ntask+1 << " of " << ntasks << " total tasks." << std::endl;
 	}
 
     // Final send.
@@ -379,7 +382,9 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	while (true){
 		comm->recv(master, 0, counter);
 		if (counter < 0) return;
+        std::clog << "Starting pattern #"<<counter+1<<" on rank " << comm->rank() <<"."<< std::endl;
 		make1Diffr(myQuaternions,counter,vm,outputName);
+        std::clog << "Pattern #"<<counter+1<<" completed on rank " << comm->rank() <<"." << std::endl;
 		comm->send(master, 0, &counter, 1);
 	}
 }
@@ -752,19 +757,23 @@ void saveAsDiffrOutFile(const string outputName,\
             // Detector counts.
             stringstream sstm;
             sstm.str("");
-            sstm << "data/" << setfill('0') << setw(7) << count << "/";
+            sstm << "data/" << setfill('0') << setw(7) << count+1 << "/";
             string group_name = sstm.str();
 
             // Open output file.
             hid_t output_id = H5Fopen(outputName.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
 
+
 			int success = hdf5writeVector(outputName, group_name, "data", *detector_counts);
+            //std::cout << "Data written with success = " << success << std::endl;
 
             // Detector intensity.
 			success = hdf5writeVector(outputName,group_name, "diffr", *detector_intensity);
+            //std::cout << "Diffr written with success = " << success << std::endl;
 
             // Quaternion
 			success = hdf5writeVector(outputName, group_name, "angle", *quaternion);
+            //std::cout << "Angle written with success = " << success << std::endl;
 
             // History
             string history(group_name+"history");
@@ -779,18 +788,24 @@ void saveAsDiffrOutFile(const string outputName,\
             // Geometry.
 			double dist = det->get_detector_dist();
 			success = hdf5writeScalar(outputName,"params/geom", "detectorDist", dist);
+            //std::cout << "Detector dist. written with success = " << success << std::endl;
 			double pixelWidth = det->get_pix_width();
 			success = hdf5writeScalar(outputName,"params/geom", "pixelWidth", pixelWidth);
+            //std::cout << "pixel width written with success = " << success << std::endl;
 			double pixelHeight = det->get_pix_height();
 			success = hdf5writeScalar(outputName,"params/geom", "pixelHeight", pixelHeight);
+            //std::cout << "pixel height written with success = " << success << std::endl;
 			fmat mask = ones<fmat>(det->py,det->px);
 			success = hdf5writeVector(outputName,"params/geom", "mask", mask);
+            //std::cout << "mask written with success = " << success << std::endl;
 			double focusArea = beam->get_focus_area();
 			success = hdf5writeScalar(outputName,"params/beam", "focusArea", focusArea);
+            //std::cout << "focus area written with success = " << success << std::endl;
 
             // Photons.
 			double photonEnergy = beam->get_photon_energy();
 			success = hdf5writeScalar(outputName,"params/beam", "photonEnergy", photonEnergy);
+            //std::cout << "photon energy written with success = " << success << std::endl;
             //success = hdf5writeScalar(outputName,"params", "/params/beam/photons", total_phot); // Not needed.
             //
             H5Fclose( output_id );
