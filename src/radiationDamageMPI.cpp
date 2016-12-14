@@ -323,9 +323,6 @@ static void master_diffract(mpi::communicator* comm, opt::variables_map vm) {
             // Trigger calculation on slave.
 			comm->send(status.source(), 0, &ntask, 1);
 		}
-
-        // Print progress.
-        std::cout << "Launched " << ntask+1 << " of " << ntasks << " total tasks." << std::endl;
 	}
 
     // Final send.
@@ -382,9 +379,7 @@ static void slave_diffract(mpi::communicator* comm, opt::variables_map vm) {
 	while (true){
 		comm->recv(master, 0, counter);
 		if (counter < 0) return;
-        std::clog << "Starting pattern #"<<counter+1<<" on rank " << comm->rank() <<"."<< std::endl;
 		make1Diffr(myQuaternions,counter,vm,outputName);
-        std::clog << "Pattern #"<<counter+1<<" completed on rank " << comm->rank() <<"." << std::endl;
 		comm->send(master, 0, &counter, 1);
 	}
 }
